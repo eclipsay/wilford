@@ -38,21 +38,58 @@
           <p class="eyebrow">Repository Activity</p>
           <h1>Commits</h1>
           <p class="hero-copy">
-            This page is prepared for a commit feed. Any commit containing the
-            word <strong>silent</strong> should be excluded from display.
+            Live repository activity from GitHub. Any commit containing the word
+            <strong>silent</strong> is automatically excluded from display.
           </p>
         </section>
 
-        <section class="info-panel info-panel--wide">
-          <p class="panel-kicker">Filtering Rule</p>
-          <h2>Hidden Commit Terms</h2>
-          <p>
-            When the commit system is connected, commit messages containing
-            <code>silent</code> in any position should never appear in the
-            public list.
-          </p>
+        <section class="commit-shell">
+          <aside class="commit-aside info-panel">
+            <p class="panel-kicker">Repository</p>
+            <h2>eclipsay/wilford</h2>
+            <p>
+              This board pulls recent commits from GitHub and presents them in
+              the Wilford visual system.
+            </p>
+            <div class="commit-rule">
+              <span class="commit-rule__label">Censorship Rule</span>
+              <p>
+                Any commit whose message contains <code>silent</code> is hidden
+                before rendering.
+              </p>
+            </div>
+            <a
+              class="portal-button portal-button--inline"
+              href="https://github.com/eclipsay/wilford"
+              target="_blank"
+              rel="noreferrer"
+              >View Repository</a
+            >
+          </aside>
+
+          <section class="commit-feed-panel info-panel">
+            <div class="commit-feed-panel__header">
+              <div>
+                <p class="panel-kicker">Transmission Feed</p>
+                <h2>Recent Commits</h2>
+              </div>
+              <span class="commit-status" id="commit-status">Loading</span>
+            </div>
+
+            <div
+              class="commit-feed"
+              id="commit-feed"
+              data-owner="eclipsay"
+              data-repo="wilford"
+            >
+              <article class="commit-card commit-card--loading">
+                <p>Fetching recent directives from GitHub...</p>
+              </article>
+            </div>
+          </section>
         </section>
       </main>
     </div>
+    <script src="commits.js"></script>
   </body>
 </html>

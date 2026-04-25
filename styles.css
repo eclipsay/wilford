@@ -875,6 +875,140 @@ h1 {
   border-top: 1px solid rgba(190, 130, 54, 0.18);
 }
 
+.commit-shell {
+  width: min(1220px, calc(100% - 8vw));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 24px;
+}
+
+.commit-aside {
+  align-self: start;
+}
+
+.commit-rule {
+  margin: 26px 0;
+  padding: 18px;
+  border: 1px solid rgba(211, 157, 79, 0.34);
+  background: rgba(66, 14, 10, 0.22);
+}
+
+.commit-rule__label {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-family: "Cinzel", serif;
+  color: var(--gold-bright);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.commit-rule p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+
+.commit-feed-panel__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.commit-feed-panel__header h2 {
+  margin-bottom: 0;
+}
+
+.commit-status {
+  padding: 10px 14px;
+  border: 1px solid rgba(211, 157, 79, 0.4);
+  background: rgba(22, 9, 7, 0.82);
+  color: var(--gold-bright);
+  font-family: "Cinzel", serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.commit-feed {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.commit-card {
+  min-height: 214px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid rgba(211, 157, 79, 0.28);
+  background:
+    linear-gradient(180deg, rgba(93, 18, 12, 0.2), rgba(13, 8, 8, 0.96)),
+    radial-gradient(circle at top, rgba(216, 172, 94, 0.08), transparent 42%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.commit-card h3 {
+  margin: 0;
+  font-family: "Cinzel", serif;
+  font-size: 1.35rem;
+  line-height: 1.3;
+  color: var(--gold-bright);
+  text-transform: uppercase;
+}
+
+.commit-card p {
+  margin: 0;
+}
+
+.commit-card__topline,
+.commit-card__meta,
+.commit-card__link {
+  color: var(--text-soft);
+}
+
+.commit-card__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.92rem;
+}
+
+.commit-card__sha {
+  padding: 6px 10px;
+  border: 1px solid rgba(211, 157, 79, 0.35);
+  color: var(--gold-bright);
+  font-family: "Cinzel", serif;
+  letter-spacing: 0.08em;
+}
+
+.commit-card__meta {
+  font-size: 0.96rem;
+}
+
+.commit-card__link {
+  font-family: "Cinzel", serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.commit-card__link:hover,
+.commit-card__link:focus-visible {
+  color: var(--gold-bright);
+}
+
+.commit-card--loading,
+.commit-card--error,
+.commit-card--empty {
+  min-height: 180px;
+  justify-content: center;
+}
+
 @media (max-width: 1180px) {
   .topbar {
     position: relative;
@@ -932,6 +1066,14 @@ h1 {
   }
 
   .section-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .commit-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .commit-feed {
     grid-template-columns: 1fr;
   }
 
