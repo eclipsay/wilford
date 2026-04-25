@@ -1,11 +1,17 @@
 import Link from "next/link";
-import { filterVisibleCommits, formatShortSha } from "@wilford/shared";
+import {
+  fallbackCommits,
+  filterVisibleCommits,
+  formatShortSha
+} from "@wilford/shared";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 
 async function getCommits() {
   const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    process.env.API_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:4000";
 
   try {
     const response = await fetch(`${baseUrl}/api/commits`, {
@@ -19,7 +25,7 @@ async function getCommits() {
     const data = await response.json();
     return filterVisibleCommits(data.commits || []);
   } catch {
-    return [];
+    return filterVisibleCommits(fallbackCommits);
   }
 }
 
@@ -35,35 +41,42 @@ export default async function CommitsPage() {
       />
 
       <main className="content">
-        <section className="panel">
-          {commits.length ? (
+        <section className="commit-panel">
+          <div className="commit-panel__header">
             <div>
+              <p className="eyebrow">Repository</p>
+              <h2>eclipsay/wilford</h2>
+            </div>
+            <Link className="button" href="https://github.com/eclipsay/wilford">
+              Open Repository
+            </Link>
+          </div>
+
+          {commits.length ? (
+            <div className="commit-log" role="list">
               {commits.map((commit) => (
-                <div
+                <Link
                   key={commit.sha}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "120px 1fr 180px",
-                    gap: "16px",
-                    padding: "16px 0",
-                    borderBottom: "1px solid rgba(211,157,79,0.18)"
-                  }}
+                  className="commit-row"
+                  href={commit.html_url || "#"}
+                  target="_blank"
+                  role="listitem"
                 >
-                  <span style={{ color: "var(--gold)" }}>{formatShortSha(commit.sha)}</span>
-                  <strong>{commit.message}</strong>
-                  <span style={{ color: "var(--text-soft)", textAlign: "right" }}>
-                    {commit.author}
+                  <span className="commit-row__sha">{formatShortSha(commit.sha)}</span>
+                  <span className="commit-row__message">{commit.message}</span>
+                  <span className="commit-row__meta">
+                    <span>{commit.author}</span>
+                    <span className="commit-row__dot">/</span>
+                    <span>{commit.date}</span>
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           ) : (
-            <p>No commits available yet. Connect the API to GitHub or use the local fallback feed.</p>
+            <div className="panel">
+              <p>No commits available yet. Connect the API to GitHub or use the local fallback feed.</p>
+            </div>
           )}
-
-          <p style={{ marginTop: "24px" }}>
-            <Link href="https://github.com/eclipsay/wilford">Open Repository</Link>
-          </p>
         </section>
       </main>
     </SiteLayout>

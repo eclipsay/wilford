@@ -156,6 +156,85 @@ h1 {
   line-height: 1.7;
 }
 
+.commit-panel {
+  padding: 28px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(95, 17, 11, 0.14), rgba(12, 8, 7, 0.86)),
+    rgba(13, 7, 7, 0.82);
+  box-shadow: var(--shadow);
+  margin-bottom: 72px;
+}
+
+.commit-panel__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 22px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(211, 157, 79, 0.18);
+}
+
+.commit-panel__header h2 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  color: var(--gold-bright);
+  text-transform: uppercase;
+}
+
+.commit-log {
+  display: flex;
+  flex-direction: column;
+}
+
+.commit-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 220px;
+  gap: 18px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(211, 157, 79, 0.14);
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.commit-row:last-child {
+  border-bottom: none;
+}
+
+.commit-row:hover,
+.commit-row:focus-visible {
+  background: rgba(211, 157, 79, 0.04);
+}
+
+.commit-row__sha {
+  color: var(--gold);
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.commit-row__message {
+  min-width: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.commit-row__meta {
+  display: flex;
+  justify-content: end;
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.commit-row__dot {
+  color: rgba(244, 221, 180, 0.45);
+}
+
 @media (max-width: 900px) {
   .topbar {
     flex-direction: column;
@@ -164,5 +243,20 @@ h1 {
 
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .commit-panel__header {
+    flex-direction: column;
+    align-items: start;
+  }
+
+  .commit-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .commit-row__meta {
+    justify-content: start;
+    white-space: normal;
   }
 }
