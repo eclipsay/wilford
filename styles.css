@@ -31,6 +31,11 @@ body {
   font-family: "Manrope", sans-serif;
 }
 
+code {
+  font-family: "Manrope", sans-serif;
+  color: var(--gold-bright);
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -766,6 +771,15 @@ h1 {
   padding: 38px 4vw 64px;
 }
 
+.inner-page {
+  padding-bottom: 72px;
+}
+
+.page-hero {
+  padding: 72px 4vw 24px;
+  text-align: center;
+}
+
 .info-panel {
   min-height: 220px;
   padding: 28px;
@@ -795,6 +809,11 @@ h1 {
   color: var(--gold-bright);
 }
 
+.info-panel--wide {
+  width: min(960px, calc(100% - 8vw));
+  margin: 0 auto;
+}
+
 .info-panel__seal {
   margin-bottom: 18px;
 }
@@ -821,6 +840,39 @@ h1 {
   margin: 0;
   color: var(--text-soft);
   line-height: 1.75;
+}
+
+.record-table {
+  width: min(1060px, calc(100% - 8vw));
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(92, 17, 12, 0.12), rgba(11, 8, 7, 0.9)),
+    rgba(10, 7, 7, 0.9);
+  box-shadow: var(--shadow);
+}
+
+.record-table__head,
+.record-table__row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 18px;
+  padding: 18px 22px;
+}
+
+.record-table__head {
+  border-bottom: 1px solid var(--line);
+  font-family: "Cinzel", serif;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+}
+
+.record-table__row {
+  color: var(--text-soft);
+}
+
+.record-table__row + .record-table__row {
+  border-top: 1px solid rgba(190, 130, 54, 0.18);
 }
 
 @media (max-width: 1180px) {
@@ -880,6 +932,11 @@ h1 {
   }
 
   .section-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .record-table__head,
+  .record-table__row {
     grid-template-columns: 1fr;
   }
 
