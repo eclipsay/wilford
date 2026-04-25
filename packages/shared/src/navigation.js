@@ -10,6 +10,8 @@ export const mainNavigation = [
 export const panelNavigation = [
   { label: "Dashboard", href: "/" },
   { label: "Members", href: "/members" },
+  { label: "Excommunications", href: "/excommunications" },
+  { label: "Settings", href: "/settings" },
   { label: "Commits", href: "/commits" },
   { label: "System", href: "/system" }
 ];

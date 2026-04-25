@@ -1,0 +1,20 @@
+{
+  "settings": {
+    "homepageHeadline": "Wilford Industries",
+    "homepageEyebrow": "Welcome to",
+    "homepageDescription": "A monument to order, expansion, and industrial discipline under the leadership of Chairman Lemmie.",
+    "chairmanName": "Lemmie",
+    "commitsRepository": "eclipsay/wilford"
+  },
+  "members": [
+    {
+      "id": "chairman-lemmie",
+      "name": "Lemmie",
+      "role": "Chairman",
+      "division": "Executive Office",
+      "status": "Active",
+      "notes": "Supreme authority over Wilford Industries."
+    }
+  ],
+  "excommunications": []
+}

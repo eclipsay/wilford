@@ -1,43 +1,21 @@
 import Link from "next/link";
-import {
-  fallbackCommits,
-  filterVisibleCommits,
-  formatShortSha
-} from "@wilford/shared";
+import { formatShortSha } from "@wilford/shared";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
-
-async function getCommits() {
-  const baseUrl =
-    process.env.API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:4000";
-
-  try {
-    const response = await fetch(`${baseUrl}/api/commits`, {
-      cache: "no-store"
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to load commits");
-    }
-
-    const data = await response.json();
-    return filterVisibleCommits(data.commits || []);
-  } catch {
-    return filterVisibleCommits(fallbackCommits);
-  }
-}
+import { getSiteContent, getVisibleCommits } from "../../lib/content";
 
 export default async function CommitsPage() {
-  const commits = await getCommits();
+  const [commits, content] = await Promise.all([
+    getVisibleCommits(),
+    getSiteContent()
+  ]);
 
   return (
     <SiteLayout>
       <PageHero
         eyebrow="Transmission Feed"
         title="Recent Commits"
-        description="Public repository activity, filtered to exclude restricted commit messages."
+        description="Wilford Industries' latest commits from therepository on GitHub."
       />
 
       <main className="content">
@@ -45,7 +23,7 @@ export default async function CommitsPage() {
           <div className="commit-panel__header">
             <div>
               <p className="eyebrow">Repository</p>
-              <h2>eclipsay/wilford</h2>
+              <h2>{content.settings.commitsRepository}</h2>
             </div>
             <Link className="button" href="https://github.com/eclipsay/wilford">
               Open Repository

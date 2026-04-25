@@ -1,37 +1,49 @@
-import Link from "next/link";
-import { panelNavigation } from "@wilford/shared";
+import { fetchPublic } from "../lib/api";
+import { requireAuth } from "../lib/auth";
+import { PanelShell } from "../components/PanelShell";
 
-export default function PanelHomePage() {
+export default async function PanelHomePage() {
+  await requireAuth();
+  const [content, commits] = await Promise.all([
+    fetchPublic("/api/content"),
+    fetchPublic("/api/commits")
+  ]);
+
   return (
-    <main className="shell">
-      <header className="header">
-        <div>
-          <p>Wilford Internal</p>
-          <h1>Panel Dashboard</h1>
-        </div>
-        <nav style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-          {panelNavigation.map((item) => (
-            <Link key={item.href} href={item.href}>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      </header>
-
+    <PanelShell
+      title="Panel Dashboard"
+      description="Overview of current public content, records, and repository activity."
+    >
       <section className="cards">
         <article className="card">
-          <h2>Members</h2>
-          <p>Internal member and standing management.</p>
+          <p className="card__kicker">Members</p>
+          <h2>{content.members.length}</h2>
+          <p>Recognized records currently listed on the public site.</p>
         </article>
         <article className="card">
-          <h2>Commits</h2>
-          <p>Moderated repository activity and controls.</p>
+          <p className="card__kicker">Excommunications</p>
+          <h2>{content.excommunications.length}</h2>
+          <p>Removed or censured individuals currently listed.</p>
         </article>
         <article className="card">
-          <h2>System</h2>
-          <p>Health, deployment, and service monitoring.</p>
+          <p className="card__kicker">Commits</p>
+          <h2>{commits.commits.length}</h2>
+          <p>Visible repository commits after Wilford filtering.</p>
         </article>
       </section>
-    </main>
+
+      <section className="panel-grid">
+        <article className="panel-card">
+          <p className="card__kicker">Homepage Settings</p>
+          <h2>{content.settings.homepageHeadline}</h2>
+          <p>{content.settings.homepageDescription}</p>
+        </article>
+        <article className="panel-card">
+          <p className="card__kicker">Chairman</p>
+          <h2>{content.settings.chairmanName}</h2>
+          <p>Executive office identity currently published to the site.</p>
+        </article>
+      </section>
+    </PanelShell>
   );
 }

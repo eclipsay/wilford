@@ -1,8 +1,10 @@
 body {
   margin: 0;
-  background: #0a0605;
+  background:
+    radial-gradient(circle at top, rgba(125, 35, 14, 0.28), transparent 30%),
+    linear-gradient(180deg, #120808 0%, #090505 58%, #070404 100%);
   color: #f7e2b4;
-  font-family: Arial, sans-serif;
+  font-family: Georgia, "Times New Roman", serif;
 }
 
 a {
@@ -10,33 +12,244 @@ a {
   text-decoration: none;
 }
 
-.shell {
-  min-height: 100vh;
-  padding: 32px;
+.button,
+input,
+textarea {
+  font: inherit;
 }
 
-.header {
+.shell {
+  min-height: 100vh;
+  padding: 32px 4vw 64px;
+}
+
+.panel-header {
   display: flex;
   justify-content: space-between;
+  align-items: end;
+  gap: 24px;
+  margin-bottom: 36px;
+}
+
+.panel-header__eyebrow,
+.card__kicker,
+.auth-kicker {
+  margin: 0 0 12px;
+  color: #d8ac5e;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.panel-header h1,
+.auth-card h1 {
+  margin: 0;
+  color: #f0ca86;
+  font-size: clamp(2.2rem, 4vw, 3.5rem);
+  text-transform: uppercase;
+}
+
+.panel-header__copy,
+.auth-copy {
+  max-width: 720px;
+  color: rgba(244, 221, 180, 0.72);
+  line-height: 1.7;
+}
+
+.panel-nav {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.panel-nav a,
+.button {
+  display: inline-flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 32px;
+  justify-content: center;
+  padding: 12px 16px;
+  border: 1px solid rgba(211, 157, 79, 0.45);
+  color: #f0ca86;
+  background: rgba(22, 9, 7, 0.82);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
+  margin-bottom: 24px;
 }
 
 .card {
   padding: 24px;
   border: 1px solid rgba(211, 157, 79, 0.3);
   background: rgba(22, 9, 7, 0.88);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+}
+
+.card h2,
+.panel-card h2 {
+  margin: 0 0 12px;
+  color: #f0ca86;
+  font-size: 1.9rem;
+}
+
+.card p,
+.panel-card p,
+.record-item p,
+.record-item small {
+  color: rgba(244, 221, 180, 0.72);
+  line-height: 1.7;
+}
+
+.panel-grid,
+.panel-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.panel-card {
+  padding: 24px;
+  border: 1px solid rgba(211, 157, 79, 0.3);
+  background: rgba(22, 9, 7, 0.88);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+}
+
+.form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-card--wide {
+  max-width: 780px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field span {
+  color: #d8ac5e;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.88rem;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(211, 157, 79, 0.3);
+  background: rgba(11, 6, 6, 0.88);
+  color: #f7e2b4;
+}
+
+.button--solid {
+  cursor: pointer;
+}
+
+.button--ghost {
+  cursor: pointer;
+  background: transparent;
+}
+
+.record-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.record-item,
+.commit-admin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(211, 157, 79, 0.16);
+}
+
+.record-item:last-child,
+.commit-admin-row:last-child {
+  border-bottom: none;
+}
+
+.record-item h2 {
+  margin: 0 0 4px;
+  font-size: 1.2rem;
+}
+
+.commit-admin-row {
+  grid-template-columns: 110px minmax(0, 1fr) 180px;
+}
+
+.commit-admin-row span:first-child {
+  color: #d8ac5e;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.commit-admin-row span:last-child {
+  color: rgba(244, 221, 180, 0.72);
+  text-align: right;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.auth-card {
+  width: min(100%, 520px);
+  padding: 32px;
+  border: 1px solid rgba(211, 157, 79, 0.3);
+  background: rgba(22, 9, 7, 0.92);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 28px 0 14px;
+}
+
+.form-error {
+  color: #ffb3a6;
+}
+
+.system-banner {
+  margin-bottom: 24px;
+}
+
+.system-banner--error {
+  border-color: rgba(255, 128, 102, 0.45);
 }
 
 @media (max-width: 900px) {
+  .panel-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
   .cards {
     grid-template-columns: 1fr;
+  }
+
+  .panel-grid,
+  .panel-split,
+  .commit-admin-row,
+  .record-item {
+    grid-template-columns: 1fr;
+  }
+
+  .commit-admin-row span:last-child {
+    text-align: left;
   }
 }

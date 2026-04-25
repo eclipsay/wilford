@@ -1,14 +1,16 @@
-import { brand } from "@wilford/shared";
 import { PageHero } from "../components/PageHero";
 import { SiteLayout } from "../components/SiteLayout";
+import { getSiteContent } from "../lib/content";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const content = await getSiteContent();
+
   return (
     <SiteLayout>
       <PageHero
-        eyebrow="Welcome to"
-        title={brand.name}
-        description={`A monument to order, expansion, and industrial discipline under the leadership of Chairman ${brand.chairman}.`}
+        eyebrow={content.settings.homepageEyebrow}
+        title={content.settings.homepageHeadline}
+        description={content.settings.homepageDescription}
       />
 
       <main className="content">
@@ -21,7 +23,7 @@ export default function HomePage() {
           <article className="panel">
             <p className="eyebrow">Records</p>
             <h2>Members List</h2>
-            <p>Recognized members, standing, and organization records.</p>
+            <p>{content.members.length} recognized members are currently listed in public records.</p>
           </article>
           <article className="panel">
             <p className="eyebrow">Development</p>

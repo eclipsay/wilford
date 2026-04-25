@@ -2,6 +2,10 @@ import Link from "next/link";
 import { brand, mainNavigation } from "@wilford/shared";
 
 export function SiteLayout({ children }) {
+  const panelUrl =
+    process.env.NEXT_PUBLIC_PANEL_URL ||
+    "https://panel.wilfordindustries.org";
+
   return (
     <div className="site-shell">
       <header className="topbar">
@@ -21,9 +25,14 @@ export function SiteLayout({ children }) {
           ))}
         </nav>
 
-        <Link className="button" href="/panel-access">
+        <a
+          className="button"
+          href={panelUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
           Panel Access
-        </Link>
+        </a>
       </header>
 
       {children}
