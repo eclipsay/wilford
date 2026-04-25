@@ -1,0 +1,13 @@
+{
+  "name": "@wilford/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./navigation": "./src/navigation.js",
+    "./commits": "./src/commits.js",
+    "./brand": "./src/brand.js"
+  }
+}

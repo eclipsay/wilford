@@ -1,0 +1,17 @@
+{
+  "name": "@wilford/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "build": "node -e \"console.log('api build step not required')\"",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@wilford/shared": "1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
+  }
+}
