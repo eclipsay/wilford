@@ -14,5 +14,7 @@ export const config = {
   adminApiKey: process.env.ADMIN_API_KEY || "",
   dataFile: resolve(currentDir, "../data/content.json"),
   repoRoot: process.env.REPO_ROOT || resolve(currentDir, "../../.."),
-  panelPm2Name: process.env.PANEL_PM2_NAME || "wilford-panel"
+  panelPm2Name: process.env.PANEL_PM2_NAME || "wilford-panel",
+  ownerUsername: process.env.PANEL_OWNER_USERNAME || "eclip",
+  ownerPassword: process.env.PANEL_OWNER_PASSWORD || ""
 };

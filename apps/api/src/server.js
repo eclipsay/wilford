@@ -2,11 +2,15 @@ import cors from "cors";
 import express from "express";
 import { config } from "./config.js";
 import {
+  authenticatePanelUser,
   createExcommunication,
   createMember,
+  createPanelUser,
   deleteExcommunication,
   deleteMember,
+  deletePanelUser,
   getContent,
+  getPanelUsers,
   updateSettings
 } from "./content-store.js";
 import { deployPanel } from "./deploy.js";
@@ -26,6 +30,24 @@ function requireAdmin(req, res, next) {
 
   if (req.headers["x-admin-key"] !== config.adminApiKey) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+}
+
+function requireOwner(req, res, next) {
+  if (!config.adminApiKey) {
+    return res.status(500).json({
+      error: "ADMIN_API_KEY is not configured on the API."
+    });
+  }
+
+  if (req.headers["x-admin-key"] !== config.adminApiKey) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (req.headers["x-admin-role"] !== "owner") {
+    return res.status(403).json({ error: "Owner access required" });
   }
 
   next();
@@ -64,9 +86,58 @@ app.get("/api/commits", async (_req, res) => {
   res.json({ commits });
 });
 
+app.post("/api/panel/login", async (req, res) => {
+  const username = String(req.body?.username || "");
+  const password = String(req.body?.password || "");
+
+  const user = await authenticatePanelUser(username, password);
+
+  if (!user) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  res.json({ user });
+});
+
 app.post("/api/admin/settings", requireAdmin, async (req, res) => {
   const content = await updateSettings(req.body || {});
   res.json({ settings: content.settings });
+});
+
+app.get("/api/admin/users", requireOwner, async (_req, res) => {
+  const users = await getPanelUsers();
+  res.json({
+    users,
+    owner: {
+      username: config.ownerUsername,
+      role: "owner"
+    }
+  });
+});
+
+app.post("/api/admin/users", requireOwner, async (req, res) => {
+  const username = String(req.body?.username || "").trim();
+  const password = String(req.body?.password || "").trim();
+  const role = String(req.body?.role || "editor").trim();
+
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password are required." });
+  }
+
+  const users = await createPanelUser({
+    id: createId("user"),
+    username,
+    password,
+    role,
+    createdAt: new Date().toISOString()
+  });
+
+  res.status(201).json({ users });
+});
+
+app.delete("/api/admin/users/:id", requireOwner, async (req, res) => {
+  const users = await deletePanelUser(req.params.id);
+  res.json({ users });
 });
 
 app.post("/api/admin/members", requireAdmin, async (req, res) => {

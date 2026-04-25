@@ -53,8 +53,8 @@ export default async function SystemPage({ searchParams }) {
         </article>
         <article className="card">
           <p className="card__kicker">Panel Auth</p>
-          <h2>{process.env.PANEL_ADMIN_PASSWORD ? "Configured" : "Missing"}</h2>
-          <p>Password login is enabled when the panel admin password exists.</p>
+          <h2>{process.env.PANEL_SESSION_SECRET ? "Configured" : "Missing"}</h2>
+          <p>Username and password login is enabled when the panel auth variables exist on the API and panel.</p>
         </article>
       </section>
 

@@ -1,7 +1,22 @@
 import Link from "next/link";
 import { panelNavigation } from "@wilford/shared";
+import { clearAuthenticatedSession, getSession } from "../lib/auth";
 
-export function PanelShell({ title, description, children }) {
+async function logoutAction() {
+  "use server";
+  await clearAuthenticatedSession();
+}
+
+export async function PanelShell({ title, description, children }) {
+  const session = await getSession();
+  const navigation = panelNavigation.filter((item) => {
+    if (item.href === "/users") {
+      return session?.role === "owner";
+    }
+
+    return true;
+  });
+
   return (
     <main className="shell">
       <header className="panel-header">
@@ -12,12 +27,19 @@ export function PanelShell({ title, description, children }) {
         </div>
 
         <nav className="panel-nav">
-          {panelNavigation.map((item) => (
+          {navigation.map((item) => (
             <Link key={item.href} href={item.href}>
               {item.label}
             </Link>
           ))}
-          <Link href="/login">Lock</Link>
+          <span className="panel-nav__identity">
+            {session?.username} / {session?.role}
+          </span>
+          <form action={logoutAction}>
+            <button className="button button--ghost" type="submit">
+              Sign out
+            </button>
+          </form>
         </nav>
       </header>
 

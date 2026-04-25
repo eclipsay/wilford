@@ -59,6 +59,7 @@ textarea {
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .panel-nav a,
@@ -70,6 +71,12 @@ textarea {
   border: 1px solid rgba(211, 157, 79, 0.45);
   color: #f0ca86;
   background: rgba(22, 9, 7, 0.82);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.panel-nav__identity {
+  color: rgba(244, 221, 180, 0.72);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -141,7 +148,8 @@ textarea {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   padding: 14px 16px;
   border: 1px solid rgba(211, 157, 79, 0.3);

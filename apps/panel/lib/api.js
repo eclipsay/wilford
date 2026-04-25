@@ -19,7 +19,12 @@ export async function fetchAdmin(path, options = {}) {
 }
 
 export async function fetchPublic(path) {
+  return fetchPublicWithOptions(path);
+}
+
+export async function fetchPublicWithOptions(path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
     cache: "no-store"
   });
 

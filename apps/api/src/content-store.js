@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { config } from "./config.js";
 
@@ -20,8 +21,32 @@ const defaultContent = {
       notes: "Supreme authority over Wilford Industries."
     }
   ],
-  excommunications: []
+  excommunications: [],
+  panelUsers: []
 };
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const [salt, hash] = String(storedHash || "").split(":");
+
+  if (!salt || !hash) {
+    return false;
+  }
+
+  const passwordBuffer = scryptSync(password, salt, 64);
+  const hashBuffer = Buffer.from(hash, "hex");
+
+  if (passwordBuffer.length !== hashBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(passwordBuffer, hashBuffer);
+}
 
 async function readContentFile() {
   try {
@@ -34,7 +59,8 @@ async function readContentFile() {
         ...(parsed.settings || {})
       },
       members: parsed.members || [],
-      excommunications: parsed.excommunications || []
+      excommunications: parsed.excommunications || [],
+      panelUsers: parsed.panelUsers || []
     };
   } catch {
     return structuredClone(defaultContent);
@@ -47,6 +73,15 @@ async function writeContentFile(content) {
 
 export async function getContent() {
   return readContentFile();
+}
+
+export function sanitizePanelUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    createdAt: user.createdAt
+  };
 }
 
 export async function updateSettings(nextSettings) {
@@ -87,4 +122,62 @@ export async function deleteExcommunication(id) {
   );
   await writeContentFile(content);
   return content.excommunications;
+}
+
+export async function getPanelUsers() {
+  const content = await readContentFile();
+  return content.panelUsers.map(sanitizePanelUser);
+}
+
+export async function createPanelUser(user) {
+  const content = await readContentFile();
+  const nextUser = {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    passwordHash: hashPassword(user.password),
+    createdAt: user.createdAt
+  };
+
+  content.panelUsers.unshift(nextUser);
+  await writeContentFile(content);
+  return content.panelUsers.map(sanitizePanelUser);
+}
+
+export async function deletePanelUser(id) {
+  const content = await readContentFile();
+  content.panelUsers = content.panelUsers.filter((user) => user.id !== id);
+  await writeContentFile(content);
+  return content.panelUsers.map(sanitizePanelUser);
+}
+
+export async function authenticatePanelUser(username, password) {
+  if (
+    username === config.ownerUsername &&
+    config.ownerPassword &&
+    password === config.ownerPassword
+  ) {
+    return {
+      username,
+      role: "owner"
+    };
+  }
+
+  const content = await readContentFile();
+  const user = content.panelUsers.find(
+    (entry) => entry.username.toLowerCase() === String(username).toLowerCase()
+  );
+
+  if (!user) {
+    return null;
+  }
+
+  if (!verifyPassword(password, user.passwordHash)) {
+    return null;
+  }
+
+  return {
+    username: user.username,
+    role: user.role
+  };
 }

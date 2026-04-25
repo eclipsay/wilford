@@ -1,20 +1,27 @@
 import { redirect } from "next/navigation";
 import { clearAuthenticatedSession, isAuthenticated, setAuthenticatedSession } from "../../lib/auth";
+import { fetchPublicWithOptions } from "../../lib/api";
 
 async function loginAction(formData) {
   "use server";
 
-  const password = formData.get("password");
+  try {
+    const response = await fetchPublicWithOptions("/api/panel/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        username: String(formData.get("username") || ""),
+        password: String(formData.get("password") || "")
+      })
+    });
 
-  if (!process.env.PANEL_ADMIN_PASSWORD) {
-    throw new Error("PANEL_ADMIN_PASSWORD is not configured.");
-  }
-
-  if (password !== process.env.PANEL_ADMIN_PASSWORD) {
+    await setAuthenticatedSession(response.user);
+  } catch {
     redirect("/login?error=1");
   }
 
-  await setAuthenticatedSession();
   redirect("/");
 }
 
@@ -38,18 +45,22 @@ export default async function LoginPage({ searchParams }) {
         <p className="auth-kicker">Restricted Access</p>
         <h1>Wilford Panel</h1>
         <p className="auth-copy">
-          Enter the administrative password to access content management,
-          records, and site controls.
+          Sign in with your panel username and password to access Wilford
+          control tools, records, and administrative actions.
         </p>
 
         <form action={loginAction} className="auth-form">
+          <label className="field">
+            <span>Username</span>
+            <input defaultValue="eclip" name="username" required />
+          </label>
           <label className="field">
             <span>Password</span>
             <input name="password" type="password" required />
           </label>
 
           {hasError ? (
-            <p className="form-error">The password was not accepted.</p>
+            <p className="form-error">The username or password was not accepted.</p>
           ) : null}
 
           <button className="button button--solid" type="submit">
