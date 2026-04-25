@@ -5,6 +5,22 @@ import { fetchPublicWithOptions } from "../../lib/api";
 async function loginAction(formData) {
   "use server";
 
+  const username = String(formData.get("username") || "");
+  const password = String(formData.get("password") || "");
+
+  if (
+    process.env.PANEL_OWNER_USERNAME &&
+    process.env.PANEL_OWNER_PASSWORD &&
+    username === process.env.PANEL_OWNER_USERNAME &&
+    password === process.env.PANEL_OWNER_PASSWORD
+  ) {
+    await setAuthenticatedSession({
+      username,
+      role: "owner"
+    });
+    redirect("/");
+  }
+
   try {
     const response = await fetchPublicWithOptions("/api/panel/login", {
       method: "POST",
@@ -12,8 +28,8 @@ async function loginAction(formData) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        username: String(formData.get("username") || ""),
-        password: String(formData.get("password") || "")
+        username,
+        password
       })
     });
 
@@ -46,7 +62,8 @@ export default async function LoginPage({ searchParams }) {
         <h1>Wilford Panel</h1>
         <p className="auth-copy">
           Sign in with your panel username and password to access Wilford
-          control tools, records, and administrative actions.
+          control tools, records, and administrative actions. The owner account
+          for `eclip` can be read from panel or API environment settings.
         </p>
 
         <form action={loginAction} className="auth-form">
