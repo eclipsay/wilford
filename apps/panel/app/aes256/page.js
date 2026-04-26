@@ -1,5 +1,6 @@
 import { requireAuth } from "../../lib/auth";
 import { PanelShell } from "../../components/PanelShell";
+import { AesWorkspace } from "../../components/AesWorkspace";
 
 export default async function Aes256Page() {
   await requireAuth();
@@ -7,19 +8,23 @@ export default async function Aes256Page() {
   return (
     <PanelShell
       title="AES256"
-      description="Reserved for future encryption and decryption tooling inside the Wilford panel."
+      description="Encrypt and decrypt operational text inside the panel with a single clean workspace."
     >
-      <section className="panel-card form-card form-card--wide">
-        <p className="card__kicker">Future Tooling</p>
-        <h2>AES256 Encrypter</h2>
+      <section className="panel-card">
+        <div className="panel-card__header">
+          <div>
+            <p className="card__kicker">Crypto Tools</p>
+            <h2>Encryption Workspace</h2>
+          </div>
+        </div>
         <p>
-          This control is a placeholder for the future AES-256 encryptor and
-          decrypter workflow. It is intentionally inactive right now.
+          This tool uses AES-256 in the browser with your passphrase. Keep the
+          passphrase private because the encrypted text cannot be recovered
+          without it.
         </p>
-        <button className="button button--solid" disabled type="button">
-          AES256 Encrypter
-        </button>
       </section>
+
+      <AesWorkspace />
     </PanelShell>
   );
 }

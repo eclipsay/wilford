@@ -36,10 +36,10 @@ async function deleteMemberAction(formData) {
 async function moveMemberAction(formData) {
   "use server";
 
-  await fetchAdmin(`/api/admin/members/${formData.get("id")}/move`, {
+  await fetchAdmin(`/api/admin/members/${formData.get("id")}/position`, {
     method: "POST",
     body: JSON.stringify({
-      direction: formData.get("direction")
+      targetIndex: Number(formData.get("targetIndex") ?? 0)
     })
   });
 
@@ -77,10 +77,10 @@ async function deleteAllianceAction(formData) {
 async function moveAllianceAction(formData) {
   "use server";
 
-  await fetchAdmin(`/api/admin/alliances/${formData.get("id")}/move`, {
+  await fetchAdmin(`/api/admin/alliances/${formData.get("id")}/position`, {
     method: "POST",
     body: JSON.stringify({
-      direction: formData.get("direction")
+      targetIndex: Number(formData.get("targetIndex") ?? 0)
     })
   });
 
@@ -88,31 +88,57 @@ async function moveAllianceAction(formData) {
   redirect("/members");
 }
 
-function OrderControls({ id, isFirst, isLast, moveAction, deleteAction }) {
+function OrderControls({
+  id,
+  index,
+  total,
+  isFirst,
+  isLast,
+  moveAction,
+  deleteAction
+}) {
   return (
     <div className="record-actions">
       <form action={moveAction}>
         <input name="id" type="hidden" value={id} />
+        <input name="targetIndex" type="hidden" value={Math.max(0, index - 1)} />
         <button
           className="button button--ghost"
           disabled={isFirst}
-          name="direction"
           type="submit"
-          value="up"
         >
           Up
         </button>
       </form>
       <form action={moveAction}>
         <input name="id" type="hidden" value={id} />
+        <input
+          name="targetIndex"
+          type="hidden"
+          value={Math.min(total - 1, index + 1)}
+        />
         <button
           className="button button--ghost"
           disabled={isLast}
-          name="direction"
           type="submit"
-          value="down"
         >
           Down
+        </button>
+      </form>
+      <form action={moveAction} className="record-actions__position">
+        <input name="id" type="hidden" value={id} />
+        <label className="sr-only" htmlFor={`position-${id}`}>
+          Position for {id}
+        </label>
+        <select defaultValue={index} id={`position-${id}`} name="targetIndex">
+          {Array.from({ length: total }, (_, position) => (
+            <option key={position} value={position}>
+              Position {position + 1}
+            </option>
+          ))}
+        </select>
+        <button className="button button--ghost" type="submit">
+          Move
         </button>
       </form>
       <form action={deleteAction}>
@@ -142,9 +168,11 @@ function OrderedList({ items, emptyMessage, renderMeta, moveAction, deleteAction
           <OrderControls
             deleteAction={deleteAction}
             id={item.id}
+            index={index}
             isFirst={index === 0}
             isLast={index === items.length - 1}
             moveAction={moveAction}
+            total={items.length}
           />
         </article>
       ))}

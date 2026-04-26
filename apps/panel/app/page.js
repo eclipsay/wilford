@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { fetchPublic } from "../lib/api";
 import { requireAuth } from "../lib/auth";
 import { PanelShell } from "../components/PanelShell";
@@ -42,35 +41,6 @@ export default async function PanelHomePage() {
         <article className="panel-card">
           <div className="panel-card__header">
             <div>
-              <p className="card__kicker">Quick Actions</p>
-              <h2>Main Controls</h2>
-            </div>
-          </div>
-          <div className="control-links">
-            <Link className="button" href="/members">
-              Members
-            </Link>
-            <Link className="button" href="/excommunications">
-              Excommunications
-            </Link>
-            <Link className="button" href="/settings">
-              Settings
-            </Link>
-            <Link className="button" href="/commits">
-              Commits
-            </Link>
-            <Link className="button" href="/system">
-              System and Bot
-            </Link>
-            <Link className="button" href="/users">
-              Users
-            </Link>
-          </div>
-        </article>
-
-        <article className="panel-card">
-          <div className="panel-card__header">
-            <div>
               <p className="card__kicker">Keep It Simple</p>
               <h2>How To Use It</h2>
             </div>
@@ -87,6 +57,10 @@ export default async function PanelHomePage() {
             <div className="simple-list__item">
               <strong>Operational actions stay in System.</strong>
               <p>Panel deploy and Discord bot restart controls are grouped there to avoid clutter.</p>
+            </div>
+            <div className="simple-list__item">
+              <strong>AES256 now lives in the panel.</strong>
+              <p>Use the AES256 page in the top navigation for encryption and decryption work.</p>
             </div>
           </div>
         </article>

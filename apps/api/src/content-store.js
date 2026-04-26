@@ -121,6 +121,29 @@ function moveOrderedItem(items, id, direction) {
   return withReindexedOrder(next);
 }
 
+function setOrderedItemPosition(items, id, targetIndex) {
+  const normalized = withNormalizedOrder(items);
+  const index = normalized.findIndex((item) => item.id === id);
+
+  if (index === -1) {
+    return normalized;
+  }
+
+  const boundedTargetIndex = Math.max(
+    0,
+    Math.min(normalized.length - 1, Number(targetIndex) || 0)
+  );
+
+  if (boundedTargetIndex === index) {
+    return normalized;
+  }
+
+  const next = [...normalized];
+  const [item] = next.splice(index, 1);
+  next.splice(boundedTargetIndex, 0, item);
+  return withReindexedOrder(next);
+}
+
 export async function getContent() {
   return readContentFile();
 }
@@ -165,6 +188,13 @@ export async function moveMember(id, direction) {
   return content.members;
 }
 
+export async function updateMemberPosition(id, targetIndex) {
+  const content = await readContentFile();
+  content.members = setOrderedItemPosition(content.members, id, targetIndex);
+  await writeContentFile(content);
+  return content.members;
+}
+
 export async function createAlliance(entry) {
   const content = await readContentFile();
   content.alliances = addOrderedItem(content.alliances, entry);
@@ -182,6 +212,17 @@ export async function deleteAlliance(id) {
 export async function moveAlliance(id, direction) {
   const content = await readContentFile();
   content.alliances = moveOrderedItem(content.alliances, id, direction);
+  await writeContentFile(content);
+  return content.alliances;
+}
+
+export async function updateAlliancePosition(id, targetIndex) {
+  const content = await readContentFile();
+  content.alliances = setOrderedItemPosition(
+    content.alliances,
+    id,
+    targetIndex
+  );
   await writeContentFile(content);
   return content.alliances;
 }

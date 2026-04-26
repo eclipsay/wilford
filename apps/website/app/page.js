@@ -8,7 +8,7 @@ export default async function HomePage() {
     <SiteLayout>
       <main className="content content--hero">
         <section className="homepage-image-hero">
-          <div className="homepage-image-hero__overlay">
+          <div className="homepage-image-hero__overlay homepage-image-hero__overlay--centered">
             <p className="eyebrow">{content.settings.homepageEyebrow}</p>
             <h1>{content.settings.homepageHeadline}</h1>
             <p className="lead">{content.settings.homepageDescription}</p>

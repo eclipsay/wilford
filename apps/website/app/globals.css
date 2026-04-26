@@ -183,6 +183,13 @@ h3 {
   padding: 50px 0 24px;
 }
 
+.hero--centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
 .hero-simple {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
@@ -211,11 +218,22 @@ h3 {
   padding: 0;
 }
 
+.homepage-image-hero__overlay--centered {
+  margin: 0 auto 28px;
+  text-align: center;
+}
+
 .homepage-image-hero__totals {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-top: 24px;
+}
+
+.hero--centered .lead,
+.homepage-image-hero__overlay--centered .lead {
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .homepage-image-hero__totals article {
@@ -885,6 +903,41 @@ h3 {
   margin-bottom: 72px;
 }
 
+.public-crypto-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.public-crypto-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.public-crypto-field span {
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.84rem;
+}
+
+.public-crypto-field input,
+.public-crypto-field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(10, 6, 6, 0.92);
+  color: var(--text);
+  font: inherit;
+}
+
+.public-crypto-error {
+  margin: 0;
+  color: #ffb8ac;
+}
+
 @media (max-width: 1180px) {
   .homepage-image-hero {
     min-height: 720px;
@@ -984,6 +1037,10 @@ h3 {
   .homepage-image-hero__overlay {
     margin: 0 18px 18px;
     padding: 0;
+  }
+
+  .homepage-image-hero__overlay--centered {
+    margin: 0 auto 18px;
   }
 
   .homepage-image-hero__totals,

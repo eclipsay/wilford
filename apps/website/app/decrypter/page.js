@@ -1,3 +1,4 @@
+import { PublicDecrypter } from "../../components/PublicDecrypter";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 
@@ -5,10 +6,14 @@ export default function DecrypterPage() {
   return (
     <SiteLayout>
       <PageHero
-        eyebrow="Future Deployment"
+        eyebrow="AES256"
         title="Decrypter"
-        description="Prepared for future AES-256 encryptor and decrypter rollout information."
+        description="Decrypt messages created with the Wilford AES256 tool using the correct passphrase."
       />
+
+      <main className="content">
+        <PublicDecrypter />
+      </main>
     </SiteLayout>
   );
 }

@@ -19,6 +19,8 @@ import {
   moveEnemyNation,
   moveExcommunication,
   moveMember,
+  updateAlliancePosition,
+  updateMemberPosition,
   updateSettings
 } from "./content-store.js";
 import { deployDiscordBot, deployPanel } from "./deploy.js";
@@ -185,6 +187,14 @@ app.post("/api/admin/members/:id/move", requireAdmin, async (req, res) => {
   res.json({ members });
 });
 
+app.post("/api/admin/members/:id/position", requireAdmin, async (req, res) => {
+  const members = await updateMemberPosition(
+    req.params.id,
+    Number(req.body?.targetIndex ?? 0)
+  );
+  res.json({ members });
+});
+
 app.delete("/api/admin/members/:id", requireAdmin, async (req, res) => {
   const members = await deleteMember(req.params.id);
   res.json({ members });
@@ -209,6 +219,18 @@ app.post("/api/admin/alliances/:id/move", requireAdmin, async (req, res) => {
   );
   res.json({ alliances });
 });
+
+app.post(
+  "/api/admin/alliances/:id/position",
+  requireAdmin,
+  async (req, res) => {
+    const alliances = await updateAlliancePosition(
+      req.params.id,
+      Number(req.body?.targetIndex ?? 0)
+    );
+    res.json({ alliances });
+  }
+);
 
 app.delete("/api/admin/alliances/:id", requireAdmin, async (req, res) => {
   const alliances = await deleteAlliance(req.params.id);
