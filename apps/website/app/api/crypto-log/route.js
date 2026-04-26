@@ -10,7 +10,7 @@ function resolveContentFile() {
     process.env.REPO_ROOT
       ? resolve(process.env.REPO_ROOT, "apps/api/data/content.json")
       : null,
-    resolve(currentDir, "../../../../../api/data/content.json"),
+    resolve(currentDir, "../../../../api/data/content.json"),
     resolve(process.cwd(), "../api/data/content.json"),
     resolve(process.cwd(), "../../apps/api/data/content.json"),
     resolve(process.cwd(), "apps/api/data/content.json")

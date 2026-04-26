@@ -47,10 +47,9 @@ select {
 }
 
 .panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, auto);
+  gap: 20px 28px;
   margin-bottom: 20px;
   padding: 20px 22px;
   border: 1px solid var(--panel-line);
@@ -81,8 +80,8 @@ select {
 .panel-header__tools {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  align-items: flex-end;
+  gap: 12px;
+  align-items: stretch;
 }
 
 .panel-status-pill {
@@ -144,6 +143,13 @@ select {
   justify-content: flex-end;
 }
 
+.panel-header__account {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .panel-nav a,
 .button {
   display: inline-flex;
@@ -170,6 +176,7 @@ select {
 .panel-nav__identity {
   color: var(--panel-text-soft);
   font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .cards {
@@ -488,7 +495,7 @@ select {
 
 @media (max-width: 1080px) {
   .panel-header {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .panel-header__tools {
@@ -497,6 +504,10 @@ select {
   }
 
   .panel-nav {
+    justify-content: flex-start;
+  }
+
+  .panel-header__account {
     justify-content: flex-start;
   }
 
@@ -541,5 +552,9 @@ select {
 
   .panel-header__brand {
     flex-direction: column;
+  }
+
+  .panel-header__account {
+    flex-wrap: wrap;
   }
 }

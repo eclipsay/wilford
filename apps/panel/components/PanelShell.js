@@ -61,6 +61,9 @@ export async function PanelShell({ title, description, children }) {
                 {item.label}
               </Link>
             ))}
+          </nav>
+
+          <div className="panel-header__account">
             <span className="panel-nav__identity">
               {session?.username} / {session?.role}
             </span>
@@ -69,7 +72,7 @@ export async function PanelShell({ title, description, children }) {
                 Sign out
               </button>
             </form>
-          </nav>
+          </div>
         </div>
       </header>
 
