@@ -1,6 +1,7 @@
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getSiteContent } from "../../lib/content";
+import Image from "next/image";
 
 export default async function ChairmanPage() {
   const content = await getSiteContent();
@@ -15,7 +16,18 @@ export default async function ChairmanPage() {
       />
 
       <main className="content">
-        <section className="panel">
+        <section className="panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ margin: '0 auto 32px', maxWidth: 480, width: '100%' }}>
+            <Image
+              src="/lemmie-portrait.png"
+              alt="Official Portrait of Chairman Lemmie"
+              width={480}
+              height={600}
+              style={{ width: '100%', height: 'auto', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.45)' }}
+              priority
+            />
+          </div>
+
           <div className="panel__header">
             <div>
               <p className="eyebrow">Biography</p>
