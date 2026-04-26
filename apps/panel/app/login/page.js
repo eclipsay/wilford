@@ -5,17 +5,19 @@ import { fetchPublicWithOptions } from "../../lib/api";
 async function loginAction(formData) {
   "use server";
 
-  const username = String(formData.get("username") || "");
-  const password = String(formData.get("password") || "");
+  const username = String(formData.get("username") || "").trim();
+  const password = String(formData.get("password") || "").trim();
+  const ownerUsername = String(process.env.PANEL_OWNER_USERNAME || "").trim();
+  const ownerPassword = String(process.env.PANEL_OWNER_PASSWORD || "").trim();
 
   if (
-    process.env.PANEL_OWNER_USERNAME &&
-    process.env.PANEL_OWNER_PASSWORD &&
-    username === process.env.PANEL_OWNER_USERNAME &&
-    password === process.env.PANEL_OWNER_PASSWORD
+    ownerUsername &&
+    ownerPassword &&
+    username.toLowerCase() === ownerUsername.toLowerCase() &&
+    password === ownerPassword
   ) {
     await setAuthenticatedSession({
-      username,
+      username: ownerUsername,
       role: "owner"
     });
     redirect("/");

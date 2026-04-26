@@ -1,9 +1,28 @@
+:root {
+  --panel-bg: #090505;
+  --panel-surface: rgba(20, 8, 7, 0.9);
+  --panel-surface-strong: rgba(25, 10, 9, 0.96);
+  --panel-line: rgba(211, 157, 79, 0.26);
+  --panel-line-strong: rgba(211, 157, 79, 0.48);
+  --panel-gold: #d8ac5e;
+  --panel-gold-bright: #f0ca86;
+  --panel-text: #f7e2b4;
+  --panel-text-soft: rgba(244, 221, 180, 0.74);
+  --panel-red: #6d1412;
+  --panel-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
+  min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(125, 35, 14, 0.28), transparent 30%),
-    linear-gradient(180deg, #120808 0%, #090505 58%, #070404 100%);
-  color: #f7e2b4;
+    radial-gradient(circle at top, rgba(125, 35, 14, 0.25), transparent 30%),
+    linear-gradient(180deg, #150909 0%, #0a0505 55%, #070404 100%);
+  color: var(--panel-text);
   font-family: Georgia, "Times New Roman", serif;
 }
 
@@ -14,28 +33,88 @@ a {
 
 .button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
 .shell {
   min-height: 100vh;
-  padding: 24px 4vw 48px;
+  padding: 26px 4vw 52px;
+  background:
+    linear-gradient(90deg, rgba(221, 170, 95, 0.05) 1px, transparent 1px),
+    linear-gradient(rgba(221, 170, 95, 0.04) 1px, transparent 1px);
+  background-size: 42px 42px;
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
-  align-items: end;
+  align-items: start;
   gap: 24px;
   margin-bottom: 28px;
+  padding: 22px 24px;
+  border: 1px solid var(--panel-line);
+  background:
+    linear-gradient(180deg, rgba(92, 18, 14, 0.14), rgba(17, 8, 7, 0.92)),
+    var(--panel-surface);
+  box-shadow: var(--panel-shadow);
+}
+
+.panel-header__brand {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+}
+
+.panel-brand-mark {
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--panel-line-strong);
+  border-radius: 50%;
+  color: var(--panel-gold-bright);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.08), transparent 42%),
+    linear-gradient(180deg, rgba(122, 26, 19, 0.84), rgba(18, 8, 7, 0.96));
+  font-size: 1.9rem;
+}
+
+.panel-header__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: end;
+}
+
+.panel-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  color: var(--panel-text-soft);
+  background: rgba(10, 8, 8, 0.58);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.82rem;
+}
+
+.panel-status-pill span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #53c878;
+  box-shadow: 0 0 12px rgba(83, 200, 120, 0.6);
 }
 
 .panel-header__eyebrow,
 .card__kicker,
 .auth-kicker {
   margin: 0 0 12px;
-  color: #d8ac5e;
+  color: var(--panel-gold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -43,23 +122,25 @@ textarea {
 .panel-header h1,
 .auth-card h1 {
   margin: 0;
-  color: #f0ca86;
-  font-size: clamp(2.2rem, 4vw, 3.5rem);
+  color: var(--panel-gold-bright);
+  font-size: clamp(2.1rem, 4vw, 3.4rem);
   text-transform: uppercase;
+  line-height: 0.96;
 }
 
 .panel-header__copy,
 .auth-copy {
-  max-width: 720px;
-  color: rgba(244, 221, 180, 0.72);
-  line-height: 1.7;
+  max-width: 700px;
+  color: var(--panel-text-soft);
+  line-height: 1.72;
 }
 
 .panel-nav {
   display: flex;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: end;
 }
 
 .panel-nav a,
@@ -68,47 +149,96 @@ textarea {
   align-items: center;
   justify-content: center;
   padding: 10px 14px;
-  border: 1px solid rgba(211, 157, 79, 0.45);
-  color: #f0ca86;
-  background: rgba(22, 9, 7, 0.82);
+  border: 1px solid var(--panel-line-strong);
+  color: var(--panel-gold-bright);
+  background: rgba(22, 9, 7, 0.84);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
+  transition: transform 150ms ease, background 150ms ease;
+}
+
+.panel-nav a:hover,
+.button:hover,
+.button:focus-visible {
+  transform: translateY(-1px);
+  background: rgba(43, 14, 12, 0.92);
 }
 
 .panel-nav__identity {
-  color: rgba(244, 221, 180, 0.72);
+  color: var(--panel-text-soft);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  padding: 0 4px;
 }
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 18px;
 }
 
-.card {
+.card,
+.panel-card {
   padding: 18px;
-  border: 1px solid rgba(211, 157, 79, 0.3);
-  background: rgba(22, 9, 7, 0.88);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--panel-line);
+  background:
+    linear-gradient(180deg, rgba(95, 17, 11, 0.14), rgba(12, 8, 7, 0.9)),
+    var(--panel-surface);
+  box-shadow: var(--panel-shadow);
 }
 
 .card h2,
-.panel-card h2 {
+.panel-card h2,
+.panel-hero h2 {
   margin: 0 0 10px;
-  color: #f0ca86;
+  color: var(--panel-gold-bright);
   font-size: 1.5rem;
+  text-transform: uppercase;
 }
 
 .card p,
 .panel-card p,
 .record-item p,
-.record-item small {
-  color: rgba(244, 221, 180, 0.72);
+.record-item small,
+.commit-admin-row span:nth-child(2),
+.panel-hero p {
+  color: var(--panel-text-soft);
   line-height: 1.7;
+}
+
+.panel-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--panel-line);
+  background:
+    linear-gradient(135deg, rgba(92, 18, 14, 0.24), rgba(18, 8, 7, 0.96)),
+    var(--panel-surface-strong);
+  box-shadow: var(--panel-shadow);
+}
+
+.panel-hero__seal {
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 150px;
+  justify-self: end;
+  border-radius: 50%;
+  border: 1px solid var(--panel-line-strong);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.08), transparent 42%),
+    linear-gradient(180deg, rgba(122, 26, 19, 0.84), rgba(18, 8, 7, 0.96));
+}
+
+.panel-hero__seal span {
+  color: var(--panel-gold-bright);
+  font-size: 4rem;
+  line-height: 1;
 }
 
 .panel-grid,
@@ -118,11 +248,12 @@ textarea {
   gap: 16px;
 }
 
-.panel-card {
-  padding: 18px;
-  border: 1px solid rgba(211, 157, 79, 0.3);
-  background: rgba(22, 9, 7, 0.88);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+.panel-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 14px;
 }
 
 .form-card {
@@ -142,24 +273,27 @@ textarea {
 }
 
 .field span {
-  color: #d8ac5e;
+  color: var(--panel-gold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
 }
 
 .field input,
 .field textarea,
 .field select {
   width: 100%;
-  padding: 11px 13px;
-  border: 1px solid rgba(211, 157, 79, 0.3);
-  background: rgba(11, 6, 6, 0.88);
-  color: #f7e2b4;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-line);
+  background: rgba(12, 6, 6, 0.92);
+  color: var(--panel-text);
 }
 
 .button--solid {
   cursor: pointer;
+  background:
+    linear-gradient(180deg, rgba(216, 168, 95, 0.18), rgba(90, 24, 20, 0.85)),
+    rgba(54, 19, 16, 0.92);
 }
 
 .button--ghost {
@@ -175,11 +309,18 @@ textarea {
 .record-item,
 .commit-admin-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 12px 0;
   border-bottom: 1px solid rgba(211, 157, 79, 0.16);
+}
+
+.record-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.commit-admin-row {
+  grid-template-columns: 92px minmax(0, 1fr) 140px;
 }
 
 .record-item:last-child,
@@ -189,44 +330,51 @@ textarea {
 
 .record-item h2 {
   margin: 0 0 4px;
-  font-size: 1.2rem;
-}
-
-.commit-admin-row {
-  grid-template-columns: 110px minmax(0, 1fr) 180px;
-}
-
-.commit-admin-row span:first-child {
-  color: #d8ac5e;
-  letter-spacing: 0.08em;
+  font-size: 1.08rem;
   text-transform: uppercase;
 }
 
+.commit-admin-row span:first-child,
+.status-badge {
+  color: var(--panel-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.82rem;
+}
+
 .commit-admin-row span:last-child {
-  color: rgba(244, 221, 180, 0.72);
+  color: var(--panel-text-soft);
   text-align: right;
+}
+
+.control-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .auth-shell {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 24px;
 }
 
 .auth-card {
-  width: min(100%, 460px);
+  width: min(100%, 440px);
   padding: 24px;
-  border: 1px solid rgba(211, 157, 79, 0.3);
-  background: rgba(22, 9, 7, 0.92);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-line);
+  background:
+    linear-gradient(180deg, rgba(94, 18, 14, 0.2), rgba(17, 8, 7, 0.94)),
+    var(--panel-surface-strong);
+  box-shadow: var(--panel-shadow);
 }
 
 .auth-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin: 22px 0 12px;
+  margin: 20px 0 12px;
 }
 
 .form-error {
@@ -241,24 +389,68 @@ textarea {
   border-color: rgba(255, 128, 102, 0.45);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1080px) {
   .panel-header {
-    align-items: start;
     flex-direction: column;
+  }
+
+  .panel-header__tools {
+    width: 100%;
+    align-items: start;
+  }
+
+  .panel-nav {
+    justify-content: start;
+  }
+
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .panel-hero,
+  .panel-grid,
+  .panel-split,
+  .record-item,
+  .commit-admin-row {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-hero__seal {
+    justify-self: start;
+    width: 100px;
+    height: 100px;
+  }
+
+  .panel-hero__seal span {
+    font-size: 2.8rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding-inline: 18px;
+  }
+
+  .panel-header,
+  .panel-card,
+  .card,
+  .auth-card {
+    padding: 16px;
   }
 
   .cards {
     grid-template-columns: 1fr;
   }
 
-  .panel-grid,
-  .panel-split,
-  .commit-admin-row,
-  .record-item {
-    grid-template-columns: 1fr;
+  .panel-header__brand {
+    flex-direction: column;
   }
 
-  .commit-admin-row span:last-child {
-    text-align: left;
+  .panel-brand-mark {
+    width: 48px;
+    height: 48px;
+    font-size: 1.4rem;
   }
 }

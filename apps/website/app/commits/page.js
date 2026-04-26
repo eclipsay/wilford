@@ -15,7 +15,7 @@ export default async function CommitsPage() {
       <PageHero
         eyebrow="Transmission Feed"
         title="Recent Commits"
-        description="Wilford Industries' latest commits from therepository on GitHub."
+        description="Wilford Industries' latest visible commits from the official repository on GitHub."
       />
 
       <main className="content">
