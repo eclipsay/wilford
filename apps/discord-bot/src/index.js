@@ -500,6 +500,48 @@ async function handleReviewThreadCommand(message, commandName, args) {
   }
 
   const hasLinkedDiscordUser = Boolean(String(application.applicantId || "").trim());
+  const reviewThread = message.channel;
+
+  async function closeReviewThread(status, note) {
+    if (!reviewThread?.isThread?.()) {
+      return;
+    }
+
+    await reviewThread.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(status === "accepted" ? 0x4f8a5b : 0x8a3f38)
+          .setTitle(
+            status === "accepted" ? "Application Accepted" : "Application Denied"
+          )
+          .setDescription(
+            note?.trim()
+              ? note
+              : status === "accepted"
+                ? "The application has been approved and this review thread is now closed."
+                : "The application has been declined and this review thread is now closed."
+          )
+          .addFields(
+            {
+              name: "Reviewed By",
+              value: `<@${message.author.id}>`,
+              inline: true
+            },
+            {
+              name: "Applicant",
+              value: hasLinkedDiscordUser
+                ? `<@${application.applicantId}>`
+                : application.applicantTag || "Website applicant",
+              inline: true
+            }
+          )
+          .setTimestamp(new Date())
+      ]
+    });
+
+    await reviewThread.setLocked(true, `Application ${status}`);
+    await reviewThread.setArchived(true, `Application ${status}`);
+  }
 
   if (commandName === "r") {
     const replyText = args.join(" ").trim();
@@ -574,6 +616,8 @@ async function handleReviewThreadCommand(message, commandName, args) {
           : "Application accepted and applicant notified."
         : "Application accepted. No Discord user ID was linked, so no DM or automatic role was applied."
     );
+    await closeReviewThread("accepted", note);
+
     return true;
   }
 
@@ -599,6 +643,8 @@ async function handleReviewThreadCommand(message, commandName, args) {
         ? "Application denied and applicant notified."
         : "Application denied. No Discord user ID was linked, so no DM was sent."
     );
+    await closeReviewThread("denied", note);
+
     return true;
   }
 
