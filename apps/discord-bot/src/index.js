@@ -91,7 +91,7 @@ function buildCommitEmbed(commit) {
   return new EmbedBuilder()
     .setColor(0xf28c28)
     .setTitle(`Changelog - ${titleDate}`)
-    .setDescription(`\`\`\`diff\n+ [Wilford] ${message}\n\`\`\``)
+    .setDescription(`\`\`\`diff\n+ ${message}\n\`\`\``)
     .addFields(
       {
         name: "Repository",
@@ -135,6 +135,9 @@ async function publishCommitUpdates() {
   }
 
   if (!state.lastCommitSha) {
+    await channel.send({
+      embeds: [buildCommitEmbed(visibleCommits[0])]
+    });
     await writeState({ lastCommitSha: visibleCommits[0].sha });
     return;
   }
