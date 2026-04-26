@@ -78,6 +78,23 @@ export default async function InformationPage() {
 
             <article className="public-record-item">
               <div>
+                <h3>Rise of Lemmie</h3>
+                <p>
+                  Following the B-13 era, Chairman Lemmie assumed control of Wilford Industries 
+                  from its founder, Mr Wilford. Under her leadership, the organization transformed 
+                  from a modest industrial operation into a powerful corporate empire. 
+                  She consolidated power, modernized operations, and established the authoritarian 
+                  structures that define Wilford today.
+                </p>
+              </div>
+              <div className="public-record-meta">
+                <strong>Transformation Era</strong>
+                <span>The period where Wilford transitioned from humble beginnings to imperial dominance.</span>
+              </div>
+            </article>
+
+            <article className="public-record-item">
+              <div>
                 <h3>Public Build Era</h3>
                 <p>
                   Development visibility, commit archives, and controlled public
