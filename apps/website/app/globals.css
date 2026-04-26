@@ -43,11 +43,7 @@ a {
 .site-shell {
   min-height: 100vh;
   border: 1px solid rgba(169, 113, 44, 0.24);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 10%),
-    linear-gradient(90deg, rgba(221, 170, 95, 0.06) 1px, transparent 1px),
-    linear-gradient(rgba(221, 170, 95, 0.05) 1px, transparent 1px);
-  background-size: auto, 44px 44px, 44px 44px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 10%);
 }
 
 .topbar {
@@ -211,10 +207,7 @@ h3 {
 .homepage-image-hero__overlay {
   width: min(620px, 100%);
   margin: 0 0 42px 42px;
-  padding: 24px 26px;
-  border: 1px solid rgba(218, 170, 96, 0.38);
-  background: rgba(18, 8, 7, 0.72);
-  backdrop-filter: blur(8px);
+  padding: 0;
 }
 
 .homepage-image-hero__totals {
@@ -988,7 +981,7 @@ h3 {
 
   .homepage-image-hero__overlay {
     margin: 0 18px 18px;
-    padding: 18px;
+    padding: 0;
   }
 
   .homepage-image-hero__totals,
