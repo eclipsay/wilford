@@ -186,6 +186,7 @@ async function runCommitLoop() {
 
 client.once("ready", () => {
   console.log(`${brand.name} bot logged in as ${client.user.tag}`);
+  // Start a lightweight polling loop so new public commits can be mirrored into Discord.
   runCommitLoop();
   setInterval(runCommitLoop, pollIntervalMs);
 });
