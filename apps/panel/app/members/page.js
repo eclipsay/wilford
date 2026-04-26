@@ -67,13 +67,17 @@ async function saveMembersAction(formData) {
     order: index
   }));
 
-  await fetchAdmin("/api/admin/members/replace", {
-    method: "POST",
-    body: JSON.stringify({ members })
-  });
+  try {
+    await fetchAdmin("/api/admin/members/replace", {
+      method: "POST",
+      body: JSON.stringify({ members })
+    });
 
-  revalidatePath("/members");
-  redirect("/members");
+    revalidatePath("/members");
+    redirect("/members?saved=members");
+  } catch {
+    redirect("/members?error=members");
+  }
 }
 
 async function saveAlliancesAction(formData) {
@@ -91,18 +95,23 @@ async function saveAlliancesAction(formData) {
     order: index
   }));
 
-  await fetchAdmin("/api/admin/alliances/replace", {
-    method: "POST",
-    body: JSON.stringify({ alliances })
-  });
+  try {
+    await fetchAdmin("/api/admin/alliances/replace", {
+      method: "POST",
+      body: JSON.stringify({ alliances })
+    });
 
-  revalidatePath("/members");
-  redirect("/members");
+    revalidatePath("/members");
+    redirect("/members?saved=alliances");
+  } catch {
+    redirect("/members?error=alliances");
+  }
 }
 
-export default async function MembersPage() {
+export default async function MembersPage({ searchParams }) {
   await requireAuth();
   const content = await fetchPublic("/api/content");
+  const params = await searchParams;
   const members = content.members || [];
   const alliances = content.alliances || [];
 
@@ -111,6 +120,30 @@ export default async function MembersPage() {
       title="Members"
       description="Edit the public roster as ordered text lines. The top line appears first on the site."
     >
+      {params?.saved === "members" ? (
+        <section className="panel-card system-banner">
+          <p>Members were saved successfully.</p>
+        </section>
+      ) : null}
+
+      {params?.saved === "alliances" ? (
+        <section className="panel-card system-banner">
+          <p>Alliances were saved successfully.</p>
+        </section>
+      ) : null}
+
+      {params?.error === "members" ? (
+        <section className="panel-card system-banner system-banner--error">
+          <p>Saving members failed. The API likely needs the latest code and a restart.</p>
+        </section>
+      ) : null}
+
+      {params?.error === "alliances" ? (
+        <section className="panel-card system-banner system-banner--error">
+          <p>Saving alliances failed. The API likely needs the latest code and a restart.</p>
+        </section>
+      ) : null}
+
       <section className="panel-split">
         <form action={saveMembersAction} className="panel-card form-card">
           <div className="panel-card__header">
