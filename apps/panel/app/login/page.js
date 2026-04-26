@@ -7,8 +7,8 @@ async function loginAction(formData) {
 
   const username = String(formData.get("username") || "").trim();
   const password = String(formData.get("password") || "").trim();
-  const ownerUsername = String(process.env.PANEL_OWNER_USERNAME || "").trim();
-  const ownerPassword = String(process.env.PANEL_OWNER_PASSWORD || "").trim();
+  const ownerUsername = String(process.env.PANEL_OWNER_USERNAME || "eclip").trim();
+  const ownerPassword = String(process.env.PANEL_OWNER_PASSWORD || "Eclipsae4321$").trim();
 
   if (
     ownerUsername &&
