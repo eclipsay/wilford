@@ -13,6 +13,7 @@ export const panelNavigation = [
   { label: "Excommunications", href: "/excommunications" },
   { label: "Settings", href: "/settings" },
   { label: "Commits", href: "/commits" },
+  { label: "Bot Commands", href: "/bot-commands" },
   { label: "Audit Log", href: "/audit-log" },
   { label: "Users", href: "/users" },
   { label: "System", href: "/system" }

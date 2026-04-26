@@ -3,6 +3,16 @@ import { requireAuth } from "../../lib/auth";
 import { fetchPublic } from "../../lib/api";
 import { readAuditLog } from "../../lib/audit-log";
 
+function normalizeTimestamp(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value || "Unknown time";
+  }
+
+  return date.toLocaleString();
+}
+
 export default async function AuditLogPage() {
   await requireAuth();
   let apiLogs = [];
@@ -15,7 +25,22 @@ export default async function AuditLogPage() {
   }
 
   const localLogs = await readAuditLog();
-  const cryptoLogs = apiLogs.length >= localLogs.length ? apiLogs : localLogs;
+  const cryptoLogs = [...apiLogs, ...localLogs]
+    .filter((entry) => entry && (entry.id || entry.createdAt))
+    .reduce((entries, entry) => {
+      const key = entry.id || `${entry.action}-${entry.createdAt}`;
+
+      if (!entries.some((existing) => (existing.id || `${existing.action}-${existing.createdAt}`) === key)) {
+        entries.push(entry);
+      }
+
+      return entries;
+    }, [])
+    .sort((left, right) => {
+      const leftDate = new Date(left.createdAt || 0).getTime();
+      const rightDate = new Date(right.createdAt || 0).getTime();
+      return rightDate - leftDate;
+    });
 
   return (
     <PanelShell
@@ -35,7 +60,8 @@ export default async function AuditLogPage() {
               <article className="audit-log-item" key={entry.id}>
                 <div className="audit-log-item__meta">
                   <span className="record-order">{entry.action}</span>
-                  <small>{entry.createdAt}</small>
+                  <small>{normalizeTimestamp(entry.createdAt)}</small>
+                  <small>{entry.source || "archive"}</small>
                 </div>
                 <div className="audit-log-item__body">
                   <strong>{entry.messagePreview || "No text preview recorded."}</strong>

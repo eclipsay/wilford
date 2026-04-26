@@ -63,6 +63,15 @@ npm run build
 - A root `ecosystem.config.cjs` file is included for PM2.
 - Simple Dockerfiles are included for `panel`, `api`, and `discord-bot`.
 
+## Discord Bot Notes
+
+- The bot supports both `-` prefix commands and `/` slash commands.
+- Public applications can be started with `-apply` or `/apply`.
+- Staff review thread actions use `-r`, `-accept`, and `-deny`.
+- For the application review flow, configure these environment variables in `apps/discord-bot/.env`:
+  `DISCORD_APPLICATIONS_CHANNEL_ID`, `DISCORD_APPLICATION_REVIEW_ROLE_ID`,
+  `DISCORD_APPLICATION_ROLE_ID`, and optionally `DISCORD_APPLICATION_GUILD_ID`.
+
 ## PM2
 
 ```bash

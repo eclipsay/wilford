@@ -5,6 +5,31 @@ import { getSiteContent } from "../lib/content";
 export default async function HomePage() {
   const content = await getSiteContent();
   const chairman = content.settings.chairmanName || "Lemmie";
+  const biographies = [
+    {
+      name: "Chairman Lemmie",
+      title: "Transformation Era",
+      image: "/lemmie-portrait.png",
+      summary:
+        "Chairman Lemmie assumed control of Wilford Industries following the departure of its founder, Mr Wilford, and reshaped it into the modern company-state seen today.",
+      details: [
+        "Under her stewardship, Wilford Industries evolved from a modest industrial concern into a powerful corporate empire.",
+        "Her rule is defined by iron discipline, strategic modernization, and the consolidation of authority across the entire Wilford command structure.",
+        "Official records present her legacy as the rise of order, expansion, and dominance from the ashes of a simpler time."
+      ]
+    },
+    ...Array.from({ length: 13 }, (_, index) => ({
+      name: `Archive Entry ${String(index + 2).padStart(2, "0")}`,
+      title: "Reserved Biography Slot",
+      image: null,
+      summary:
+        "This record space is reserved for future leadership, member, or historical profile entries within the Wilford archive.",
+      details: [
+        "Add portrait, rank, and official narrative here.",
+        "Structured to keep the homepage grid balanced as the archive grows."
+      ]
+    }))
+  ];
 
   return (
     <SiteLayout>
@@ -82,6 +107,54 @@ export default async function HomePage() {
               <strong>The Future</strong>
               <span>Is Our Mission</span>
             </article>
+          </div>
+        </section>
+
+        <section className="state-biographies" aria-labelledby="state-biographies-title">
+          <div className="state-biographies__header">
+            <p className="state-biographies__eyebrow">Official Archive</p>
+            <h2 id="state-biographies-title">Biographies</h2>
+            <p className="state-biographies__lede">
+              A growing record of the figures who define Wilford Industries,
+              beginning with the current Chairman and leaving structured room
+              for the archive to expand.
+            </p>
+          </div>
+
+          <div className="state-biographies__grid">
+            {biographies.map((entry) => (
+              <article
+                key={entry.name}
+                className={`biography-card${entry.image ? " biography-card--featured" : " biography-card--placeholder"}`}
+              >
+                {entry.image ? (
+                  <div className="biography-card__image-wrap">
+                    <Image
+                      src={entry.image}
+                      alt={`Official portrait of ${entry.name}`}
+                      width={480}
+                      height={600}
+                      className="biography-card__image"
+                    />
+                  </div>
+                ) : (
+                  <div className="biography-card__image-wrap biography-card__image-wrap--empty">
+                    <span>Portrait Pending</span>
+                  </div>
+                )}
+
+                <div className="biography-card__body">
+                  <p className="biography-card__eyebrow">{entry.title}</p>
+                  <h3>{entry.name}</h3>
+                  <p className="biography-card__summary">{entry.summary}</p>
+                  <div className="biography-card__details">
+                    {entry.details.map((detail) => (
+                      <p key={detail}>{detail}</p>
+                    ))}
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
         </section>
       </main>

@@ -1,16 +1,16 @@
 :root {
-  --panel-bg: #060708;
-  --panel-surface: #0d0f12;
-  --panel-surface-strong: #12151a;
-  --panel-surface-soft: #171b22;
-  --panel-line: #262b33;
-  --panel-line-strong: #3a414d;
-  --panel-accent: #d1a85c;
-  --panel-accent-soft: #f0d49d;
-  --panel-text: #f1f3f5;
-  --panel-text-soft: #9ba3b0;
+  --panel-bg: #090505;
+  --panel-surface: rgba(18, 8, 8, 0.94);
+  --panel-surface-strong: rgba(24, 10, 9, 0.98);
+  --panel-surface-soft: rgba(39, 14, 12, 0.92);
+  --panel-line: rgba(184, 125, 56, 0.2);
+  --panel-line-strong: rgba(218, 170, 96, 0.56);
+  --panel-accent: #d7a85f;
+  --panel-accent-soft: #f3cc8a;
+  --panel-text: #f5dfb1;
+  --panel-text-soft: rgba(245, 223, 177, 0.7);
   --panel-danger: #d86f6f;
-  --panel-shadow: 0 20px 45px rgba(0, 0, 0, 0.38);
+  --panel-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
 }
 
 * {
@@ -21,10 +21,11 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(209, 168, 92, 0.06), transparent 24%),
-    linear-gradient(180deg, #050607 0%, #090a0d 100%);
+    radial-gradient(circle at top, rgba(155, 39, 17, 0.24), transparent 24%),
+    radial-gradient(circle at 50% 20%, rgba(93, 16, 13, 0.18), transparent 28%),
+    linear-gradient(180deg, #1a0a09 0%, #0b0505 48%, #070404 100%);
   color: var(--panel-text);
-  font-family: Inter, "Segoe UI", sans-serif;
+  font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
 }
 
 a {
@@ -54,7 +55,9 @@ select {
   padding: 18px 20px;
   border: 1px solid var(--panel-line);
   border-radius: 18px;
-  background: rgba(12, 14, 17, 0.94);
+  background:
+    linear-gradient(180deg, rgba(42, 15, 13, 0.52), rgba(15, 6, 6, 0.96)),
+    rgba(12, 6, 6, 0.94);
   box-shadow: var(--panel-shadow);
 }
 
@@ -77,9 +80,11 @@ select {
   display: grid;
   place-items: center;
   border: 1px solid var(--panel-line-strong);
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--panel-accent-soft);
-  background: #13171d;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 34%),
+    linear-gradient(180deg, rgba(95, 20, 16, 0.65), rgba(17, 9, 8, 0.96));
   font-size: 1.1rem;
   font-weight: 700;
 }
@@ -98,7 +103,7 @@ select {
   border: 1px solid var(--panel-line);
   border-radius: 999px;
   color: var(--panel-text-soft);
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(255, 255, 255, 0.03);
   font-size: 0.78rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -108,7 +113,7 @@ select {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #5dd39e;
+  background: var(--panel-accent);
 }
 
 .panel-header__eyebrow,
@@ -148,7 +153,7 @@ select {
   align-items: center;
   justify-content: flex-start;
   padding-top: 2px;
-  border-top: 1px solid rgba(61, 75, 103, 0.45);
+  border-top: 1px solid rgba(184, 125, 56, 0.24);
 }
 
 .panel-header__account {
@@ -167,19 +172,26 @@ select {
   min-height: 40px;
   padding: 0 14px;
   border: 1px solid var(--panel-line-strong);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--panel-text);
-  background: #14181f;
+  background: rgba(17, 8, 6, 0.55);
   font-size: 0.84rem;
   font-weight: 600;
-  transition: background 140ms ease, border-color 140ms ease, opacity 140ms ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
 }
 
 .panel-nav a:hover,
 .button:hover,
 .button:focus-visible {
-  background: #1a2028;
-  border-color: #515b69;
+  background: rgba(44, 14, 12, 0.84);
+  border-color: var(--panel-line-strong);
+  transform: translateY(-1px);
 }
 
 .panel-nav__identity {
@@ -200,7 +212,9 @@ select {
   padding: 18px;
   border: 1px solid var(--panel-line);
   border-radius: 16px;
-  background: rgba(11, 13, 17, 0.95);
+  background:
+    linear-gradient(180deg, rgba(54, 20, 15, 0.26), rgba(12, 5, 5, 0.96)),
+    rgba(11, 6, 6, 0.95);
   box-shadow: var(--panel-shadow);
 }
 
@@ -263,7 +277,7 @@ select {
   padding: 11px 12px;
   border: 1px solid var(--panel-line);
   border-radius: 10px;
-  background: #090b0f;
+  background: rgba(8, 4, 4, 0.9);
   color: var(--panel-text);
 }
 
@@ -276,15 +290,15 @@ select {
 
 .button--solid {
   cursor: pointer;
-  color: #151821;
+  color: #220d0b;
   background: var(--panel-accent);
-  border-color: #ddb978;
+  border-color: var(--panel-accent-soft);
 }
 
 .button--solid:hover,
 .button--solid:focus-visible {
-  background: #dec184;
-  border-color: #e7ca92;
+  background: var(--panel-accent-soft);
+  border-color: #f6d9a8;
 }
 
 .button--ghost {
@@ -318,7 +332,7 @@ select {
   grid-template-columns: 180px minmax(0, 1fr);
   gap: 16px;
   padding: 14px 0;
-  border-bottom: 1px solid rgba(61, 75, 103, 0.55);
+  border-bottom: 1px solid rgba(184, 125, 56, 0.2);
 }
 
 .audit-log-item:last-child {
@@ -357,7 +371,7 @@ select {
   gap: 12px;
   align-items: center;
   padding: 14px 0;
-  border-bottom: 1px solid rgba(61, 75, 103, 0.55);
+  border-bottom: 1px solid rgba(184, 125, 56, 0.2);
 }
 
 .record-item {
@@ -423,7 +437,7 @@ select {
   padding: 0 10px;
   border: 1px solid var(--panel-line-strong);
   border-radius: 10px;
-  background: #090b0f;
+  background: rgba(8, 4, 4, 0.9);
   color: var(--panel-text);
 }
 
@@ -447,7 +461,7 @@ select {
 
 .simple-list__item {
   padding: 12px 0;
-  border-top: 1px solid rgba(61, 75, 103, 0.45);
+  border-top: 1px solid rgba(184, 125, 56, 0.18);
 }
 
 .simple-list__item:first-child {
@@ -467,7 +481,7 @@ select {
   padding: 12px 14px;
   border: 1px solid var(--panel-line);
   border-radius: 12px;
-  background: #11151b;
+  background: rgba(17, 8, 6, 0.6);
 }
 
 .panel-example strong {
@@ -485,7 +499,7 @@ select {
   padding: 12px 14px;
   border: 1px solid var(--panel-line);
   border-radius: 12px;
-  background: #11151b;
+  background: rgba(17, 8, 6, 0.6);
 }
 
 .stat-chip span,
@@ -507,8 +521,8 @@ select {
 }
 
 .button--active {
-  background: #1e2530;
-  border-color: #596675;
+  background: rgba(67, 18, 14, 0.96);
+  border-color: var(--panel-accent);
 }
 
 .auth-shell {
@@ -523,7 +537,9 @@ select {
   padding: 24px;
   border: 1px solid var(--panel-line);
   border-radius: 18px;
-  background: rgba(11, 13, 17, 0.97);
+  background:
+    linear-gradient(180deg, rgba(54, 20, 15, 0.26), rgba(12, 5, 5, 0.97)),
+    rgba(11, 6, 6, 0.97);
   box-shadow: var(--panel-shadow);
 }
 
@@ -550,7 +566,7 @@ select {
   overflow: hidden;
   border: 1px solid var(--panel-line);
   border-radius: 14px;
-  background: #050607;
+  background: #050303;
 }
 
 .deploy-console__header {
@@ -559,8 +575,8 @@ select {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(58, 65, 77, 0.65);
-  background: #0b0d10;
+  border-bottom: 1px solid rgba(184, 125, 56, 0.18);
+  background: rgba(17, 8, 6, 0.76);
 }
 
 .deploy-console__header small {
@@ -597,7 +613,7 @@ select {
 
 .deploy-console__step {
   padding: 14px;
-  border-top: 1px solid rgba(58, 65, 77, 0.35);
+  border-top: 1px solid rgba(184, 125, 56, 0.14);
 }
 
 .deploy-console__step:first-child {
@@ -614,12 +630,44 @@ select {
 
 .deploy-console__step pre {
   margin: 0;
-  color: #cfd6e1;
+  color: #f0dbb1;
   font-family: Consolas, "Courier New", monospace;
   font-size: 0.82rem;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.command-card {
+  padding: 16px;
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  background: rgba(17, 8, 6, 0.56);
+}
+
+.command-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.command-card__header strong {
+  color: var(--panel-accent-soft);
+  font-size: 0.98rem;
+}
+
+.command-card p {
+  margin: 0;
 }
 
 .deploy-console__error {
@@ -651,6 +699,10 @@ select {
   .record-item,
   .commit-admin-row,
   .audit-log-item {
+    grid-template-columns: 1fr;
+  }
+
+  .command-grid {
     grid-template-columns: 1fr;
   }
 

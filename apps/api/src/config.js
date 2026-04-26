@@ -16,6 +16,10 @@ export const config = {
   repoRoot: process.env.REPO_ROOT || resolve(currentDir, "../../.."),
   panelPm2Name: process.env.PANEL_PM2_NAME || "wilford-panel",
   botPm2Name: process.env.BOT_PM2_NAME || "wilford-discord-bot",
+  panelDeployCommand:
+    process.env.PANEL_DEPLOY_COMMAND ||
+    (process.platform === "win32" ? "" : "bash deploypanel"),
+  botDeployCommand: process.env.BOT_DEPLOY_COMMAND || "",
   ownerUsername: process.env.PANEL_OWNER_USERNAME || "eclip",
   ownerPassword: process.env.PANEL_OWNER_PASSWORD || "Eclipsae4321$"
 };

@@ -28,14 +28,27 @@ function appendJobLine(job, line) {
 }
 
 function getDeployPlan(target) {
-  if (target === "bot") {
+  if (target === "panel" && config.panelDeployCommand) {
     return [
-      { command: "git", args: ["pull", "--ff-only", "origin", "main"] },
       {
-        command: "npm",
-        args: ["run", "build", "--workspace", "@wilford/discord-bot"]
-      },
-      { command: "pm2", args: ["restart", config.botPm2Name] }
+        shellCommand: config.panelDeployCommand
+      }
+    ];
+  }
+
+  if (target === "bot") {
+    if (config.botDeployCommand) {
+      return [
+        {
+          shellCommand: config.botDeployCommand
+        }
+      ];
+    }
+
+    return [
+      {
+        shellCommand: `pm2 restart ${config.botPm2Name}`
+      }
     ];
   }
 
@@ -47,7 +60,9 @@ function getDeployPlan(target) {
 }
 
 async function runStep(job, step) {
-  const commandLabel = `${step.command} ${step.args.join(" ")}`;
+  const commandLabel = step.shellCommand
+    ? step.shellCommand
+    : `${step.command} ${step.args.join(" ")}`;
   const stepRecord = {
     command: commandLabel,
     stdout: "",
@@ -58,11 +73,24 @@ async function runStep(job, step) {
   appendJobLine(job, `$ ${commandLabel}`);
 
   await new Promise((resolve, reject) => {
-    const child = spawn(step.command, step.args, {
-      cwd: config.repoRoot,
-      env: process.env,
-      shell: false
-    });
+    const child = step.shellCommand
+      ? spawn(step.shellCommand, {
+          cwd: config.repoRoot,
+          env: process.env,
+          shell: true
+        })
+      : spawn(step.command, step.args, {
+          cwd: config.repoRoot,
+          env: process.env,
+          shell: false
+        });
+
+    if (!child.stdout || !child.stderr) {
+      const error = new Error(`${commandLabel} could not be started.`);
+      appendJobLine(job, `! ${error.message}`);
+      reject(error);
+      return;
+    }
 
     child.stdout.on("data", (chunk) => {
       const text = chunk.toString();

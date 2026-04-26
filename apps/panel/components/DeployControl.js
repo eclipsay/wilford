@@ -133,8 +133,8 @@ export function DeployControl() {
             </div>
           </div>
           <p>
-            Pull the latest code, rebuild `@wilford/panel`, and restart the website
-            panel PM2 process.
+            Run the VPS panel deployment shortcut and stream the resulting output
+            back into this console.
           </p>
           <button
             className="button button--solid"
@@ -154,8 +154,8 @@ export function DeployControl() {
             </div>
           </div>
           <p>
-            Pull the latest code, run the bot workspace build, and restart the
-            Discord bot PM2 process.
+            Restart the Discord bot deployment flow using the server-side bot
+            deploy configuration.
           </p>
           <button
             className="button button--solid"

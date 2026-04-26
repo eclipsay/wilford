@@ -8,6 +8,7 @@
     ".": "./src/index.js",
     "./navigation": "./src/navigation.js",
     "./commits": "./src/commits.js",
-    "./brand": "./src/brand.js"
+    "./brand": "./src/brand.js",
+    "./discord-commands": "./src/discord-commands.js"
   }
 }

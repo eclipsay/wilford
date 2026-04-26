@@ -5,11 +5,11 @@ import { brand } from "@wilford/shared";
 const stateNavigation = [
   { label: "The Chairman", href: "/chairman" },
   { label: "Our State", href: "/information" },
-  { label: "Our Industries", href: "/decrypter" },
+  { label: "Wilford Decrypter", href: "/decrypter" },
   { label: "The People", href: "/members" },
-  { label: "News & Propaganda", href: "/commits" },
-  { label: "Careers", href: "/panel-access" },
-  { label: "Contact", href: "mailto:contact@wilfordindustries.org" }
+  { label: "Command Archive", href: "/commands" },
+  { label: "Excommunication List", href: "/excommunication" },
+  { label: "Commits", href: "/commits", align: "right" }
 ];
 
 export function SiteLayout({ children }) {
@@ -38,7 +38,11 @@ export function SiteLayout({ children }) {
 
         <nav className="nav" aria-label="Main navigation">
           {stateNavigation.map((item) => (
-            <Link key={item.href} href={item.href}>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={item.align === "right" ? "nav__push-right" : undefined}
+            >
               {item.label}
             </Link>
           ))}
@@ -50,7 +54,7 @@ export function SiteLayout({ children }) {
           target="_blank"
           rel="noreferrer"
         >
-          <span>Citizen Portal</span>
+          <span>Admin Portal</span>
           <span aria-hidden="true">+</span>
         </a>
       </header>
