@@ -111,7 +111,9 @@ function OrderControls({ id, moveAction, deleteAction }) {
 
 export default async function MembersPage() {
   await requireAuth();
-  const { members, alliances } = await fetchPublic("/api/content");
+  const content = await fetchPublic("/api/content");
+  const members = content.members || [];
+  const alliances = content.alliances || [];
 
   return (
     <PanelShell

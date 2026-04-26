@@ -110,7 +110,9 @@ function OrderControls({ id, moveAction, deleteAction }) {
 
 export default async function ExcommunicationsPage() {
   await requireAuth();
-  const { excommunications, enemyNations } = await fetchPublic("/api/content");
+  const content = await fetchPublic("/api/content");
+  const excommunications = content.excommunications || [];
+  const enemyNations = content.enemyNations || [];
 
   return (
     <PanelShell
