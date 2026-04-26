@@ -21,10 +21,13 @@ const fallbackContent = {
       role: "Chairman",
       division: "Executive Office",
       status: "Active",
-      notes: "Supreme authority over Wilford Industries."
+      notes: "Supreme authority over Wilford Industries.",
+      order: 0
     }
   ],
-  excommunications: []
+  alliances: [],
+  excommunications: [],
+  enemyNations: []
 };
 
 export async function getSiteContent() {

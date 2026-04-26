@@ -194,6 +194,56 @@ h3 {
   padding: 52px 0 30px;
 }
 
+.homepage-image-hero {
+  min-height: calc(100vh - 120px);
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(14, 6, 5, 0.12), rgba(14, 6, 5, 0.8)),
+    linear-gradient(0deg, rgba(12, 6, 6, 0.86), rgba(12, 6, 6, 0.22)),
+    url("/lemmie.png") center center / cover no-repeat;
+  box-shadow: var(--shadow);
+  margin-top: 22px;
+}
+
+.homepage-image-hero__overlay {
+  width: min(620px, 100%);
+  margin: 0 0 42px 42px;
+  padding: 24px 26px;
+  border: 1px solid rgba(218, 170, 96, 0.38);
+  background: rgba(18, 8, 7, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.homepage-image-hero__totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.homepage-image-hero__totals article {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  background: rgba(26, 10, 9, 0.72);
+}
+
+.homepage-image-hero__totals span {
+  display: block;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.homepage-image-hero__totals strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--gold-bright);
+  font-size: 1.8rem;
+}
+
 .hero-simple__copy,
 .hero-simple__crest {
   border: 1px solid var(--line);
@@ -719,6 +769,15 @@ h3 {
   flex-direction: column;
 }
 
+.public-record-list--compact .public-record-item {
+  padding: 12px 0;
+}
+
+.public-record-list--compact .public-record-item h2,
+.public-record-list--compact .public-record-item h3 {
+  font-size: 0.98rem;
+}
+
 .public-record-item {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(220px, 0.9fr);
@@ -832,6 +891,10 @@ h3 {
 }
 
 @media (max-width: 1180px) {
+  .homepage-image-hero {
+    min-height: 720px;
+  }
+
   .hero-simple,
   .hero-monument {
     grid-template-columns: 1fr;
@@ -918,6 +981,17 @@ h3 {
     right: 32px;
   }
 
+  .homepage-image-hero {
+    min-height: 560px;
+    align-items: end;
+  }
+
+  .homepage-image-hero__overlay {
+    margin: 0 18px 18px;
+    padding: 18px;
+  }
+
+  .homepage-image-hero__totals,
   .summary-strip,
   .value-strip,
   .grid--feature,

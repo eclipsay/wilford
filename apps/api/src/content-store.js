@@ -18,12 +18,24 @@ const defaultContent = {
       role: "Chairman",
       division: "Executive Office",
       status: "Active",
-      notes: "Supreme authority over Wilford Industries."
+      notes: "Supreme authority over Wilford Industries.",
+      order: 0
     }
   ],
+  alliances: [],
   excommunications: [],
+  enemyNations: [],
   panelUsers: []
 };
+
+function withNormalizedOrder(items) {
+  return [...(items || [])]
+    .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
+    .map((item, index) => ({
+      ...item,
+      order: index
+    }));
+}
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
@@ -58,8 +70,10 @@ async function readContentFile() {
         ...defaultContent.settings,
         ...(parsed.settings || {})
       },
-      members: parsed.members || [],
-      excommunications: parsed.excommunications || [],
+      members: withNormalizedOrder(parsed.members || defaultContent.members),
+      alliances: withNormalizedOrder(parsed.alliances || []),
+      excommunications: withNormalizedOrder(parsed.excommunications || []),
+      enemyNations: withNormalizedOrder(parsed.enemyNations || []),
       panelUsers: parsed.panelUsers || []
     };
   } catch {
@@ -69,6 +83,35 @@ async function readContentFile() {
 
 async function writeContentFile(content) {
   await writeFile(config.dataFile, JSON.stringify(content, null, 2));
+}
+
+function addOrderedItem(items, item) {
+  return withNormalizedOrder([item, ...items]);
+}
+
+function deleteOrderedItem(items, id) {
+  return withNormalizedOrder(items.filter((item) => item.id !== id));
+}
+
+function moveOrderedItem(items, id, direction) {
+  const normalized = withNormalizedOrder(items);
+  const index = normalized.findIndex((item) => item.id === id);
+
+  if (index === -1) {
+    return normalized;
+  }
+
+  const targetIndex =
+    direction === "up" ? Math.max(0, index - 1) : Math.min(normalized.length - 1, index + 1);
+
+  if (targetIndex === index) {
+    return normalized;
+  }
+
+  const next = [...normalized];
+  const [item] = next.splice(index, 1);
+  next.splice(targetIndex, 0, item);
+  return withNormalizedOrder(next);
 }
 
 export async function getContent() {
@@ -96,32 +139,90 @@ export async function updateSettings(nextSettings) {
 
 export async function createMember(member) {
   const content = await readContentFile();
-  content.members.unshift(member);
+  content.members = addOrderedItem(content.members, member);
   await writeContentFile(content);
   return content.members;
 }
 
 export async function deleteMember(id) {
   const content = await readContentFile();
-  content.members = content.members.filter((member) => member.id !== id);
+  content.members = deleteOrderedItem(content.members, id);
   await writeContentFile(content);
   return content.members;
 }
 
+export async function moveMember(id, direction) {
+  const content = await readContentFile();
+  content.members = moveOrderedItem(content.members, id, direction);
+  await writeContentFile(content);
+  return content.members;
+}
+
+export async function createAlliance(entry) {
+  const content = await readContentFile();
+  content.alliances = addOrderedItem(content.alliances, entry);
+  await writeContentFile(content);
+  return content.alliances;
+}
+
+export async function deleteAlliance(id) {
+  const content = await readContentFile();
+  content.alliances = deleteOrderedItem(content.alliances, id);
+  await writeContentFile(content);
+  return content.alliances;
+}
+
+export async function moveAlliance(id, direction) {
+  const content = await readContentFile();
+  content.alliances = moveOrderedItem(content.alliances, id, direction);
+  await writeContentFile(content);
+  return content.alliances;
+}
+
 export async function createExcommunication(entry) {
   const content = await readContentFile();
-  content.excommunications.unshift(entry);
+  content.excommunications = addOrderedItem(content.excommunications, entry);
   await writeContentFile(content);
   return content.excommunications;
 }
 
 export async function deleteExcommunication(id) {
   const content = await readContentFile();
-  content.excommunications = content.excommunications.filter(
-    (entry) => entry.id !== id
+  content.excommunications = deleteOrderedItem(content.excommunications, id);
+  await writeContentFile(content);
+  return content.excommunications;
+}
+
+export async function moveExcommunication(id, direction) {
+  const content = await readContentFile();
+  content.excommunications = moveOrderedItem(
+    content.excommunications,
+    id,
+    direction
   );
   await writeContentFile(content);
   return content.excommunications;
+}
+
+export async function createEnemyNation(entry) {
+  const content = await readContentFile();
+  content.enemyNations = addOrderedItem(content.enemyNations, entry);
+  await writeContentFile(content);
+  return content.enemyNations;
+}
+
+export async function deleteEnemyNation(id) {
+  const content = await readContentFile();
+  content.enemyNations = deleteOrderedItem(content.enemyNations, id);
+  await writeContentFile(content);
+  return content.enemyNations;
+}
+
+export async function moveEnemyNation(id, direction) {
+  const content = await readContentFile();
+  content.enemyNations = moveOrderedItem(content.enemyNations, id, direction);
+  await writeContentFile(content);
+  return content.enemyNations;
 }
 
 export async function getPanelUsers() {

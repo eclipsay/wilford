@@ -3,14 +3,22 @@ import express from "express";
 import { config } from "./config.js";
 import {
   authenticatePanelUser,
+  createAlliance,
+  createEnemyNation,
   createExcommunication,
   createMember,
   createPanelUser,
+  deleteAlliance,
+  deleteEnemyNation,
   deleteExcommunication,
   deleteMember,
   deletePanelUser,
   getContent,
   getPanelUsers,
+  moveAlliance,
+  moveEnemyNation,
+  moveExcommunication,
+  moveMember,
   updateSettings
 } from "./content-store.js";
 import { deployPanel } from "./deploy.js";
@@ -63,7 +71,8 @@ app.get("/health", (_req, res) => {
 
 app.get("/api/content", async (_req, res) => {
   const content = await getContent();
-  res.json(content);
+  const { panelUsers, ...publicContent } = content;
+  res.json(publicContent);
 });
 
 app.get("/api/settings", async (_req, res) => {
@@ -76,9 +85,22 @@ app.get("/api/members", async (_req, res) => {
   res.json({ members: content.members });
 });
 
+app.get("/api/alliances", async (_req, res) => {
+  const content = await getContent();
+  res.json({ alliances: content.alliances });
+});
+
 app.get("/api/excommunications", async (_req, res) => {
   const content = await getContent();
-  res.json({ excommunications: content.excommunications });
+  res.json({
+    excommunications: content.excommunications,
+    enemyNations: content.enemyNations
+  });
+});
+
+app.get("/api/enemy-nations", async (_req, res) => {
+  const content = await getContent();
+  res.json({ enemyNations: content.enemyNations });
 });
 
 app.get("/api/commits", async (_req, res) => {
@@ -147,16 +169,50 @@ app.post("/api/admin/members", requireAdmin, async (req, res) => {
     role: req.body?.role || "",
     division: req.body?.division || "",
     status: req.body?.status || "Active",
-    notes: req.body?.notes || ""
+    notes: req.body?.notes || "",
+    order: Number(req.body?.order ?? 0)
   };
 
   const members = await createMember(member);
   res.status(201).json({ members });
 });
 
+app.post("/api/admin/members/:id/move", requireAdmin, async (req, res) => {
+  const members = await moveMember(
+    req.params.id,
+    req.body?.direction === "up" ? "up" : "down"
+  );
+  res.json({ members });
+});
+
 app.delete("/api/admin/members/:id", requireAdmin, async (req, res) => {
   const members = await deleteMember(req.params.id);
   res.json({ members });
+});
+
+app.post("/api/admin/alliances", requireAdmin, async (req, res) => {
+  const alliances = await createAlliance({
+    id: createId("alliance"),
+    name: req.body?.name || "",
+    classification: req.body?.classification || "Nation",
+    notes: req.body?.notes || "",
+    order: Number(req.body?.order ?? 0)
+  });
+
+  res.status(201).json({ alliances });
+});
+
+app.post("/api/admin/alliances/:id/move", requireAdmin, async (req, res) => {
+  const alliances = await moveAlliance(
+    req.params.id,
+    req.body?.direction === "up" ? "up" : "down"
+  );
+  res.json({ alliances });
+});
+
+app.delete("/api/admin/alliances/:id", requireAdmin, async (req, res) => {
+  const alliances = await deleteAlliance(req.params.id);
+  res.json({ alliances });
 });
 
 app.post("/api/admin/excommunications", requireAdmin, async (req, res) => {
@@ -166,12 +222,25 @@ app.post("/api/admin/excommunications", requireAdmin, async (req, res) => {
     reason: req.body?.reason || "",
     decree: req.body?.decree || "",
     date: req.body?.date || new Date().toISOString().slice(0, 10),
-    notes: req.body?.notes || ""
+    notes: req.body?.notes || "",
+    order: Number(req.body?.order ?? 0)
   };
 
   const excommunications = await createExcommunication(entry);
   res.status(201).json({ excommunications });
 });
+
+app.post(
+  "/api/admin/excommunications/:id/move",
+  requireAdmin,
+  async (req, res) => {
+    const excommunications = await moveExcommunication(
+      req.params.id,
+      req.body?.direction === "up" ? "up" : "down"
+    );
+    res.json({ excommunications });
+  }
+);
 
 app.delete(
   "/api/admin/excommunications/:id",
@@ -181,6 +250,35 @@ app.delete(
     res.json({ excommunications });
   }
 );
+
+app.post("/api/admin/enemy-nations", requireAdmin, async (req, res) => {
+  const enemyNations = await createEnemyNation({
+    id: createId("enemy"),
+    name: req.body?.name || "",
+    classification: req.body?.classification || "Nation",
+    notes: req.body?.notes || "",
+    order: Number(req.body?.order ?? 0)
+  });
+
+  res.status(201).json({ enemyNations });
+});
+
+app.post(
+  "/api/admin/enemy-nations/:id/move",
+  requireAdmin,
+  async (req, res) => {
+    const enemyNations = await moveEnemyNation(
+      req.params.id,
+      req.body?.direction === "up" ? "up" : "down"
+    );
+    res.json({ enemyNations });
+  }
+);
+
+app.delete("/api/admin/enemy-nations/:id", requireAdmin, async (req, res) => {
+  const enemyNations = await deleteEnemyNation(req.params.id);
+  res.json({ enemyNations });
+});
 
 app.post("/api/admin/deploy/panel", requireAdmin, async (_req, res) => {
   try {

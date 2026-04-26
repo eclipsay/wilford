@@ -13,9 +13,12 @@
       "role": "Chairman",
       "division": "Executive Office",
       "status": "Active",
-      "notes": "Supreme authority over Wilford Industries."
+      "notes": "Supreme authority over Wilford Industries.",
+      "order": 0
     }
   ],
+  "alliances": [],
   "excommunications": [],
+  "enemyNations": [],
   "panelUsers": []
 }

@@ -286,6 +286,11 @@ select {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.record-item--stacked {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
 .commit-admin-row {
   grid-template-columns: 92px minmax(0, 1fr) 140px;
 }
@@ -318,6 +323,12 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .sort-row {
