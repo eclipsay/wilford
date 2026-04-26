@@ -1,31 +1,20 @@
-import Link from "next/link";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getSiteContent } from "../../lib/content";
 
-function sortMembers(members, sort) {
-  const sorted = [...members];
-
-  if (sort === "name") {
-    return sorted.sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  if (sort === "status") {
-    return sorted.sort((a, b) => a.status.localeCompare(b.status) || a.name.localeCompare(b.name));
-  }
-
-  if (sort === "division") {
-    return sorted.sort((a, b) => a.division.localeCompare(b.division) || a.name.localeCompare(b.name));
-  }
-
-  return sorted.sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+function formatMemberLine(member) {
+  return [member.name, member.role, member.division].filter(Boolean);
 }
 
-export default async function MembersPage({ searchParams }) {
+function formatAllianceLine(alliance) {
+  return [alliance.name, alliance.classification, alliance.notes].filter(Boolean);
+}
+
+export default async function MembersPage() {
   const content = await getSiteContent();
-  const params = await searchParams;
-  const sort = params?.sort || "order";
-  const members = sortMembers(content.members, sort);
+  const members = [...(content.members || [])].sort(
+    (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)
+  );
   const alliances = [...(content.alliances || [])].sort(
     (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)
   );
@@ -42,34 +31,24 @@ export default async function MembersPage({ searchParams }) {
         <section className="panel list-panel">
           <div className="panel__header">
             <div>
-              <p className="eyebrow">Sort Records</p>
+              <p className="eyebrow">Public Roster</p>
               <h2>Members</h2>
             </div>
-            <div className="sort-row">
-              <Link className={`button ${sort === "order" ? "button--active" : ""}`} href="/members?sort=order">
-                Order
-              </Link>
-              <Link className={`button ${sort === "name" ? "button--active" : ""}`} href="/members?sort=name">
-                Name
-              </Link>
-              <Link className={`button ${sort === "status" ? "button--active" : ""}`} href="/members?sort=status">
-                Status
-              </Link>
-              <Link className={`button ${sort === "division" ? "button--active" : ""}`} href="/members?sort=division">
-                Division
-              </Link>
-            </div>
           </div>
-          <div className="public-record-list public-record-list--compact">
+          <div className="public-flow-list">
             {members.map((member) => (
-              <article className="public-record-item" key={member.id}>
-                <div>
-                  <h2>{member.name}</h2>
-                  <p>{member.role} / {member.division}</p>
+              <article className="public-flow-item" key={member.id}>
+                <div className="public-flow-item__line">
+                  {formatMemberLine(member).map((part, index) => (
+                    <span className="public-flow-item__part" key={`${member.id}-${index}`}>
+                      {index ? <span className="public-flow-item__divider">|</span> : null}
+                      <span>{part}</span>
+                    </span>
+                  ))}
                 </div>
-                <div className="public-record-meta">
-                  <strong>{member.status}</strong>
-                  <span>{member.notes}</span>
+                <div className="public-flow-item__meta">
+                  <strong>{member.status || "Active"}</strong>
+                  {member.notes ? <span>{member.notes}</span> : null}
                 </div>
               </article>
             ))}
@@ -84,16 +63,19 @@ export default async function MembersPage({ searchParams }) {
             </div>
           </div>
           {alliances.length ? (
-            <div className="public-record-list public-record-list--compact">
+            <div className="public-flow-list">
               {alliances.map((alliance) => (
-                <article className="public-record-item" key={alliance.id}>
-                  <div>
-                    <h2>{alliance.name}</h2>
-                    <p>{alliance.classification}</p>
-                  </div>
-                  <div className="public-record-meta">
-                    <strong>Allied</strong>
-                    <span>{alliance.notes}</span>
+                <article className="public-flow-item" key={alliance.id}>
+                  <div className="public-flow-item__line">
+                    {formatAllianceLine(alliance).map((part, index) => (
+                      <span
+                        className="public-flow-item__part"
+                        key={`${alliance.id}-${index}`}
+                      >
+                        {index ? <span className="public-flow-item__divider">|</span> : null}
+                        <span>{part}</span>
+                      </span>
+                    ))}
                   </div>
                 </article>
               ))}

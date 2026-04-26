@@ -37,56 +37,27 @@ export default async function PanelHomePage() {
         </article>
       </section>
 
-      <section className="panel-grid">
-        <article className="panel-card">
-          <div className="panel-card__header">
-            <div>
-              <p className="card__kicker">Keep It Simple</p>
-              <h2>How To Use It</h2>
-            </div>
+      <section className="panel-card panel-card--wide">
+        <div className="panel-card__header">
+          <div>
+            <p className="card__kicker">Snapshot</p>
+            <h2>Current State</h2>
           </div>
-          <div className="simple-list">
-            <div className="simple-list__item">
-              <strong>Edit records where they live.</strong>
-              <p>Members and excommunications each have their own page with direct add, move, and delete controls.</p>
-            </div>
-            <div className="simple-list__item">
-              <strong>Use manual ordering for public pages.</strong>
-              <p>The top item in the panel becomes the top item on the site.</p>
-            </div>
-            <div className="simple-list__item">
-              <strong>Operational actions stay in System.</strong>
-              <p>Panel deploy and Discord bot restart controls are grouped there to avoid clutter.</p>
-            </div>
-            <div className="simple-list__item">
-              <strong>AES256 now lives in the panel.</strong>
-              <p>Use the AES256 page in the top navigation for encryption and decryption work.</p>
-            </div>
+        </div>
+        <div className="stat-row">
+          <div className="stat-chip">
+            <span>Enemy nations</span>
+            <strong>{content.enemyNations.length}</strong>
           </div>
-        </article>
-
-        <article className="panel-card panel-card--wide">
-          <div className="panel-card__header">
-            <div>
-              <p className="card__kicker">Snapshot</p>
-              <h2>Current State</h2>
-            </div>
+          <div className="stat-chip">
+            <span>Chairman</span>
+            <strong>{content.settings.chairmanName}</strong>
           </div>
-          <div className="stat-row">
-            <div className="stat-chip">
-              <span>Enemy nations</span>
-              <strong>{content.enemyNations.length}</strong>
-            </div>
-            <div className="stat-chip">
-              <span>Chairman</span>
-              <strong>{content.settings.chairmanName}</strong>
-            </div>
-            <div className="stat-chip">
-              <span>Headline</span>
-              <strong>{content.settings.homepageHeadline}</strong>
-            </div>
+          <div className="stat-chip">
+            <span>Headline</span>
+            <strong>{content.settings.homepageHeadline}</strong>
           </div>
-        </article>
+        </div>
       </section>
     </PanelShell>
   );

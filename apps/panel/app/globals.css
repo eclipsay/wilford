@@ -400,6 +400,26 @@ select {
   margin-bottom: 6px;
 }
 
+.panel-example {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  background: #1b2230;
+}
+
+.panel-example strong {
+  font-size: 0.9rem;
+}
+
+.panel-example code {
+  color: var(--panel-text-soft);
+  font-family: Consolas, "Courier New", monospace;
+  white-space: pre-wrap;
+}
+
 .stat-chip {
   min-width: 180px;
   padding: 12px 14px;

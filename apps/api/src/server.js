@@ -19,6 +19,12 @@ import {
   moveEnemyNation,
   moveExcommunication,
   moveMember,
+  reorderAlliances,
+  reorderEnemyNations,
+  reorderExcommunications,
+  reorderMembers,
+  replaceAlliances,
+  replaceMembers,
   updateAlliancePosition,
   updateMemberPosition,
   updateSettings
@@ -195,6 +201,16 @@ app.post("/api/admin/members/:id/position", requireAdmin, async (req, res) => {
   res.json({ members });
 });
 
+app.post("/api/admin/members/reorder", requireAdmin, async (req, res) => {
+  const members = await reorderMembers(req.body?.orderedIds || []);
+  res.json({ members });
+});
+
+app.post("/api/admin/members/replace", requireAdmin, async (req, res) => {
+  const members = await replaceMembers(req.body?.members || []);
+  res.json({ members });
+});
+
 app.delete("/api/admin/members/:id", requireAdmin, async (req, res) => {
   const members = await deleteMember(req.params.id);
   res.json({ members });
@@ -232,6 +248,16 @@ app.post(
   }
 );
 
+app.post("/api/admin/alliances/reorder", requireAdmin, async (req, res) => {
+  const alliances = await reorderAlliances(req.body?.orderedIds || []);
+  res.json({ alliances });
+});
+
+app.post("/api/admin/alliances/replace", requireAdmin, async (req, res) => {
+  const alliances = await replaceAlliances(req.body?.alliances || []);
+  res.json({ alliances });
+});
+
 app.delete("/api/admin/alliances/:id", requireAdmin, async (req, res) => {
   const alliances = await deleteAlliance(req.params.id);
   res.json({ alliances });
@@ -259,6 +285,17 @@ app.post(
     const excommunications = await moveExcommunication(
       req.params.id,
       req.body?.direction === "up" ? "up" : "down"
+    );
+    res.json({ excommunications });
+  }
+);
+
+app.post(
+  "/api/admin/excommunications/reorder",
+  requireAdmin,
+  async (req, res) => {
+    const excommunications = await reorderExcommunications(
+      req.body?.orderedIds || []
     );
     res.json({ excommunications });
   }
@@ -293,6 +330,15 @@ app.post(
       req.params.id,
       req.body?.direction === "up" ? "up" : "down"
     );
+    res.json({ enemyNations });
+  }
+);
+
+app.post(
+  "/api/admin/enemy-nations/reorder",
+  requireAdmin,
+  async (req, res) => {
+    const enemyNations = await reorderEnemyNations(req.body?.orderedIds || []);
     res.json({ enemyNations });
   }
 );

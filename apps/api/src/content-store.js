@@ -144,6 +144,29 @@ function setOrderedItemPosition(items, id, targetIndex) {
   return withReindexedOrder(next);
 }
 
+function reorderOrderedItems(items, orderedIds) {
+  const normalized = withNormalizedOrder(items);
+  const byId = new Map(normalized.map((item) => [item.id, item]));
+  const reordered = [];
+
+  for (const id of orderedIds || []) {
+    const item = byId.get(id);
+
+    if (item) {
+      reordered.push(item);
+      byId.delete(id);
+    }
+  }
+
+  for (const item of normalized) {
+    if (byId.has(item.id)) {
+      reordered.push(item);
+    }
+  }
+
+  return withReindexedOrder(reordered);
+}
+
 export async function getContent() {
   return readContentFile();
 }
@@ -195,6 +218,20 @@ export async function updateMemberPosition(id, targetIndex) {
   return content.members;
 }
 
+export async function reorderMembers(orderedIds) {
+  const content = await readContentFile();
+  content.members = reorderOrderedItems(content.members, orderedIds);
+  await writeContentFile(content);
+  return content.members;
+}
+
+export async function replaceMembers(nextMembers) {
+  const content = await readContentFile();
+  content.members = withReindexedOrder(nextMembers || []);
+  await writeContentFile(content);
+  return content.members;
+}
+
 export async function createAlliance(entry) {
   const content = await readContentFile();
   content.alliances = addOrderedItem(content.alliances, entry);
@@ -227,6 +264,20 @@ export async function updateAlliancePosition(id, targetIndex) {
   return content.alliances;
 }
 
+export async function reorderAlliances(orderedIds) {
+  const content = await readContentFile();
+  content.alliances = reorderOrderedItems(content.alliances, orderedIds);
+  await writeContentFile(content);
+  return content.alliances;
+}
+
+export async function replaceAlliances(nextAlliances) {
+  const content = await readContentFile();
+  content.alliances = withReindexedOrder(nextAlliances || []);
+  await writeContentFile(content);
+  return content.alliances;
+}
+
 export async function createExcommunication(entry) {
   const content = await readContentFile();
   content.excommunications = addOrderedItem(content.excommunications, entry);
@@ -252,6 +303,16 @@ export async function moveExcommunication(id, direction) {
   return content.excommunications;
 }
 
+export async function reorderExcommunications(orderedIds) {
+  const content = await readContentFile();
+  content.excommunications = reorderOrderedItems(
+    content.excommunications,
+    orderedIds
+  );
+  await writeContentFile(content);
+  return content.excommunications;
+}
+
 export async function createEnemyNation(entry) {
   const content = await readContentFile();
   content.enemyNations = addOrderedItem(content.enemyNations, entry);
@@ -269,6 +330,13 @@ export async function deleteEnemyNation(id) {
 export async function moveEnemyNation(id, direction) {
   const content = await readContentFile();
   content.enemyNations = moveOrderedItem(content.enemyNations, id, direction);
+  await writeContentFile(content);
+  return content.enemyNations;
+}
+
+export async function reorderEnemyNations(orderedIds) {
+  const content = await readContentFile();
+  content.enemyNations = reorderOrderedItems(content.enemyNations, orderedIds);
   await writeContentFile(content);
   return content.enemyNations;
 }
