@@ -57,6 +57,20 @@ export async function requireOwner() {
   return session;
 }
 
+export async function requireAdmin() {
+  const session = await getSession();
+
+  if (!session) {
+    redirect("/login");
+  }
+
+  if (!["owner", "admin"].includes(session.role)) {
+    redirect("/");
+  }
+
+  return session;
+}
+
 export async function setAuthenticatedSession(sessionData) {
   const store = await cookies();
   const options = {

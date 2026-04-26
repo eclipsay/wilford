@@ -11,7 +11,7 @@ export async function PanelShell({ title, description, children }) {
   const session = await getSession();
   const navigation = panelNavigation.filter((item) => {
     if (item.href === "/users") {
-      return session?.role === "owner";
+      return ["owner", "admin"].includes(session?.role);
     }
 
     return true;

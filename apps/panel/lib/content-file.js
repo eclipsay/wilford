@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
@@ -24,7 +25,8 @@ const defaultContent = {
   alliances: [],
   excommunications: [],
   enemyNations: [],
-  panelUsers: []
+  panelUsers: [],
+  cryptoLogs: []
 };
 
 function withNormalizedOrder(items) {
@@ -66,7 +68,8 @@ async function readContentFile() {
       alliances: withNormalizedOrder(parsed.alliances || []),
       excommunications: withNormalizedOrder(parsed.excommunications || []),
       enemyNations: withNormalizedOrder(parsed.enemyNations || []),
-      panelUsers: parsed.panelUsers || []
+      panelUsers: parsed.panelUsers || [],
+      cryptoLogs: parsed.cryptoLogs || []
     };
   } catch {
     return structuredClone(defaultContent);
@@ -84,4 +87,14 @@ export async function updatePanelContent(mutator) {
   const nextContent = (await mutator(content)) || content;
   await writeContentFile(nextContent);
   return nextContent;
+}
+
+export async function getPanelContentFile() {
+  return readContentFile();
+}
+
+export function hashPanelPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
 }

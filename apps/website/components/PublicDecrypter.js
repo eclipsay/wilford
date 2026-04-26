@@ -37,6 +37,18 @@ export function PublicDecrypter() {
 
       setEncryptedOutput(result);
       setPayload(result);
+
+      void fetch("/api/crypto-log", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          action: "encrypt",
+          messagePreview: encryptMessage,
+          encryptedPreview: result
+        })
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Encryption failed.");
     } finally {
@@ -56,6 +68,18 @@ export function PublicDecrypter() {
       });
 
       setMessage(result);
+
+      void fetch("/api/crypto-log", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          action: "decrypt",
+          messagePreview: result,
+          encryptedPreview: payload
+        })
+      });
     } catch (nextError) {
       setMessage("");
       setError(nextError instanceof Error ? nextError.message : "Decryption failed.");
