@@ -10,7 +10,8 @@ const defaultContent = {
     homepageDescription:
       "A monument to order, expansion, and industrial discipline under the leadership of Chairman Lemmie.",
     chairmanName: "Lemmie",
-    commitsRepository: "eclipsay/wilford"
+    commitsRepository: "eclipsay/wilford",
+    discordCommitsChannelId: ""
   },
   members: [
     {

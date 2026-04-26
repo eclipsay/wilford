@@ -17,7 +17,8 @@ async function saveSettingsAction(formData) {
         homepageHeadline: formData.get("homepageHeadline"),
         homepageDescription: formData.get("homepageDescription"),
         chairmanName: formData.get("chairmanName"),
-        commitsRepository: formData.get("commitsRepository")
+        commitsRepository: formData.get("commitsRepository"),
+        discordCommitsChannelId: formData.get("discordCommitsChannelId")
       }
     }));
   } catch {
@@ -76,6 +77,13 @@ export default async function SettingsPage({ searchParams }) {
         <label className="field">
           <span>Commits Repository</span>
           <input defaultValue={settings.commitsRepository} name="commitsRepository" />
+        </label>
+        <label className="field">
+          <span>Discord Commits Channel ID</span>
+          <input
+            defaultValue={settings.discordCommitsChannelId || ""}
+            name="discordCommitsChannelId"
+          />
         </label>
         <button className="button button--solid" type="submit">
           Save Settings
