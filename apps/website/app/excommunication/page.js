@@ -1,9 +1,27 @@
+import Link from "next/link";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getSiteContent } from "../../lib/content";
 
-export default async function ExcommunicationPage() {
+function sortEntries(entries, sort) {
+  const sorted = [...entries];
+
+  if (sort === "date") {
+    return sorted.sort((a, b) => String(b.date).localeCompare(String(a.date)) || a.name.localeCompare(b.name));
+  }
+
+  if (sort === "reason") {
+    return sorted.sort((a, b) => a.reason.localeCompare(b.reason) || a.name.localeCompare(b.name));
+  }
+
+  return sorted.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export default async function ExcommunicationPage({ searchParams }) {
   const content = await getSiteContent();
+  const params = await searchParams;
+  const sort = params?.sort || "date";
+  const excommunications = sortEntries(content.excommunications, sort);
 
   return (
     <SiteLayout>
@@ -15,9 +33,26 @@ export default async function ExcommunicationPage() {
 
       <main className="content">
         <section className="panel list-panel">
-          {content.excommunications.length ? (
+          <div className="panel__header">
+            <div>
+              <p className="eyebrow">Sort Records</p>
+              <h2>Disciplinary Entries</h2>
+            </div>
+            <div className="sort-row">
+              <Link className={`button ${sort === "date" ? "button--active" : ""}`} href="/excommunication?sort=date">
+                Date
+              </Link>
+              <Link className={`button ${sort === "name" ? "button--active" : ""}`} href="/excommunication?sort=name">
+                Name
+              </Link>
+              <Link className={`button ${sort === "reason" ? "button--active" : ""}`} href="/excommunication?sort=reason">
+                Reason
+              </Link>
+            </div>
+          </div>
+          {excommunications.length ? (
             <div className="public-record-list">
-              {content.excommunications.map((entry) => (
+              {excommunications.map((entry) => (
                 <article className="public-record-item" key={entry.id}>
                   <div>
                     <h2>{entry.name}</h2>
