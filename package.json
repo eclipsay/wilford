@@ -16,9 +16,19 @@
     "start:panel": "npm run start --workspace @wilford/panel",
     "start:api": "npm run start --workspace @wilford/api",
     "start:bot": "npm run start --workspace @wilford/discord-bot",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "remote:help": "node scripts/remote-deploy.mjs help",
+    "remote:shell": "node scripts/remote-deploy.mjs shell",
+    "remote:panel": "node scripts/remote-deploy.mjs panel",
+    "remote:panel:full": "node scripts/remote-deploy.mjs panel-full",
+    "remote:all": "node scripts/remote-deploy.mjs all",
+    "remote:services": "node scripts/remote-deploy.mjs services"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.5.15"
   }
 }

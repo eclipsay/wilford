@@ -1,5 +1,15 @@
 import Link from "next/link";
-import { brand, mainNavigation } from "@wilford/shared";
+import Image from "next/image";
+import { brand } from "@wilford/shared";
+
+const stateNavigation = [
+  { label: "The Chairman", href: "/information" },
+  { label: "Our Industries", href: "/decrypter" },
+  { label: "The People", href: "/members" },
+  { label: "News & Propaganda", href: "/commits" },
+  { label: "Careers", href: "/panel-access" },
+  { label: "Contact", href: "mailto:contact@wilfordindustries.org" }
+];
 
 export function SiteLayout({ children }) {
   const panelUrl =
@@ -10,7 +20,15 @@ export function SiteLayout({ children }) {
     <div className="site-shell">
       <header className="topbar">
         <Link className="brand" href="/">
-          <span className="brand-mark">W</span>
+          <Image
+            className="brand-mark"
+            src="/creed-icons/header-w.png"
+            alt=""
+            aria-hidden="true"
+            width={112}
+            height={112}
+            priority
+          />
           <span className="brand-copy">
             <strong>{brand.name}</strong>
             <small>{brand.tagline}</small>
@@ -18,7 +36,7 @@ export function SiteLayout({ children }) {
         </Link>
 
         <nav className="nav" aria-label="Main navigation">
-          {mainNavigation.map((item) => (
+          {stateNavigation.map((item) => (
             <Link key={item.href} href={item.href}>
               {item.label}
             </Link>
@@ -31,7 +49,8 @@ export function SiteLayout({ children }) {
           target="_blank"
           rel="noreferrer"
         >
-          Panel Access
+          <span>Citizen Portal</span>
+          <span aria-hidden="true">+</span>
         </a>
       </header>
 

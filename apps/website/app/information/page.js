@@ -103,7 +103,7 @@ export default async function InformationPage() {
               </div>
               <div className="public-record-meta">
                 <strong>Current Period</strong>
-                <span>Following Chairman Lemmie's takeover from Mr Wilford, Wilford Industries has prospered and has long left the train it was born on.
+                <span>Following Chairman Lemmie&apos;s takeover from Mr Wilford, Wilford Industries has prospered and has long left the train it was born on.
                   It now operates as a modern company-state.
                 </span>
               </div>
