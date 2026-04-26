@@ -35,12 +35,6 @@ export default async function MembersPage() {
                 </div>
                 <div className="public-roster__cell public-roster__cell--role">
                   <span>{member.role || "Member"}</span>
-                  {member.division ? (
-                    <>
-                      <span className="public-roster__divider">|</span>
-                      <span>{member.division}</span>
-                    </>
-                  ) : null}
                 </div>
                 <div className="public-roster__cell public-roster__cell--notes">
                   <span>{member.notes || "No public notes recorded."}</span>

@@ -946,7 +946,7 @@ h3 {
 
 .public-roster__row {
   display: grid;
-  grid-template-columns: minmax(160px, 0.7fr) minmax(260px, 1fr) minmax(0, 1.4fr) 120px;
+  grid-template-columns: minmax(160px, 0.75fr) minmax(260px, 1.2fr) minmax(0, 1.4fr) 120px;
   gap: 18px;
   align-items: center;
   padding: 18px 0;
@@ -973,19 +973,8 @@ h3 {
   font-weight: 700;
 }
 
-.public-roster__cell--role {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
 .public-roster__cell--role span {
   color: var(--gold);
-}
-
-.public-roster__divider {
-  color: rgba(211, 157, 79, 0.56);
 }
 
 .public-roster__cell--notes span {

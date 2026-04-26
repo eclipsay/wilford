@@ -9,325 +9,181 @@ function createId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function moveItem(items, id, direction) {
-  const index = items.findIndex((item) => item.id === id);
+function parsePipeList(value, columns) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split("|").map((part) => part.trim());
+      return columns.reduce((entry, column, index) => {
+        entry[column] = parts[index] || "";
+        return entry;
+      }, {});
+    });
+}
 
-  if (index === -1) {
-    return items;
+function formatExcommunicationsEditor(entries) {
+  return entries
+    .map((entry) =>
+      [entry.name || "", entry.reason || "", entry.notes || "", entry.date || ""].join(" | ")
+    )
+    .join("\n");
+}
+
+function formatEnemiesEditor(entries) {
+  return entries
+    .map((entry) =>
+      [entry.name || "", entry.classification || "", entry.notes || ""].join(" | ")
+    )
+    .join("\n");
+}
+
+async function saveExcommunicationsAction(formData) {
+  "use server";
+
+  const excommunications = parsePipeList(formData.get("excommunicationsEditor"), [
+    "name",
+    "reason",
+    "notes",
+    "date"
+  ]).map((entry, index) => ({
+    id: createId("excommunication"),
+    name: entry.name,
+    reason: entry.reason,
+    decree: entry.reason,
+    notes: entry.notes,
+    date: entry.date || new Date().toISOString().slice(0, 10),
+    order: index
+  }));
+
+  try {
+    await updatePanelContent((content) => ({
+      ...content,
+      excommunications
+    }));
+  } catch {
+    redirect("/excommunications?error=excommunications");
   }
 
-  const targetIndex =
-    direction === "up"
-      ? Math.max(0, index - 1)
-      : Math.min(items.length - 1, index + 1);
+  revalidatePath("/excommunications");
+  redirect("/excommunications?saved=excommunications");
+}
 
-  if (targetIndex === index) {
-    return items;
+async function saveEnemiesAction(formData) {
+  "use server";
+
+  const enemyNations = parsePipeList(formData.get("enemiesEditor"), [
+    "name",
+    "classification",
+    "notes"
+  ]).map((entry, index) => ({
+    id: createId("enemy"),
+    name: entry.name,
+    classification: entry.classification || "Nation",
+    notes: entry.notes,
+    order: index
+  }));
+
+  try {
+    await updatePanelContent((content) => ({
+      ...content,
+      enemyNations
+    }));
+  } catch {
+    redirect("/excommunications?error=enemies");
   }
 
-  const next = [...items];
-  const [item] = next.splice(index, 1);
-  next.splice(targetIndex, 0, item);
-
-  return next.map((entry, order) => ({
-    ...entry,
-    order
-  }));
-}
-
-async function addExcommunicationAction(formData) {
-  "use server";
-
-  await updatePanelContent((content) => ({
-    ...content,
-    excommunications: [
-      {
-        id: createId("excommunication"),
-        name: String(formData.get("name") || ""),
-        reason: String(formData.get("reason") || ""),
-        decree: String(formData.get("decree") || ""),
-        date:
-          String(formData.get("date") || "") ||
-          new Date().toISOString().slice(0, 10),
-        notes: String(formData.get("notes") || ""),
-        order: 0
-      },
-      ...(content.excommunications || [])
-    ].map((entry, order) => ({
-      ...entry,
-      order
-    }))
-  }));
-
   revalidatePath("/excommunications");
-  redirect("/excommunications");
+  redirect("/excommunications?saved=enemies");
 }
 
-async function deleteExcommunicationAction(formData) {
-  "use server";
-
-  const id = String(formData.get("id") || "");
-  await updatePanelContent((content) => ({
-    ...content,
-    excommunications: (content.excommunications || [])
-      .filter((entry) => entry.id !== id)
-      .map((entry, order) => ({
-        ...entry,
-        order
-      }))
-  }));
-
-  revalidatePath("/excommunications");
-  redirect("/excommunications");
-}
-
-async function moveExcommunicationAction(formData) {
-  "use server";
-
-  const id = String(formData.get("id") || "");
-  const direction = String(formData.get("direction") || "down");
-  await updatePanelContent((content) => ({
-    ...content,
-    excommunications: moveItem(content.excommunications || [], id, direction)
-  }));
-
-  revalidatePath("/excommunications");
-  redirect("/excommunications");
-}
-
-async function addEnemyNationAction(formData) {
-  "use server";
-
-  await updatePanelContent((content) => ({
-    ...content,
-    enemyNations: [
-      {
-        id: createId("enemy"),
-        name: String(formData.get("name") || ""),
-        classification: String(formData.get("classification") || "Nation"),
-        notes: String(formData.get("notes") || ""),
-        order: 0
-      },
-      ...(content.enemyNations || [])
-    ].map((entry, order) => ({
-      ...entry,
-      order
-    }))
-  }));
-
-  revalidatePath("/excommunications");
-  redirect("/excommunications");
-}
-
-async function deleteEnemyNationAction(formData) {
-  "use server";
-
-  const id = String(formData.get("id") || "");
-  await updatePanelContent((content) => ({
-    ...content,
-    enemyNations: (content.enemyNations || [])
-      .filter((entry) => entry.id !== id)
-      .map((entry, order) => ({
-        ...entry,
-        order
-      }))
-  }));
-
-  revalidatePath("/excommunications");
-  redirect("/excommunications");
-}
-
-async function moveEnemyNationAction(formData) {
-  "use server";
-
-  const id = String(formData.get("id") || "");
-  const direction = String(formData.get("direction") || "down");
-  await updatePanelContent((content) => ({
-    ...content,
-    enemyNations: moveItem(content.enemyNations || [], id, direction)
-  }));
-
-  revalidatePath("/excommunications");
-  redirect("/excommunications");
-}
-
-function OrderControls({ id, isFirst, isLast, moveAction, deleteAction }) {
-  return (
-    <div className="record-actions">
-      <form action={moveAction}>
-        <input name="id" type="hidden" value={id} />
-        <button
-          className="button button--ghost"
-          disabled={isFirst}
-          name="direction"
-          type="submit"
-          value="up"
-        >
-          Up
-        </button>
-      </form>
-      <form action={moveAction}>
-        <input name="id" type="hidden" value={id} />
-        <button
-          className="button button--ghost"
-          disabled={isLast}
-          name="direction"
-          type="submit"
-          value="down"
-        >
-          Down
-        </button>
-      </form>
-      <form action={deleteAction}>
-        <input name="id" type="hidden" value={id} />
-        <button className="button button--ghost button--danger" type="submit">
-          Delete
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function OrderedList({ items, emptyMessage, renderMeta, moveAction, deleteAction }) {
-  if (!items.length) {
-    return <p className="empty-state">{emptyMessage}</p>;
-  }
-
-  return (
-    <div className="record-list">
-      {items.map((item, index) => (
-        <article className="record-item" key={item.id}>
-          <div className="record-copy">
-            <span className="record-order">#{index + 1}</span>
-            <h2>{item.name}</h2>
-            {renderMeta(item)}
-          </div>
-          <OrderControls
-            deleteAction={deleteAction}
-            id={item.id}
-            isFirst={index === 0}
-            isLast={index === items.length - 1}
-            moveAction={moveAction}
-          />
-        </article>
-      ))}
-    </div>
-  );
-}
-
-export default async function ExcommunicationsPage() {
+export default async function ExcommunicationsPage({ searchParams }) {
   await requireAuth();
   const content = await fetchPublic("/api/content");
+  const params = await searchParams;
   const excommunications = content.excommunications || [];
   const enemyNations = content.enemyNations || [];
 
   return (
     <PanelShell
       title="Excommunications"
-      description="Manage disciplinary records and hostile nation entries without the extra clutter."
+      description="Edit excommunications and enemy nations as ordered text lines."
     >
-      <section className="panel-split">
-        <form action={addExcommunicationAction} className="panel-card form-card">
-          <div className="panel-card__header">
-            <div>
-              <p className="card__kicker">Create</p>
-              <h2>Add Excommunication</h2>
-            </div>
-          </div>
-          <label className="field">
-            <span>Name</span>
-            <input name="name" required />
-          </label>
-          <label className="field">
-            <span>Reason</span>
-            <input name="reason" required />
-          </label>
-          <label className="field">
-            <span>Decree</span>
-            <input name="decree" required />
-          </label>
-          <label className="field">
-            <span>Date</span>
-            <input defaultValue={new Date().toISOString().slice(0, 10)} name="date" type="date" />
-          </label>
-          <label className="field">
-            <span>Notes</span>
-            <textarea name="notes" rows="4" />
-          </label>
-          <button className="button button--solid" type="submit">
-            Save Entry
-          </button>
-        </form>
+      {params?.saved === "excommunications" ? (
+        <section className="panel-card system-banner">
+          <p>Excommunications were saved successfully.</p>
+        </section>
+      ) : null}
 
-        <section className="panel-card list-card">
+      {params?.saved === "enemies" ? (
+        <section className="panel-card system-banner">
+          <p>Enemy nations were saved successfully.</p>
+        </section>
+      ) : null}
+
+      {params?.error === "excommunications" ? (
+        <section className="panel-card system-banner system-banner--error">
+          <p>Saving excommunications failed. Check file permissions and panel server logs.</p>
+        </section>
+      ) : null}
+
+      {params?.error === "enemies" ? (
+        <section className="panel-card system-banner system-banner--error">
+          <p>Saving enemy nations failed. Check file permissions and panel server logs.</p>
+        </section>
+      ) : null}
+
+      <section className="panel-split">
+        <form action={saveExcommunicationsAction} className="panel-card form-card">
           <div className="panel-card__header">
             <div>
-              <p className="card__kicker">Live Order</p>
+              <p className="card__kicker">Register Editor</p>
               <h2>Excommunications</h2>
             </div>
-            <p className="helper-text">The first item appears first on the public record.</p>
           </div>
-          <OrderedList
-            deleteAction={deleteExcommunicationAction}
-            emptyMessage="No excommunications have been published."
-            items={excommunications}
-            moveAction={moveExcommunicationAction}
-            renderMeta={(entry) => (
-              <>
-                <p>{entry.reason} / {entry.decree}</p>
-                <small>{entry.date}</small>
-              </>
-            )}
-          />
-        </section>
-      </section>
-
-      <section className="panel-split">
-        <form action={addEnemyNationAction} className="panel-card form-card">
-          <div className="panel-card__header">
-            <div>
-              <p className="card__kicker">Create</p>
-              <h2>Add Enemy Nation</h2>
-            </div>
+          <div className="panel-example">
+            <strong>Format Example</strong>
+            <code>Lemmie | Treason | Removed from leadership | 2026-04-25</code>
+            <code>Eclip | Breach of protocol | Restricted from access | 2026-04-26</code>
           </div>
           <label className="field">
-            <span>Name</span>
-            <input name="name" required />
-          </label>
-          <label className="field">
-            <span>Classification</span>
-            <input defaultValue="Nation" name="classification" required />
-          </label>
-          <label className="field">
-            <span>Notes</span>
-            <textarea name="notes" rows="4" />
+            <span>One entry per line: Name | Reason | Notes | Date</span>
+            <textarea
+              defaultValue={formatExcommunicationsEditor(excommunications)}
+              name="excommunicationsEditor"
+              rows="14"
+            />
           </label>
           <button className="button button--solid" type="submit">
-            Save Enemy Nation
+            Save Excommunications
           </button>
         </form>
 
-        <section className="panel-card list-card">
+        <form action={saveEnemiesAction} className="panel-card form-card">
           <div className="panel-card__header">
             <div>
-              <p className="card__kicker">Live Order</p>
+              <p className="card__kicker">Register Editor</p>
               <h2>Enemy Nations</h2>
             </div>
-            <p className="helper-text">Use short labels to keep the public page neat.</p>
           </div>
-          <OrderedList
-            deleteAction={deleteEnemyNationAction}
-            emptyMessage="No enemy nations are currently listed."
-            items={enemyNations}
-            moveAction={moveEnemyNationAction}
-            renderMeta={(entry) => (
-              <>
-                <p>{entry.classification}</p>
-                <small>{entry.notes}</small>
-              </>
-            )}
-          />
-        </section>
+          <div className="panel-example">
+            <strong>Format Example</strong>
+            <code>Blackwater | Nation | Repeated hostile incursions</code>
+            <code>Iron Pact | Coalition | Active operational threat</code>
+          </div>
+          <label className="field">
+            <span>One entry per line: Name | Type | Notes</span>
+            <textarea
+              defaultValue={formatEnemiesEditor(enemyNations)}
+              name="enemiesEditor"
+              rows="14"
+            />
+          </label>
+          <button className="button button--solid" type="submit">
+            Save Enemy Nations
+          </button>
+        </form>
       </section>
     </PanelShell>
   );

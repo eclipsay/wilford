@@ -12,9 +12,8 @@ function formatMembersEditor(members) {
         [
           member.name || "",
           member.role || "",
-          member.division || "",
-          member.status || "",
-          member.notes || ""
+          member.notes || "",
+          member.status || ""
         ].join(" | ")
     )
     .join("\n");
@@ -55,16 +54,14 @@ async function saveMembersAction(formData) {
   const members = parsePipeList(formData.get("membersEditor"), [
     "name",
     "role",
-    "division",
-    "status",
-    "notes"
+    "notes",
+    "status"
   ]).map((member, index) => ({
     id: createId("member"),
     name: member.name,
     role: member.role,
-    division: member.division,
-    status: member.status || "Active",
     notes: member.notes,
+    status: member.status || "Active",
     order: index
   }));
 
@@ -155,11 +152,11 @@ export default async function MembersPage({ searchParams }) {
           </div>
           <div className="panel-example">
             <strong>Format Example</strong>
-            <code>Lemmie | Wilford Owner | Queen of Divas | Active | Runs the operation</code>
-            <code>Eclip | Lead Developer | Cool Guy | Active | Builds the system</code>
+            <code>Lemmie | Chairman | Runs the operation | Active</code>
+            <code>Eclip | Executive Director &amp; Lead Developer | Builds the system | Active</code>
           </div>
           <label className="field">
-            <span>One member per line</span>
+            <span>One member per line: Name | Role | Notes | Status</span>
             <textarea
               defaultValue={formatMembersEditor(members)}
               name="membersEditor"
