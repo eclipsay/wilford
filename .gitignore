@@ -10,5 +10,3 @@ apps/api/data/content.json
 deploypanel
 *.log
 npm-debug.log*
-apps/api/data/content.json
-deploypanel

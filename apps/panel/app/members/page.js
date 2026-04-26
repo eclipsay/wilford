@@ -1,7 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { fetchAdmin, fetchPublic } from "../../lib/api";
+import { fetchPublic } from "../../lib/api";
 import { requireAuth } from "../../lib/auth";
+import { updatePanelContent } from "../../lib/content-file";
 import { PanelShell } from "../../components/PanelShell";
 
 function formatMembersEditor(members) {
@@ -68,10 +69,10 @@ async function saveMembersAction(formData) {
   }));
 
   try {
-    await fetchAdmin("/api/admin/members/replace", {
-      method: "POST",
-      body: JSON.stringify({ members })
-    });
+    await updatePanelContent((content) => ({
+      ...content,
+      members
+    }));
 
     revalidatePath("/members");
     redirect("/members?saved=members");
@@ -96,10 +97,10 @@ async function saveAlliancesAction(formData) {
   }));
 
   try {
-    await fetchAdmin("/api/admin/alliances/replace", {
-      method: "POST",
-      body: JSON.stringify({ alliances })
-    });
+    await updatePanelContent((content) => ({
+      ...content,
+      alliances
+    }));
 
     revalidatePath("/members");
     redirect("/members?saved=alliances");
@@ -134,13 +135,13 @@ export default async function MembersPage({ searchParams }) {
 
       {params?.error === "members" ? (
         <section className="panel-card system-banner system-banner--error">
-          <p>Saving members failed. The API likely needs the latest code and a restart.</p>
+          <p>Saving members failed. Check file permissions and panel server logs.</p>
         </section>
       ) : null}
 
       {params?.error === "alliances" ? (
         <section className="panel-card system-banner system-banner--error">
-          <p>Saving alliances failed. The API likely needs the latest code and a restart.</p>
+          <p>Saving alliances failed. Check file permissions and panel server logs.</p>
         </section>
       ) : null}
 

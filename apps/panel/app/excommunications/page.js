@@ -1,22 +1,63 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { fetchAdmin, fetchPublic } from "../../lib/api";
+import { fetchPublic } from "../../lib/api";
 import { requireAuth } from "../../lib/auth";
+import { updatePanelContent } from "../../lib/content-file";
 import { PanelShell } from "../../components/PanelShell";
+
+function createId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function moveItem(items, id, direction) {
+  const index = items.findIndex((item) => item.id === id);
+
+  if (index === -1) {
+    return items;
+  }
+
+  const targetIndex =
+    direction === "up"
+      ? Math.max(0, index - 1)
+      : Math.min(items.length - 1, index + 1);
+
+  if (targetIndex === index) {
+    return items;
+  }
+
+  const next = [...items];
+  const [item] = next.splice(index, 1);
+  next.splice(targetIndex, 0, item);
+
+  return next.map((entry, order) => ({
+    ...entry,
+    order
+  }));
+}
 
 async function addExcommunicationAction(formData) {
   "use server";
 
-  await fetchAdmin("/api/admin/excommunications", {
-    method: "POST",
-    body: JSON.stringify({
-      name: formData.get("name"),
-      reason: formData.get("reason"),
-      decree: formData.get("decree"),
-      date: formData.get("date"),
-      notes: formData.get("notes")
-    })
-  });
+  await updatePanelContent((content) => ({
+    ...content,
+    excommunications: [
+      {
+        id: createId("excommunication"),
+        name: String(formData.get("name") || ""),
+        reason: String(formData.get("reason") || ""),
+        decree: String(formData.get("decree") || ""),
+        date:
+          String(formData.get("date") || "") ||
+          new Date().toISOString().slice(0, 10),
+        notes: String(formData.get("notes") || ""),
+        order: 0
+      },
+      ...(content.excommunications || [])
+    ].map((entry, order) => ({
+      ...entry,
+      order
+    }))
+  }));
 
   revalidatePath("/excommunications");
   redirect("/excommunications");
@@ -25,9 +66,16 @@ async function addExcommunicationAction(formData) {
 async function deleteExcommunicationAction(formData) {
   "use server";
 
-  await fetchAdmin(`/api/admin/excommunications/${formData.get("id")}`, {
-    method: "DELETE"
-  });
+  const id = String(formData.get("id") || "");
+  await updatePanelContent((content) => ({
+    ...content,
+    excommunications: (content.excommunications || [])
+      .filter((entry) => entry.id !== id)
+      .map((entry, order) => ({
+        ...entry,
+        order
+      }))
+  }));
 
   revalidatePath("/excommunications");
   redirect("/excommunications");
@@ -36,12 +84,12 @@ async function deleteExcommunicationAction(formData) {
 async function moveExcommunicationAction(formData) {
   "use server";
 
-  await fetchAdmin(`/api/admin/excommunications/${formData.get("id")}/move`, {
-    method: "POST",
-    body: JSON.stringify({
-      direction: formData.get("direction")
-    })
-  });
+  const id = String(formData.get("id") || "");
+  const direction = String(formData.get("direction") || "down");
+  await updatePanelContent((content) => ({
+    ...content,
+    excommunications: moveItem(content.excommunications || [], id, direction)
+  }));
 
   revalidatePath("/excommunications");
   redirect("/excommunications");
@@ -50,14 +98,22 @@ async function moveExcommunicationAction(formData) {
 async function addEnemyNationAction(formData) {
   "use server";
 
-  await fetchAdmin("/api/admin/enemy-nations", {
-    method: "POST",
-    body: JSON.stringify({
-      name: formData.get("name"),
-      classification: formData.get("classification"),
-      notes: formData.get("notes")
-    })
-  });
+  await updatePanelContent((content) => ({
+    ...content,
+    enemyNations: [
+      {
+        id: createId("enemy"),
+        name: String(formData.get("name") || ""),
+        classification: String(formData.get("classification") || "Nation"),
+        notes: String(formData.get("notes") || ""),
+        order: 0
+      },
+      ...(content.enemyNations || [])
+    ].map((entry, order) => ({
+      ...entry,
+      order
+    }))
+  }));
 
   revalidatePath("/excommunications");
   redirect("/excommunications");
@@ -66,9 +122,16 @@ async function addEnemyNationAction(formData) {
 async function deleteEnemyNationAction(formData) {
   "use server";
 
-  await fetchAdmin(`/api/admin/enemy-nations/${formData.get("id")}`, {
-    method: "DELETE"
-  });
+  const id = String(formData.get("id") || "");
+  await updatePanelContent((content) => ({
+    ...content,
+    enemyNations: (content.enemyNations || [])
+      .filter((entry) => entry.id !== id)
+      .map((entry, order) => ({
+        ...entry,
+        order
+      }))
+  }));
 
   revalidatePath("/excommunications");
   redirect("/excommunications");
@@ -77,12 +140,12 @@ async function deleteEnemyNationAction(formData) {
 async function moveEnemyNationAction(formData) {
   "use server";
 
-  await fetchAdmin(`/api/admin/enemy-nations/${formData.get("id")}/move`, {
-    method: "POST",
-    body: JSON.stringify({
-      direction: formData.get("direction")
-    })
-  });
+  const id = String(formData.get("id") || "");
+  const direction = String(formData.get("direction") || "down");
+  await updatePanelContent((content) => ({
+    ...content,
+    enemyNations: moveItem(content.enemyNations || [], id, direction)
+  }));
 
   revalidatePath("/excommunications");
   redirect("/excommunications");
