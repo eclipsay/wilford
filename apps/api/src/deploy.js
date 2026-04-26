@@ -31,3 +31,18 @@ export async function deployPanel() {
     steps
   };
 }
+
+export async function deployDiscordBot() {
+  const steps = [];
+
+  steps.push(await run("git", ["pull", "--ff-only", "origin", "main"]));
+  steps.push(
+    await run("npm", ["run", "build", "--workspace", "@wilford/discord-bot"])
+  );
+  steps.push(await run("pm2", ["restart", config.botPm2Name]));
+
+  return {
+    ok: true,
+    steps
+  };
+}

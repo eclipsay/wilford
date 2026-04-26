@@ -32,7 +32,7 @@ body {
     radial-gradient(circle at 50% 24%, rgba(93, 16, 13, 0.22), transparent 28%),
     linear-gradient(180deg, #1a0a09 0%, #0b0505 48%, #070404 100%);
   color: var(--text);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
 }
 
 a {
@@ -54,7 +54,7 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 20px 4vw;
+  padding: 16px 4vw;
   border-bottom: 1px solid var(--line);
   background:
     linear-gradient(180deg, rgba(10, 4, 4, 0.96), rgba(10, 4, 4, 0.72)),
@@ -143,13 +143,14 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 14px;
+  min-height: 40px;
+  padding: 0 14px;
   border: 1px solid var(--line-strong);
   color: var(--gold-bright);
   background: rgba(17, 8, 6, 0.55);
   text-transform: uppercase;
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 .button:hover,
@@ -175,11 +176,11 @@ h3 {
 }
 
 .content--hero {
-  padding-bottom: 64px;
+  padding-bottom: 44px;
 }
 
 .hero {
-  padding: 78px 0 34px;
+  padding: 50px 0 24px;
 }
 
 .hero-simple {
@@ -206,7 +207,7 @@ h3 {
 
 .homepage-image-hero__overlay {
   width: min(620px, 100%);
-  margin: 0 0 42px 42px;
+  margin: 0 0 28px 28px;
   padding: 0;
 }
 
@@ -330,8 +331,8 @@ h3 {
 
 h1 {
   margin: 0;
-  font-size: clamp(3.8rem, 7vw, 7.2rem);
-  line-height: 0.92;
+  font-size: clamp(2.2rem, 4.6vw, 4.2rem);
+  line-height: 1;
   color: var(--gold-bright);
   text-transform: uppercase;
   text-shadow: 0 6px 22px rgba(0, 0, 0, 0.38);
@@ -339,7 +340,7 @@ h1 {
 
 h2 {
   margin: 0;
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-size: clamp(1.25rem, 2.2vw, 1.9rem);
   color: var(--gold-bright);
   text-transform: uppercase;
 }
@@ -352,10 +353,10 @@ h3 {
 }
 
 .lead {
-  max-width: 760px;
+  max-width: 700px;
   color: var(--text-soft);
-  font-size: 1.05rem;
-  line-height: 1.85;
+  font-size: 0.98rem;
+  line-height: 1.7;
 }
 
 .hero-monument__lead {
@@ -656,6 +657,7 @@ h3 {
     linear-gradient(180deg, rgba(108, 24, 17, 0.13), rgba(16, 8, 7, 0.9)),
     rgba(13, 7, 7, 0.9);
   box-shadow: var(--shadow);
+  border-radius: 16px;
 }
 
 .value-strip article {
@@ -701,7 +703,7 @@ h3 {
 }
 
 .panel {
-  padding: 28px;
+  padding: 22px;
 }
 
 .panel p {
@@ -746,7 +748,7 @@ h3 {
   align-items: end;
   justify-content: space-between;
   gap: 20px;
-  padding-bottom: 20px;
+  padding-bottom: 16px;
   margin-bottom: 8px;
   border-bottom: 1px solid rgba(211, 157, 79, 0.16);
 }
@@ -776,7 +778,7 @@ h3 {
   grid-template-columns: minmax(0, 0.8fr) minmax(220px, 0.9fr);
   gap: 18px;
   align-items: start;
-  padding: 18px 0;
+  padding: 14px 0;
   border-bottom: 1px solid rgba(211, 157, 79, 0.14);
 }
 
@@ -804,8 +806,8 @@ h3 {
 }
 
 .commit-panel {
-  padding: 28px;
-  margin-bottom: 72px;
+  padding: 22px;
+  margin-bottom: 56px;
 }
 
 .commit-panel__header {
@@ -813,14 +815,14 @@ h3 {
   align-items: end;
   justify-content: space-between;
   gap: 20px;
-  padding-bottom: 22px;
+  padding-bottom: 16px;
   margin-bottom: 10px;
   border-bottom: 1px solid rgba(211, 157, 79, 0.18);
 }
 
 .commit-panel__header h2 {
   margin-top: 4px;
-  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  font-size: clamp(1.25rem, 2.2vw, 1.8rem);
 }
 
 .commit-log {
@@ -837,7 +839,7 @@ h3 {
   grid-template-columns: 100px minmax(0, 1fr) 210px;
   gap: 18px;
   align-items: center;
-  padding: 14px 0;
+  padding: 12px 0;
   border-bottom: 1px solid rgba(211, 157, 79, 0.14);
   transition: background 160ms ease, color 160ms ease;
 }
@@ -919,7 +921,7 @@ h3 {
   }
 
   .hero {
-    padding-top: 56px;
+    padding-top: 34px;
   }
 
   .hero-monument__visual {

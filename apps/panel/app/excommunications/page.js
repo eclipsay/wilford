@@ -88,29 +88,66 @@ async function moveEnemyNationAction(formData) {
   redirect("/excommunications");
 }
 
-function OrderControls({ id, moveAction, deleteAction }) {
+function OrderControls({ id, isFirst, isLast, moveAction, deleteAction }) {
   return (
     <div className="record-actions">
       <form action={moveAction}>
         <input name="id" type="hidden" value={id} />
-        <input name="direction" type="hidden" value="up" />
-        <button className="button button--ghost" type="submit">
-          Move Up
+        <button
+          className="button button--ghost"
+          disabled={isFirst}
+          name="direction"
+          type="submit"
+          value="up"
+        >
+          Up
         </button>
       </form>
       <form action={moveAction}>
         <input name="id" type="hidden" value={id} />
-        <input name="direction" type="hidden" value="down" />
-        <button className="button button--ghost" type="submit">
-          Move Down
+        <button
+          className="button button--ghost"
+          disabled={isLast}
+          name="direction"
+          type="submit"
+          value="down"
+        >
+          Down
         </button>
       </form>
       <form action={deleteAction}>
         <input name="id" type="hidden" value={id} />
-        <button className="button button--ghost" type="submit">
+        <button className="button button--ghost button--danger" type="submit">
           Delete
         </button>
       </form>
+    </div>
+  );
+}
+
+function OrderedList({ items, emptyMessage, renderMeta, moveAction, deleteAction }) {
+  if (!items.length) {
+    return <p className="empty-state">{emptyMessage}</p>;
+  }
+
+  return (
+    <div className="record-list">
+      {items.map((item, index) => (
+        <article className="record-item" key={item.id}>
+          <div className="record-copy">
+            <span className="record-order">#{index + 1}</span>
+            <h2>{item.name}</h2>
+            {renderMeta(item)}
+          </div>
+          <OrderControls
+            deleteAction={deleteAction}
+            id={item.id}
+            isFirst={index === 0}
+            isLast={index === items.length - 1}
+            moveAction={moveAction}
+          />
+        </article>
+      ))}
     </div>
   );
 }
@@ -124,11 +161,16 @@ export default async function ExcommunicationsPage() {
   return (
     <PanelShell
       title="Excommunications"
-      description="Manage removed individuals and hostile nations shown on the public site."
+      description="Manage disciplinary records and hostile nation entries without the extra clutter."
     >
       <section className="panel-split">
         <form action={addExcommunicationAction} className="panel-card form-card">
-          <p className="card__kicker">Add Excommunication</p>
+          <div className="panel-card__header">
+            <div>
+              <p className="card__kicker">Create</p>
+              <h2>Add Excommunication</h2>
+            </div>
+          </div>
           <label className="field">
             <span>Name</span>
             <input name="name" required />
@@ -157,38 +199,36 @@ export default async function ExcommunicationsPage() {
         <section className="panel-card list-card">
           <div className="panel-card__header">
             <div>
-              <p className="card__kicker">Current Excommunications</p>
-              <h2>Manual Order</h2>
+              <p className="card__kicker">Live Order</p>
+              <h2>Excommunications</h2>
             </div>
+            <p className="helper-text">The first item appears first on the public record.</p>
           </div>
-          <div className="record-list">
-            {excommunications.length ? (
-              excommunications.map((entry) => (
-                <article className="record-item record-item--stacked" key={entry.id}>
-                  <div>
-                    <h2>{entry.name}</h2>
-                    <p>{entry.reason} / {entry.decree}</p>
-                    <small>{entry.date}</small>
-                  </div>
-                  <OrderControls
-                    id={entry.id}
-                    moveAction={moveExcommunicationAction}
-                    deleteAction={deleteExcommunicationAction}
-                  />
-                </article>
-              ))
-            ) : (
-              <p>No excommunications have been published.</p>
+          <OrderedList
+            deleteAction={deleteExcommunicationAction}
+            emptyMessage="No excommunications have been published."
+            items={excommunications}
+            moveAction={moveExcommunicationAction}
+            renderMeta={(entry) => (
+              <>
+                <p>{entry.reason} / {entry.decree}</p>
+                <small>{entry.date}</small>
+              </>
             )}
-          </div>
+          />
         </section>
       </section>
 
       <section className="panel-split">
         <form action={addEnemyNationAction} className="panel-card form-card">
-          <p className="card__kicker">Add Enemy Nation</p>
+          <div className="panel-card__header">
+            <div>
+              <p className="card__kicker">Create</p>
+              <h2>Add Enemy Nation</h2>
+            </div>
+          </div>
           <label className="field">
-            <span>Nation Name</span>
+            <span>Name</span>
             <input name="name" required />
           </label>
           <label className="field">
@@ -207,30 +247,23 @@ export default async function ExcommunicationsPage() {
         <section className="panel-card list-card">
           <div className="panel-card__header">
             <div>
-              <p className="card__kicker">Enemies Of The State</p>
-              <h2>Manual Order</h2>
+              <p className="card__kicker">Live Order</p>
+              <h2>Enemy Nations</h2>
             </div>
+            <p className="helper-text">Use short labels to keep the public page neat.</p>
           </div>
-          <div className="record-list">
-            {enemyNations.length ? (
-              enemyNations.map((entry) => (
-                <article className="record-item record-item--stacked" key={entry.id}>
-                  <div>
-                    <h2>{entry.name}</h2>
-                    <p>{entry.classification}</p>
-                    <small>{entry.notes}</small>
-                  </div>
-                  <OrderControls
-                    id={entry.id}
-                    moveAction={moveEnemyNationAction}
-                    deleteAction={deleteEnemyNationAction}
-                  />
-                </article>
-              ))
-            ) : (
-              <p>No enemy nations are currently listed.</p>
+          <OrderedList
+            deleteAction={deleteEnemyNationAction}
+            emptyMessage="No enemy nations are currently listed."
+            items={enemyNations}
+            moveAction={moveEnemyNationAction}
+            renderMeta={(entry) => (
+              <>
+                <p>{entry.classification}</p>
+                <small>{entry.notes}</small>
+              </>
             )}
-          </div>
+          />
         </section>
       </section>
     </PanelShell>

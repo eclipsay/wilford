@@ -27,10 +27,15 @@ export default async function SettingsPage() {
   return (
     <PanelShell
       title="Settings"
-      description="Control the public website’s headline, chairman naming, and shared display settings."
+      description="Control the homepage text, chairman name, and shared public display settings."
     >
       <form action={saveSettingsAction} className="panel-card form-card form-card--wide">
-        <p className="card__kicker">Website Settings</p>
+        <div className="panel-card__header">
+          <div>
+            <p className="card__kicker">Website Settings</p>
+            <h2>Public Text</h2>
+          </div>
+        </div>
         <label className="field">
           <span>Homepage Eyebrow</span>
           <input defaultValue={settings.homepageEyebrow} name="homepageEyebrow" />

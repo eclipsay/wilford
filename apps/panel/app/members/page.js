@@ -25,8 +25,7 @@ async function addMemberAction(formData) {
 async function deleteMemberAction(formData) {
   "use server";
 
-  const id = formData.get("id");
-  await fetchAdmin(`/api/admin/members/${id}`, {
+  await fetchAdmin(`/api/admin/members/${formData.get("id")}`, {
     method: "DELETE"
   });
 
@@ -89,29 +88,66 @@ async function moveAllianceAction(formData) {
   redirect("/members");
 }
 
-function OrderControls({ id, moveAction, deleteAction }) {
+function OrderControls({ id, isFirst, isLast, moveAction, deleteAction }) {
   return (
     <div className="record-actions">
       <form action={moveAction}>
         <input name="id" type="hidden" value={id} />
-        <input name="direction" type="hidden" value="up" />
-        <button className="button button--ghost" type="submit">
-          Move Up
+        <button
+          className="button button--ghost"
+          disabled={isFirst}
+          name="direction"
+          type="submit"
+          value="up"
+        >
+          Up
         </button>
       </form>
       <form action={moveAction}>
         <input name="id" type="hidden" value={id} />
-        <input name="direction" type="hidden" value="down" />
-        <button className="button button--ghost" type="submit">
-          Move Down
+        <button
+          className="button button--ghost"
+          disabled={isLast}
+          name="direction"
+          type="submit"
+          value="down"
+        >
+          Down
         </button>
       </form>
       <form action={deleteAction}>
         <input name="id" type="hidden" value={id} />
-        <button className="button button--ghost" type="submit">
+        <button className="button button--ghost button--danger" type="submit">
           Delete
         </button>
       </form>
+    </div>
+  );
+}
+
+function OrderedList({ items, emptyMessage, renderMeta, moveAction, deleteAction }) {
+  if (!items.length) {
+    return <p className="empty-state">{emptyMessage}</p>;
+  }
+
+  return (
+    <div className="record-list">
+      {items.map((item, index) => (
+        <article className="record-item" key={item.id}>
+          <div className="record-copy">
+            <span className="record-order">#{index + 1}</span>
+            <h2>{item.name}</h2>
+            {renderMeta(item)}
+          </div>
+          <OrderControls
+            deleteAction={deleteAction}
+            id={item.id}
+            isFirst={index === 0}
+            isLast={index === items.length - 1}
+            moveAction={moveAction}
+          />
+        </article>
+      ))}
     </div>
   );
 }
@@ -125,11 +161,16 @@ export default async function MembersPage() {
   return (
     <PanelShell
       title="Members"
-      description="Manage members and allied nations shown on the public site."
+      description="Add, reorder, and remove the people and allied nations shown on the public site."
     >
       <section className="panel-split">
         <form action={addMemberAction} className="panel-card form-card">
-          <p className="card__kicker">Add Member</p>
+          <div className="panel-card__header">
+            <div>
+              <p className="card__kicker">Create</p>
+              <h2>Add Member</h2>
+            </div>
+          </div>
           <label className="field">
             <span>Name</span>
             <input name="name" required />
@@ -158,34 +199,36 @@ export default async function MembersPage() {
         <section className="panel-card list-card">
           <div className="panel-card__header">
             <div>
-              <p className="card__kicker">Current Members</p>
-              <h2>Manual Order</h2>
+              <p className="card__kicker">Live Order</p>
+              <h2>Members</h2>
             </div>
+            <p className="helper-text">Top to bottom matches the public page.</p>
           </div>
-          <div className="record-list">
-            {members.map((member) => (
-              <article className="record-item record-item--stacked" key={member.id}>
-                <div>
-                  <h2>{member.name}</h2>
-                  <p>{member.role} / {member.division}</p>
-                  <small>{member.status}</small>
-                </div>
-                <OrderControls
-                  id={member.id}
-                  moveAction={moveMemberAction}
-                  deleteAction={deleteMemberAction}
-                />
-              </article>
-            ))}
-          </div>
+          <OrderedList
+            deleteAction={deleteMemberAction}
+            emptyMessage="No members have been added yet."
+            items={members}
+            moveAction={moveMemberAction}
+            renderMeta={(member) => (
+              <>
+                <p>{member.role} / {member.division}</p>
+                <small>{member.status}</small>
+              </>
+            )}
+          />
         </section>
       </section>
 
       <section className="panel-split">
         <form action={addAllianceAction} className="panel-card form-card">
-          <p className="card__kicker">Add Alliance</p>
+          <div className="panel-card__header">
+            <div>
+              <p className="card__kicker">Create</p>
+              <h2>Add Alliance</h2>
+            </div>
+          </div>
           <label className="field">
-            <span>Nation Name</span>
+            <span>Name</span>
             <input name="name" required />
           </label>
           <label className="field">
@@ -204,30 +247,23 @@ export default async function MembersPage() {
         <section className="panel-card list-card">
           <div className="panel-card__header">
             <div>
-              <p className="card__kicker">Allied Nations</p>
-              <h2>Manual Order</h2>
+              <p className="card__kicker">Live Order</p>
+              <h2>Alliances</h2>
             </div>
+            <p className="helper-text">Keep these concise for the public roster.</p>
           </div>
-          <div className="record-list">
-            {alliances.length ? (
-              alliances.map((alliance) => (
-                <article className="record-item record-item--stacked" key={alliance.id}>
-                  <div>
-                    <h2>{alliance.name}</h2>
-                    <p>{alliance.classification}</p>
-                    <small>{alliance.notes}</small>
-                  </div>
-                  <OrderControls
-                    id={alliance.id}
-                    moveAction={moveAllianceAction}
-                    deleteAction={deleteAllianceAction}
-                  />
-                </article>
-              ))
-            ) : (
-              <p>No allied nations are currently listed.</p>
+          <OrderedList
+            deleteAction={deleteAllianceAction}
+            emptyMessage="No allied nations are currently listed."
+            items={alliances}
+            moveAction={moveAllianceAction}
+            renderMeta={(alliance) => (
+              <>
+                <p>{alliance.classification}</p>
+                <small>{alliance.notes}</small>
+              </>
             )}
-          </div>
+          />
         </section>
       </section>
     </PanelShell>

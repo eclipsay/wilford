@@ -64,14 +64,13 @@ export default async function LoginPage({ searchParams }) {
         <h1>Wilford Panel</h1>
         <p className="auth-copy">
           Sign in with your panel username and password to access Wilford
-          control tools, records, and administrative actions. The owner account
-          for `eclip` can be read from panel or API environment settings.
+          control tools, records, and administrative actions.
         </p>
 
         <form action={loginAction} className="auth-form">
           <label className="field">
             <span>Username</span>
-            <input defaultValue="eclip" name="username" required />
+            <input name="username" required />
           </label>
           <label className="field">
             <span>Password</span>

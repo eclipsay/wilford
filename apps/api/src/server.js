@@ -21,7 +21,7 @@ import {
   moveMember,
   updateSettings
 } from "./content-store.js";
-import { deployPanel } from "./deploy.js";
+import { deployDiscordBot, deployPanel } from "./deploy.js";
 import { getCommits } from "./github.js";
 
 const app = express();
@@ -287,6 +287,18 @@ app.post("/api/admin/deploy/panel", requireAdmin, async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Panel deploy failed."
+    });
+  }
+});
+
+app.post("/api/admin/deploy/bot", requireAdmin, async (_req, res) => {
+  try {
+    const result = await deployDiscordBot();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error:
+        error instanceof Error ? error.message : "Discord bot deploy failed."
     });
   }
 });

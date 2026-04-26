@@ -6,6 +6,10 @@ import { getSiteContent } from "../../lib/content";
 function sortMembers(members, sort) {
   const sorted = [...members];
 
+  if (sort === "name") {
+    return sorted.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   if (sort === "status") {
     return sorted.sort((a, b) => a.status.localeCompare(b.status) || a.name.localeCompare(b.name));
   }

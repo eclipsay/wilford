@@ -15,6 +15,7 @@ export const config = {
   dataFile: resolve(currentDir, "../data/content.json"),
   repoRoot: process.env.REPO_ROOT || resolve(currentDir, "../../.."),
   panelPm2Name: process.env.PANEL_PM2_NAME || "wilford-panel",
-  ownerUsername: process.env.PANEL_OWNER_USERNAME || "eclip",
+  botPm2Name: process.env.BOT_PM2_NAME || "wilford-discord-bot",
+  ownerUsername: process.env.PANEL_OWNER_USERNAME || "",
   ownerPassword: process.env.PANEL_OWNER_PASSWORD || ""
 };

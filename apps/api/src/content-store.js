@@ -37,6 +37,13 @@ function withNormalizedOrder(items) {
     }));
 }
 
+function withReindexedOrder(items) {
+  return [...(items || [])].map((item, index) => ({
+    ...item,
+    order: index
+  }));
+}
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
   const hash = scryptSync(password, salt, 64).toString("hex");
@@ -111,7 +118,7 @@ function moveOrderedItem(items, id, direction) {
   const next = [...normalized];
   const [item] = next.splice(index, 1);
   next.splice(targetIndex, 0, item);
-  return withNormalizedOrder(next);
+  return withReindexedOrder(next);
 }
 
 export async function getContent() {

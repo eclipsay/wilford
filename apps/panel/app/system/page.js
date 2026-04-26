@@ -12,10 +12,33 @@ async function deployPanelAction() {
       body: JSON.stringify({})
     });
 
-    redirect("/system?deploy=success");
+    redirect("/system?panel=success");
   } catch {
-    redirect("/system?deploy=error");
+    redirect("/system?panel=error");
   }
+}
+
+async function deployBotAction() {
+  "use server";
+
+  try {
+    await fetchAdmin("/api/admin/deploy/bot", {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+
+    redirect("/system?bot=success");
+  } catch {
+    redirect("/system?bot=error");
+  }
+}
+
+function Banner({ kind, children }) {
+  return (
+    <section className={`panel-card system-banner${kind === "error" ? " system-banner--error" : ""}`}>
+      <p>{children}</p>
+    </section>
+  );
 }
 
 export default async function SystemPage({ searchParams }) {
@@ -26,18 +49,30 @@ export default async function SystemPage({ searchParams }) {
   return (
     <PanelShell
       title="System"
-      description="Service visibility and configuration status for the Wilford control plane."
+      description="Operational controls for the panel and Discord bot."
     >
-      {params?.deploy === "success" ? (
-        <section className="panel-card system-banner">
-          <p>The panel deploy completed. Latest changes were pulled and the PM2 process was restarted.</p>
-        </section>
+      {params?.panel === "success" ? (
+        <Banner kind="success">
+          The panel deployment completed successfully.
+        </Banner>
       ) : null}
 
-      {params?.deploy === "error" ? (
-        <section className="panel-card system-banner system-banner--error">
-          <p>The deploy action failed. Check the API logs or PM2 logs on the VPS for the exact command error.</p>
-        </section>
+      {params?.panel === "error" ? (
+        <Banner kind="error">
+          The panel deployment failed. Check PM2 and API logs for details.
+        </Banner>
+      ) : null}
+
+      {params?.bot === "success" ? (
+        <Banner kind="success">
+          The Discord bot deployment completed successfully.
+        </Banner>
+      ) : null}
+
+      {params?.bot === "error" ? (
+        <Banner kind="error">
+          The Discord bot deployment failed. Check PM2 and API logs for details.
+        </Banner>
       ) : null}
 
       <section className="cards">
@@ -48,28 +83,57 @@ export default async function SystemPage({ searchParams }) {
         </article>
         <article className="card">
           <p className="card__kicker">Admin Key</p>
-          <h2>{process.env.ADMIN_API_KEY ? "Configured" : "Missing"}</h2>
-          <p>The panel uses this key to write protected records through the API.</p>
+          <h2>{process.env.ADMIN_API_KEY ? "Ready" : "Missing"}</h2>
+          <p>Required for protected write actions.</p>
         </article>
         <article className="card">
-          <p className="card__kicker">Panel Auth</p>
-          <h2>{process.env.PANEL_SESSION_SECRET ? "Configured" : "Missing"}</h2>
-          <p>Username and password login is enabled when the panel auth variables exist on the API and panel.</p>
+          <p className="card__kicker">Session</p>
+          <h2>{process.env.PANEL_SESSION_SECRET ? "Ready" : "Missing"}</h2>
+          <p>Required for panel login sessions.</p>
+        </article>
+        <article className="card">
+          <p className="card__kicker">Discord Bot</p>
+          <h2>{process.env.BOT_PM2_NAME || "Configured"}</h2>
+          <p>PM2 process target for bot restart actions.</p>
         </article>
       </section>
 
-      <section className="panel-card form-card form-card--wide">
-        <p className="card__kicker">Panel Deploy</p>
-        <h2>Pull And Restart</h2>
-        <p>
-          This action runs a fast-forward `git pull`, rebuilds `@wilford/panel`,
-          and restarts the `wilford-panel` PM2 process on the VPS.
-        </p>
-        <form action={deployPanelAction}>
-          <button className="button button--solid" type="submit">
-            Deploy Latest Panel
-          </button>
-        </form>
+      <section className="panel-grid">
+        <article className="panel-card">
+          <div className="panel-card__header">
+            <div>
+              <p className="card__kicker">Panel</p>
+              <h2>Pull And Restart</h2>
+            </div>
+          </div>
+          <p>
+            Pull the latest code, rebuild `@wilford/panel`, and restart the
+            panel PM2 process.
+          </p>
+          <form action={deployPanelAction}>
+            <button className="button button--solid" type="submit">
+              Deploy Panel
+            </button>
+          </form>
+        </article>
+
+        <article className="panel-card">
+          <div className="panel-card__header">
+            <div>
+              <p className="card__kicker">Discord Bot</p>
+              <h2>Pull And Restart</h2>
+            </div>
+          </div>
+          <p>
+            Pull the latest code, run the bot workspace build, and restart the
+            Discord bot PM2 process.
+          </p>
+          <form action={deployBotAction}>
+            <button className="button button--solid" type="submit">
+              Deploy Bot
+            </button>
+          </form>
+        </article>
       </section>
     </PanelShell>
   );

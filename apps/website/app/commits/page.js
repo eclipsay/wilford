@@ -25,7 +25,10 @@ export default async function CommitsPage() {
               <p className="eyebrow">Repository</p>
               <h2>{content.settings.commitsRepository}</h2>
             </div>
-            <Link className="button" href="https://github.com/eclipsay/wilford">
+            <Link
+              className="button"
+              href={`https://github.com/${content.settings.commitsRepository}`}
+            >
               Open Repository
             </Link>
           </div>
