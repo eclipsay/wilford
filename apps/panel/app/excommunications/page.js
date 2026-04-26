@@ -88,14 +88,14 @@ function OrderControls({ id, moveAction, deleteAction }) {
         <input name="id" type="hidden" value={id} />
         <input name="direction" type="hidden" value="up" />
         <button className="button button--ghost" type="submit">
-          Up
+          Move Up
         </button>
       </form>
       <form action={moveAction}>
         <input name="id" type="hidden" value={id} />
         <input name="direction" type="hidden" value="down" />
         <button className="button button--ghost" type="submit">
-          Down
+          Move Down
         </button>
       </form>
       <form action={deleteAction}>
@@ -198,7 +198,7 @@ export default async function ExcommunicationsPage() {
         <section className="panel-card list-card">
           <div className="panel-card__header">
             <div>
-              <p className="card__kicker">Enemy Nations</p>
+              <p className="card__kicker">Enemies Of The State</p>
               <h2>Manual Order</h2>
             </div>
           </div>

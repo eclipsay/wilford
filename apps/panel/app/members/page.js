@@ -89,14 +89,14 @@ function OrderControls({ id, moveAction, deleteAction }) {
         <input name="id" type="hidden" value={id} />
         <input name="direction" type="hidden" value="up" />
         <button className="button button--ghost" type="submit">
-          Up
+          Move Up
         </button>
       </form>
       <form action={moveAction}>
         <input name="id" type="hidden" value={id} />
         <input name="direction" type="hidden" value="down" />
         <button className="button button--ghost" type="submit">
-          Down
+          Move Down
         </button>
       </form>
       <form action={deleteAction}>
