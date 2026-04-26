@@ -3,8 +3,8 @@ import Image from "next/image";
 import { brand } from "@wilford/shared";
 
 const stateNavigation = [
-  { label: "Our State", href: "/information" },
   { label: "The Chairman", href: "/chairman" },
+  { label: "Our State", href: "/information" },
   { label: "Our Industries", href: "/decrypter" },
   { label: "The People", href: "/members" },
   { label: "News & Propaganda", href: "/commits" },
