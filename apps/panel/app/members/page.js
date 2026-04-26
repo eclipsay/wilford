@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { fetchAdmin, fetchPublic } from "../../lib/api";
 import { requireAuth } from "../../lib/auth";
 import { PanelShell } from "../../components/PanelShell";
@@ -18,6 +19,7 @@ async function addMemberAction(formData) {
   });
 
   revalidatePath("/members");
+  redirect("/members");
 }
 
 async function deleteMemberAction(formData) {
@@ -29,6 +31,7 @@ async function deleteMemberAction(formData) {
   });
 
   revalidatePath("/members");
+  redirect("/members");
 }
 
 async function moveMemberAction(formData) {
@@ -42,6 +45,7 @@ async function moveMemberAction(formData) {
   });
 
   revalidatePath("/members");
+  redirect("/members");
 }
 
 async function addAllianceAction(formData) {
@@ -57,6 +61,7 @@ async function addAllianceAction(formData) {
   });
 
   revalidatePath("/members");
+  redirect("/members");
 }
 
 async function deleteAllianceAction(formData) {
@@ -67,6 +72,7 @@ async function deleteAllianceAction(formData) {
   });
 
   revalidatePath("/members");
+  redirect("/members");
 }
 
 async function moveAllianceAction(formData) {
@@ -80,6 +86,7 @@ async function moveAllianceAction(formData) {
   });
 
   revalidatePath("/members");
+  redirect("/members");
 }
 
 function OrderControls({ id, moveAction, deleteAction }) {

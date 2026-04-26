@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { fetchAdmin, fetchPublic } from "../../lib/api";
 import { requireAuth } from "../../lib/auth";
 import { PanelShell } from "../../components/PanelShell";
@@ -18,6 +19,7 @@ async function addExcommunicationAction(formData) {
   });
 
   revalidatePath("/excommunications");
+  redirect("/excommunications");
 }
 
 async function deleteExcommunicationAction(formData) {
@@ -28,6 +30,7 @@ async function deleteExcommunicationAction(formData) {
   });
 
   revalidatePath("/excommunications");
+  redirect("/excommunications");
 }
 
 async function moveExcommunicationAction(formData) {
@@ -41,6 +44,7 @@ async function moveExcommunicationAction(formData) {
   });
 
   revalidatePath("/excommunications");
+  redirect("/excommunications");
 }
 
 async function addEnemyNationAction(formData) {
@@ -56,6 +60,7 @@ async function addEnemyNationAction(formData) {
   });
 
   revalidatePath("/excommunications");
+  redirect("/excommunications");
 }
 
 async function deleteEnemyNationAction(formData) {
@@ -66,6 +71,7 @@ async function deleteEnemyNationAction(formData) {
   });
 
   revalidatePath("/excommunications");
+  redirect("/excommunications");
 }
 
 async function moveEnemyNationAction(formData) {
@@ -79,6 +85,7 @@ async function moveEnemyNationAction(formData) {
   });
 
   revalidatePath("/excommunications");
+  redirect("/excommunications");
 }
 
 function OrderControls({ id, moveAction, deleteAction }) {
