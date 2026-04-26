@@ -1,10 +1,11 @@
 import { PanelShell } from "../../components/PanelShell";
 import { requireAuth } from "../../lib/auth";
-import { readAuditLog } from "../../lib/audit-log";
+import { fetchPublic } from "../../lib/api";
 
 export default async function AuditLogPage() {
   await requireAuth();
-  const cryptoLogs = await readAuditLog();
+  const content = await fetchPublic("/api/content");
+  const cryptoLogs = Array.isArray(content?.cryptoLogs) ? content.cryptoLogs : [];
 
   return (
     <PanelShell
