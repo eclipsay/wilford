@@ -73,12 +73,12 @@ async function saveMembersAction(formData) {
       ...content,
       members
     }));
-
-    revalidatePath("/members");
-    redirect("/members?saved=members");
   } catch {
     redirect("/members?error=members");
   }
+
+  revalidatePath("/members");
+  redirect("/members?saved=members");
 }
 
 async function saveAlliancesAction(formData) {
@@ -101,12 +101,12 @@ async function saveAlliancesAction(formData) {
       ...content,
       alliances
     }));
-
-    revalidatePath("/members");
-    redirect("/members?saved=alliances");
   } catch {
     redirect("/members?error=alliances");
   }
+
+  revalidatePath("/members");
+  redirect("/members?saved=alliances");
 }
 
 export default async function MembersPage({ searchParams }) {

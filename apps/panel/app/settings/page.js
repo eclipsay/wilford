@@ -20,12 +20,12 @@ async function saveSettingsAction(formData) {
         commitsRepository: formData.get("commitsRepository")
       }
     }));
-
-    revalidatePath("/settings");
-    redirect("/settings?saved=1");
   } catch {
     redirect("/settings?error=1");
   }
+
+  revalidatePath("/settings");
+  redirect("/settings?saved=1");
 }
 
 export default async function SettingsPage({ searchParams }) {

@@ -2,14 +2,6 @@ import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getSiteContent } from "../../lib/content";
 
-function formatMemberLine(member) {
-  return [member.name, member.role, member.division].filter(Boolean);
-}
-
-function formatAllianceLine(alliance) {
-  return [alliance.name, alliance.classification, alliance.notes].filter(Boolean);
-}
-
 export default async function MembersPage() {
   const content = await getSiteContent();
   const members = [...(content.members || [])].sort(
@@ -35,20 +27,26 @@ export default async function MembersPage() {
               <h2>Members</h2>
             </div>
           </div>
-          <div className="public-flow-list">
+          <div className="public-roster">
             {members.map((member) => (
-              <article className="public-flow-item" key={member.id}>
-                <div className="public-flow-item__line">
-                  {formatMemberLine(member).map((part, index) => (
-                    <span className="public-flow-item__part" key={`${member.id}-${index}`}>
-                      {index ? <span className="public-flow-item__divider">|</span> : null}
-                      <span>{part}</span>
-                    </span>
-                  ))}
+              <article className="public-roster__row" key={member.id}>
+                <div className="public-roster__cell public-roster__cell--name">
+                  <span>{member.name}</span>
                 </div>
-                <div className="public-flow-item__meta">
+                <div className="public-roster__cell public-roster__cell--role">
+                  <span>{member.role || "Member"}</span>
+                  {member.division ? (
+                    <>
+                      <span className="public-roster__divider">|</span>
+                      <span>{member.division}</span>
+                    </>
+                  ) : null}
+                </div>
+                <div className="public-roster__cell public-roster__cell--notes">
+                  <span>{member.notes || "No public notes recorded."}</span>
+                </div>
+                <div className="public-roster__meta">
                   <strong>{member.status || "Active"}</strong>
-                  {member.notes ? <span>{member.notes}</span> : null}
                 </div>
               </article>
             ))}
@@ -63,19 +61,17 @@ export default async function MembersPage() {
             </div>
           </div>
           {alliances.length ? (
-            <div className="public-flow-list">
+            <div className="public-roster public-roster--compact">
               {alliances.map((alliance) => (
-                <article className="public-flow-item" key={alliance.id}>
-                  <div className="public-flow-item__line">
-                    {formatAllianceLine(alliance).map((part, index) => (
-                      <span
-                        className="public-flow-item__part"
-                        key={`${alliance.id}-${index}`}
-                      >
-                        {index ? <span className="public-flow-item__divider">|</span> : null}
-                        <span>{part}</span>
-                      </span>
-                    ))}
+                <article className="public-roster__row" key={alliance.id}>
+                  <div className="public-roster__cell public-roster__cell--name">
+                    <span>{alliance.name}</span>
+                  </div>
+                  <div className="public-roster__cell public-roster__cell--role">
+                    <span>{alliance.classification || "Nation"}</span>
+                  </div>
+                  <div className="public-roster__cell public-roster__cell--notes">
+                    <span>{alliance.notes || "No public notes recorded."}</span>
                   </div>
                 </article>
               ))}

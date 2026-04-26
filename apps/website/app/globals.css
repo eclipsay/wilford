@@ -938,6 +938,76 @@ h3 {
   color: #ffb8ac;
 }
 
+.public-roster {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(211, 157, 79, 0.18);
+}
+
+.public-roster__row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(260px, 1fr) minmax(0, 1.4fr) 120px;
+  gap: 18px;
+  align-items: center;
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(211, 157, 79, 0.14);
+}
+
+.public-roster--compact .public-roster__row {
+  grid-template-columns: minmax(160px, 0.8fr) minmax(180px, 0.7fr) minmax(0, 1.4fr);
+}
+
+.public-roster__cell {
+  min-width: 0;
+}
+
+.public-roster__cell span {
+  display: inline-block;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.public-roster__cell--name span {
+  color: var(--gold-bright);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.public-roster__cell--role {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.public-roster__cell--role span {
+  color: var(--gold);
+}
+
+.public-roster__divider {
+  color: rgba(211, 157, 79, 0.56);
+}
+
+.public-roster__cell--notes span {
+  color: rgba(245, 223, 177, 0.8);
+}
+
+.public-roster__meta {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.public-roster__meta strong {
+  padding: 8px 12px;
+  border: 1px solid rgba(211, 157, 79, 0.3);
+  border-radius: 999px;
+  color: var(--gold-bright);
+  background: rgba(93, 16, 13, 0.18);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 @media (max-width: 1180px) {
   .homepage-image-hero {
     min-height: 720px;
@@ -1058,7 +1128,8 @@ h3 {
   }
 
   .public-record-item,
-  .commit-row {
+  .commit-row,
+  .public-roster__row {
     grid-template-columns: 1fr;
     gap: 8px;
   }
@@ -1066,5 +1137,9 @@ h3 {
   .commit-row__meta {
     justify-content: start;
     white-space: normal;
+  }
+
+  .public-roster__meta {
+    justify-content: start;
   }
 }
