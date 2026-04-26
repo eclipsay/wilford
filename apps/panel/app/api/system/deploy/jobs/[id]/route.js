@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "../../../../../../lib/auth";
+import { getLocalDeployJob } from "../../../../../../lib/deploy-jobs";
 
 const baseUrl = process.env.API_URL || "http://127.0.0.1:4000";
 
@@ -15,6 +16,12 @@ export async function GET(_request, { params }) {
   }
 
   const { id } = await params;
+  const localJob = getLocalDeployJob(id);
+
+  if (localJob) {
+    return NextResponse.json({ job: localJob });
+  }
+
   const response = await fetch(`${baseUrl}/api/admin/deploy/jobs/${id}`, {
     headers: {
       "x-admin-key": process.env.ADMIN_API_KEY || ""

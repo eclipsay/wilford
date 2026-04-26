@@ -26,15 +26,19 @@ export function PublicDecrypter() {
 
   async function logCryptoEvent(payload) {
     try {
-      await fetch("/api/crypto-log", {
+      const response = await fetch("/api/crypto-log", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify(payload)
       });
+
+      if (!response.ok) {
+        throw new Error("Audit logging failed.");
+      }
     } catch {
-      // Logging should never block the tool itself.
+      // Logging stays internal and should never surface to public users.
     }
   }
 

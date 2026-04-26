@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "../../../../../lib/auth";
+import { createLocalDeployJob } from "../../../../../lib/deploy-jobs";
 
 const baseUrl = process.env.API_URL || "http://127.0.0.1:4000";
 
@@ -19,7 +20,7 @@ export async function POST(_request, { params }) {
   }
 
   const target = resolveTarget((await params).target);
-  const response = await fetch(`${baseUrl}/api/admin/deploy/${target}/start`, {
+  let response = await fetch(`${baseUrl}/api/admin/deploy/${target}/start`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -28,7 +29,26 @@ export async function POST(_request, { params }) {
     cache: "no-store"
   });
 
-  const payload = await response.json().catch(() => null);
+  let payload = await response.json().catch(() => null);
+
+  if (response.status === 404) {
+    response = await fetch(`${baseUrl}/api/admin/deploy/${target}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-key": process.env.ADMIN_API_KEY || ""
+      },
+      cache: "no-store"
+    });
+
+    payload = await response.json().catch(() => null);
+
+    if (response.ok) {
+      const targetLabel = target === "bot" ? "bot" : "panel";
+      const job = createLocalDeployJob(targetLabel, payload || {});
+      return NextResponse.json({ job }, { status: 202 });
+    }
+  }
 
   if (!response.ok) {
     return NextResponse.json(
