@@ -24,6 +24,20 @@ export function PublicDecrypter() {
   const [error, setError] = useState("");
   const [isWorking, setIsWorking] = useState(false);
 
+  async function logCryptoEvent(payload) {
+    try {
+      await fetch("/api/crypto-log", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      // Logging should never block the tool itself.
+    }
+  }
+
   async function handleEncrypt(event) {
     event.preventDefault();
     setError("");
@@ -37,17 +51,10 @@ export function PublicDecrypter() {
 
       setEncryptedOutput(result);
       setPayload(result);
-
-      void fetch("/api/crypto-log", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          action: "encrypt",
-          messagePreview: encryptMessage,
-          encryptedPreview: result
-        })
+      await logCryptoEvent({
+        action: "encrypt",
+        messagePreview: encryptMessage,
+        encryptedPreview: result
       });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Encryption failed.");
@@ -68,17 +75,10 @@ export function PublicDecrypter() {
       });
 
       setMessage(result);
-
-      void fetch("/api/crypto-log", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          action: "decrypt",
-          messagePreview: result,
-          encryptedPreview: payload
-        })
+      await logCryptoEvent({
+        action: "decrypt",
+        messagePreview: result,
+        encryptedPreview: payload
       });
     } catch (nextError) {
       setMessage("");

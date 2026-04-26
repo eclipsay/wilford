@@ -9,7 +9,25 @@ async function logoutAction() {
 
 export async function PanelShell({ title, description, children }) {
   const session = await getSession();
-  const navigation = panelNavigation.filter((item) => {
+  const baseNavigation = [
+    { label: "Dashboard", href: "/" },
+    { label: "Members", href: "/members" },
+    { label: "Excommunications", href: "/excommunications" },
+    { label: "Settings", href: "/settings" },
+    { label: "Commits", href: "/commits" },
+    { label: "Audit Log", href: "/audit-log" },
+    { label: "Users", href: "/users" },
+    { label: "System", href: "/system" }
+  ];
+  const navigationSource =
+    Array.isArray(panelNavigation) && panelNavigation.length
+      ? baseNavigation.map(
+          (item) =>
+            panelNavigation.find((sharedItem) => sharedItem.href === item.href) ||
+            item
+        )
+      : baseNavigation;
+  const navigation = navigationSource.filter((item) => {
     if (item.href === "/users") {
       return ["owner", "admin"].includes(session?.role);
     }

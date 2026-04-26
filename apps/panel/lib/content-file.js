@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const defaultContent = {
@@ -39,11 +40,13 @@ function withNormalizedOrder(items) {
 }
 
 function resolveContentFile() {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     process.env.API_DATA_FILE,
     process.env.REPO_ROOT
       ? resolve(process.env.REPO_ROOT, "apps/api/data/content.json")
       : null,
+    resolve(currentDir, "../../api/data/content.json"),
     resolve(process.cwd(), "../api/data/content.json"),
     resolve(process.cwd(), "../../apps/api/data/content.json"),
     resolve(process.cwd(), "apps/api/data/content.json")
