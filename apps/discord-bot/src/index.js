@@ -37,6 +37,7 @@ const applicationReviewRoleId = String(
 const applicationRoleId = String(
   process.env.DISCORD_APPLICATION_ROLE_ID || ""
 ).trim();
+const adminApiKey = String(process.env.ADMIN_API_KEY || "").trim();
 const applicationGuildId = String(
   process.env.DISCORD_APPLICATION_GUILD_ID || process.env.DISCORD_GUILD_ID || ""
 ).trim();
@@ -185,6 +186,18 @@ async function findReviewApplicationByThread(threadId) {
   ) || null;
 }
 
+async function findLatestPendingApplicationByApplicant(applicantId) {
+  const state = await readState();
+  return (
+    state.applications.find(
+      (application) =>
+        application.applicantId === applicantId &&
+        application.status === "pending" &&
+        application.reviewThreadId
+    ) || null
+  );
+}
+
 async function setApplicationStatus(applicationId, nextFields) {
   let updatedApplication = null;
 
@@ -297,6 +310,8 @@ async function submitApplication(session) {
     reason: `Wilford application review for ${session.username}`
   });
 
+  await addReviewMembersToThread(thread, session.originGuildId);
+
   application.reviewThreadId = thread.id;
   application.reviewMessageId = intro.id;
 
@@ -313,6 +328,36 @@ async function submitApplication(session) {
   );
 
   return application;
+}
+
+async function addReviewMembersToThread(thread, guildId) {
+  if (!applicationReviewRoleId || !guildId) {
+    return;
+  }
+
+  const guild = await client.guilds.fetch(guildId).catch(() => null);
+
+  if (!guild) {
+    return;
+  }
+
+  const reviewRole = await guild.roles.fetch(applicationReviewRoleId).catch(() => null);
+
+  if (!reviewRole) {
+    return;
+  }
+
+  const reviewMembers = await guild.members.fetch().catch(() => null);
+
+  if (!reviewMembers) {
+    return;
+  }
+
+  const addThreadPromises = reviewMembers
+    .filter((member) => !member.user.bot && member.roles.cache.has(reviewRole.id))
+    .map((member) => thread.members.add(member.id).catch(() => null));
+
+  await Promise.all(addThreadPromises);
 }
 
 async function continueApplicationSession(message, session) {
@@ -377,7 +422,35 @@ async function beginApplicationFlow(user, guildId) {
   );
 }
 
+async function forwardApplicantMessageToReviewThread(message, application) {
+  const thread = await client.channels
+    .fetch(application.reviewThreadId)
+    .catch(() => null);
+
+  if (!thread || !thread.isTextBased()) {
+    throw new Error("The application review thread could not be found.");
+  }
+
+  const attachmentLines = message.attachments.map(
+    (attachment) => attachment.url
+  );
+  const body = [
+    `Applicant follow-up from <@${application.applicantId}> (${message.author.tag})`,
+    "",
+    message.content || "[No text content]",
+    ...(attachmentLines.length
+      ? ["", "Attachments:", ...attachmentLines]
+      : [])
+  ].join("\n");
+
+  await thread.send(body);
+}
+
 async function sendApplicantDirectMessage(applicantId, content) {
+  if (!String(applicantId || "").trim()) {
+    throw new Error("This application is not linked to a Discord user ID.");
+  }
+
   const user = await client.users.fetch(applicantId).catch(() => null);
 
   if (!user) {
@@ -389,7 +462,7 @@ async function sendApplicantDirectMessage(applicantId, content) {
 }
 
 async function grantApplicantRole(application) {
-  if (!applicationRoleId || !application.guildId) {
+  if (!applicationRoleId || !application.guildId || !application.applicantId) {
     return false;
   }
 
@@ -426,6 +499,8 @@ async function handleReviewThreadCommand(message, commandName, args) {
     return true;
   }
 
+  const hasLinkedDiscordUser = Boolean(String(application.applicantId || "").trim());
+
   if (commandName === "r") {
     const replyText = args.join(" ").trim();
 
@@ -434,11 +509,43 @@ async function handleReviewThreadCommand(message, commandName, args) {
       return true;
     }
 
-    await sendApplicantDirectMessage(
-      application.applicantId,
-      `Wilford staff: ${replyText}`
-    );
-    await message.reply("Applicant notified.");
+    if (hasLinkedDiscordUser) {
+      await sendApplicantDirectMessage(
+        application.applicantId,
+        `Wilford staff: ${replyText}`
+      );
+    }
+
+    await message.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(hasLinkedDiscordUser ? 0xd7a85f : 0xb87d38)
+          .setTitle(hasLinkedDiscordUser ? "Applicant Reply Sent" : "Staff Reply Logged")
+          .setDescription(replyText)
+          .addFields(
+            {
+              name: "Sent By",
+              value: `<@${message.author.id}>`,
+              inline: true
+            },
+            {
+              name: "Applicant",
+              value: hasLinkedDiscordUser
+                ? `<@${application.applicantId}>`
+                : application.applicantTag || "Website applicant",
+              inline: true
+            },
+            {
+              name: "Delivery",
+              value: hasLinkedDiscordUser
+                ? "Delivered by Discord DM"
+                : "No linked Discord user ID, so this was logged only in the review thread.",
+              inline: false
+            }
+          )
+          .setTimestamp(new Date())
+      ]
+    });
     return true;
   }
 
@@ -449,17 +556,23 @@ async function handleReviewThreadCommand(message, commandName, args) {
       decisionBy: message.author.id,
       decisionNote: note
     });
-    const roleGranted = await grantApplicantRole(updated);
-    await sendApplicantDirectMessage(
-      updated.applicantId,
-      note
-        ? `Your Wilford application has been accepted.\n\n${note}`
-        : "Your Wilford application has been accepted."
-    );
+    const roleGranted = hasLinkedDiscordUser ? await grantApplicantRole(updated) : false;
+
+    if (hasLinkedDiscordUser) {
+      await sendApplicantDirectMessage(
+        updated.applicantId,
+        note
+          ? `Your Wilford application has been accepted.\n\n${note}`
+          : "Your Wilford application has been accepted."
+      );
+    }
+
     await message.reply(
-      roleGranted
-        ? "Application accepted, applicant notified, and role granted."
-        : "Application accepted and applicant notified."
+      hasLinkedDiscordUser
+        ? roleGranted
+          ? "Application accepted, applicant notified, and role granted."
+          : "Application accepted and applicant notified."
+        : "Application accepted. No Discord user ID was linked, so no DM or automatic role was applied."
     );
     return true;
   }
@@ -471,13 +584,21 @@ async function handleReviewThreadCommand(message, commandName, args) {
       decisionBy: message.author.id,
       decisionNote: note
     });
-    await sendApplicantDirectMessage(
-      updated.applicantId,
-      note
-        ? `Your Wilford application has been denied.\n\n${note}`
-        : "Your Wilford application has been denied."
+
+    if (hasLinkedDiscordUser) {
+      await sendApplicantDirectMessage(
+        updated.applicantId,
+        note
+          ? `Your Wilford application has been denied.\n\n${note}`
+          : "Your Wilford application has been denied."
+      );
+    }
+
+    await message.reply(
+      hasLinkedDiscordUser
+        ? "Application denied and applicant notified."
+        : "Application denied. No Discord user ID was linked, so no DM was sent."
     );
-    await message.reply("Application denied and applicant notified.");
     return true;
   }
 
@@ -494,6 +615,147 @@ async function getSettings() {
   }
 
   return response.json();
+}
+
+async function getPendingWebsiteApplications() {
+  if (!adminApiKey) {
+    return [];
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/applications/pending`, {
+    headers: {
+      "x-admin-key": adminApiKey
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pending applications request failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload?.applications) ? payload.applications : [];
+}
+
+async function markWebsiteApplicationThread(applicationId, payload) {
+  if (!adminApiKey) {
+    return;
+  }
+
+  await fetch(`${apiUrl}/api/admin/applications/${applicationId}/review-thread`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store"
+  });
+}
+
+async function postWebsiteApplicationToReview(application) {
+  if (!applicationsChannelId) {
+    throw new Error("DISCORD_APPLICATIONS_CHANNEL_ID is not configured.");
+  }
+
+  const channel = await client.channels.fetch(applicationsChannelId).catch(() => null);
+
+  if (!channel || !channel.isTextBased() || channel.type === ChannelType.DM) {
+    throw new Error("The applications review channel is missing or not text-capable.");
+  }
+
+  const guildId = application.reviewGuildId || applicationGuildId || "";
+  const pingTarget = applicationReviewRoleId
+    ? `<@&${applicationReviewRoleId}>`
+    : `<@${botOwnerId}>`;
+  const applicantLabel = application.discordUserId
+    ? `<@${application.discordUserId}>`
+    : application.discordHandle || application.applicantName;
+  const intro = await channel.send({
+    content: `${pingTarget} New website application from ${applicantLabel}`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xd7a85f)
+        .setTitle(`Website Application - ${application.applicantName}`)
+        .setDescription(
+          [
+            `**Discord:** ${application.discordHandle}`,
+            application.email ? `**Email:** ${application.email}` : null,
+            `**Age:** ${application.age}`,
+            `**Timezone:** ${application.timezone}`,
+            "",
+            `**Why join Wilford?**\n${application.motivation}`,
+            "",
+            `**Skills and experience**\n${application.experience}`
+          ]
+            .filter(Boolean)
+            .join("\n")
+        )
+        .addFields(
+          {
+            name: "Source",
+            value: "Website Application",
+            inline: true
+          },
+          {
+            name: "Review Commands",
+            value: "`-r`, `-accept`, `-deny`",
+            inline: true
+          }
+        )
+        .setFooter({ text: `Application ID: ${application.id}` })
+        .setTimestamp(new Date(application.submittedAt || Date.now()))
+    ]
+  });
+
+  const thread = await intro.startThread({
+    name: `website-application-${application.applicantName}`
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .slice(0, 90),
+    autoArchiveDuration: 1440,
+    reason: `Wilford website application for ${application.applicantName}`
+  });
+
+  await addReviewMembersToThread(thread, guildId);
+
+  await updateState((state) => {
+    state.applications.unshift({
+      id: application.id,
+      applicantId: String(application.discordUserId || "").trim(),
+      applicantTag: application.discordHandle || application.applicantName,
+      guildId,
+      status: "pending",
+      answers: [
+        application.applicantName,
+        application.age,
+        application.timezone,
+        application.motivation,
+        application.experience
+      ],
+      reviewThreadId: thread.id,
+      reviewMessageId: intro.id,
+      createdAt: application.submittedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      source: "website",
+      email: application.email || "",
+      discordHandle: application.discordHandle || ""
+    });
+    return state;
+  });
+
+  await markWebsiteApplicationThread(application.id, {
+    status: "under_review",
+    reviewThreadId: thread.id,
+    reviewMessageId: intro.id,
+    reviewGuildId: guildId
+  });
+
+  await thread.send(
+    application.discordUserId
+      ? "Website application imported into review.\nUse `-r <message>`, `-accept [message]`, or `-deny [message]`."
+      : "Website application imported into review.\nNo Discord user ID was supplied, so `-r`, `-accept`, and `-deny` cannot send DMs unless staff handle that manually."
+  );
 }
 
 async function getCommits() {
@@ -616,6 +878,7 @@ async function publishCommitUpdates() {
 }
 
 let isPublishing = false;
+let isProcessingWebsiteApplications = false;
 
 async function runCommitLoop() {
   if (isPublishing) {
@@ -634,6 +897,30 @@ async function runCommitLoop() {
     );
   } finally {
     isPublishing = false;
+  }
+}
+
+async function runWebsiteApplicationsLoop() {
+  if (isProcessingWebsiteApplications) {
+    return;
+  }
+
+  isProcessingWebsiteApplications = true;
+
+  try {
+    const applications = await getPendingWebsiteApplications();
+
+    for (const application of applications) {
+      await postWebsiteApplicationToReview(application);
+    }
+  } catch (error) {
+    console.log(
+      `Website application sync error: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  } finally {
+    isProcessingWebsiteApplications = false;
   }
 }
 
@@ -779,6 +1066,8 @@ client.once("ready", () => {
 
   runCommitLoop();
   setInterval(runCommitLoop, pollIntervalMs);
+  runWebsiteApplicationsLoop();
+  setInterval(runWebsiteApplicationsLoop, 20000);
 });
 
 client.on("messageCreate", async (message) => {
@@ -798,6 +1087,28 @@ client.on("messageCreate", async (message) => {
         );
       }
       return;
+    }
+
+    if (!message.content.startsWith(commandPrefix)) {
+      const application = await findLatestPendingApplicationByApplicant(
+        message.author.id
+      );
+
+      if (application) {
+        try {
+          await forwardApplicantMessageToReviewThread(message, application);
+          await message.channel.send(
+            "Your follow-up message has been forwarded to the Wilford review thread."
+          );
+        } catch (error) {
+          await message.channel.send(
+            error instanceof Error
+              ? error.message
+              : "Unable to forward your message to Wilford staff right now."
+          );
+        }
+        return;
+      }
     }
   }
 

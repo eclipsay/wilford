@@ -27,7 +27,8 @@ const defaultContent = {
   excommunications: [],
   enemyNations: [],
   panelUsers: [],
-  cryptoLogs: []
+  cryptoLogs: [],
+  publicApplications: []
 };
 
 function withNormalizedOrder(items) {
@@ -84,7 +85,8 @@ async function readContentFile() {
       excommunications: withNormalizedOrder(parsed.excommunications || []),
       enemyNations: withNormalizedOrder(parsed.enemyNations || []),
       panelUsers: parsed.panelUsers || [],
-      cryptoLogs: parsed.cryptoLogs || []
+      cryptoLogs: parsed.cryptoLogs || [],
+      publicApplications: parsed.publicApplications || []
     };
   } catch {
     return structuredClone(defaultContent);
@@ -367,6 +369,67 @@ export async function appendCryptoLog(entry) {
   content.cryptoLogs = [nextEntry, ...(content.cryptoLogs || [])].slice(0, 250);
   await writeContentFile(content);
   return content.cryptoLogs;
+}
+
+export async function createPublicApplication(entry) {
+  const content = await readContentFile();
+  const application = {
+    id:
+      entry.id ||
+      `application-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+    source: entry.source || "website",
+    status: entry.status || "pending",
+    submittedAt: entry.submittedAt || new Date().toISOString(),
+    updatedAt: entry.updatedAt || new Date().toISOString(),
+    applicantName: String(entry.applicantName || "").trim(),
+    age: String(entry.age || "").trim(),
+    timezone: String(entry.timezone || "").trim(),
+    motivation: String(entry.motivation || "").trim(),
+    experience: String(entry.experience || "").trim(),
+    discordHandle: String(entry.discordHandle || "").trim(),
+    discordUserId: String(entry.discordUserId || "").trim(),
+    email: String(entry.email || "").trim(),
+    reviewThreadId: String(entry.reviewThreadId || "").trim(),
+    reviewMessageId: String(entry.reviewMessageId || "").trim(),
+    reviewGuildId: String(entry.reviewGuildId || "").trim(),
+    decisionNote: String(entry.decisionNote || "").trim()
+  };
+
+  content.publicApplications = [application, ...(content.publicApplications || [])].slice(0, 500);
+  await writeContentFile(content);
+  return application;
+}
+
+export async function getPendingPublicApplications() {
+  const content = await readContentFile();
+  return (content.publicApplications || []).filter(
+    (application) =>
+      application.status === "pending" &&
+      !String(application.reviewThreadId || "").trim()
+  );
+}
+
+export async function updatePublicApplication(id, nextFields) {
+  const content = await readContentFile();
+  let updatedApplication = null;
+
+  content.publicApplications = (content.publicApplications || []).map((application) => {
+    if (application.id !== id) {
+      return application;
+    }
+
+    updatedApplication = {
+      ...application,
+      ...nextFields,
+      updatedAt: new Date().toISOString()
+    };
+    return updatedApplication;
+  });
+
+  await writeContentFile(content);
+  return updatedApplication;
 }
 
 export async function createPanelUser(user) {

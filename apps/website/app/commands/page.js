@@ -13,22 +13,39 @@ export default function CommandsPage() {
       <PageHero
         eyebrow="Command Archive"
         title="Discord Command Registry"
-        description="Public reference for Wilford Industries Discord commands, moderation tools, and the application review pipeline."
+        description="A compact field guide for Wilford Industries Discord commands, moderation tools, and the application review pipeline."
       />
 
       <main className="content">
-        <section className="grid grid--command">
-          {publicBotCommands.map((command) => (
-            <article className="panel panel--command" key={command.name}>
-              <p className="eyebrow">{command.access}</p>
-              <h2>{command.name}</h2>
-              <p>{command.description}</p>
-              <div className="public-command-usage">
-                <span>Usage</span>
-                <code>{command.usage}</code>
-              </div>
-            </article>
-          ))}
+        <section className="panel command-archive">
+          <div className="panel__header">
+            <div>
+              <p className="eyebrow">Primary Commands</p>
+              <h2>Compact Command List</h2>
+            </div>
+            <div className="sort-row">
+              <Link className="button" href="/apply">
+                Apply Online
+              </Link>
+              <Link className="button" href="/information">
+                Return To Records
+              </Link>
+            </div>
+          </div>
+          <div className="command-ledger" role="list">
+            {publicBotCommands.map((command) => (
+              <article className="command-ledger__row" key={command.name} role="listitem">
+                <div className="command-ledger__main">
+                  <h3>{command.name}</h3>
+                  <p>{command.description}</p>
+                </div>
+                <div className="command-ledger__meta">
+                  <span className="command-ledger__access">{command.access}</span>
+                  <code>{command.usage}</code>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="panel list-panel">
@@ -37,9 +54,6 @@ export default function CommandsPage() {
               <p className="eyebrow">Application Process</p>
               <h2>DM Intake Workflow</h2>
             </div>
-            <Link className="button" href="/information">
-              Return To Records
-            </Link>
           </div>
 
           <div className="public-record-list">
@@ -122,6 +136,46 @@ export default function CommandsPage() {
               ))}
             </div>
           </section>
+        </section>
+
+        <section className="panel list-panel">
+          <div className="panel__header">
+            <div>
+              <p className="eyebrow">Future Expansion</p>
+              <h2>Website Applications</h2>
+            </div>
+          </div>
+          <div className="public-record-list public-record-list--compact">
+            <article className="public-record-item">
+              <div>
+                <h3>Yes, This Is Possible</h3>
+                <p>
+                  We can add an application form directly on the website, send it
+                  into the backend, and have it create the same Discord review
+                  thread used by DM applications.
+                </p>
+              </div>
+              <div className="public-record-meta">
+                <strong>Shared Intake</strong>
+                <span>Website forms and Discord DMs can feed one review pipeline.</span>
+              </div>
+            </article>
+
+            <article className="public-record-item">
+              <div>
+                <h3>Recommended Build Path</h3>
+                <p>
+                  The cleanest version is a website form that saves the application
+                  through an API route, then posts the application into your review
+                  channel and opens the thread automatically.
+                </p>
+              </div>
+              <div className="public-record-meta">
+                <strong>Next Stage</strong>
+                <span>This gives you the exact same thread-based review experience from the website.</span>
+              </div>
+            </article>
+          </div>
         </section>
       </main>
     </SiteLayout>

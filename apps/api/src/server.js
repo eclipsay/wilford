@@ -9,12 +9,14 @@ import {
   createExcommunication,
   createMember,
   createPanelUser,
+  createPublicApplication,
   deleteAlliance,
   deleteEnemyNation,
   deleteExcommunication,
   deleteMember,
   deletePanelUser,
   getContent,
+  getPendingPublicApplications,
   getPanelUsers,
   moveAlliance,
   moveEnemyNation,
@@ -26,6 +28,7 @@ import {
   reorderMembers,
   replaceAlliances,
   replaceMembers,
+  updatePublicApplication,
   updateAlliancePosition,
   updateMemberPosition,
   updateSettings
@@ -156,6 +159,61 @@ app.post("/api/panel/login", async (req, res) => {
   }
 
   res.json({ user });
+});
+
+app.post("/api/applications", async (req, res) => {
+  const applicantName = String(req.body?.applicantName || "").trim();
+  const age = String(req.body?.age || "").trim();
+  const timezone = String(req.body?.timezone || "").trim();
+  const motivation = String(req.body?.motivation || "").trim();
+  const experience = String(req.body?.experience || "").trim();
+  const discordHandle = String(req.body?.discordHandle || "").trim();
+  const discordUserId = String(req.body?.discordUserId || "").trim();
+  const email = String(req.body?.email || "").trim();
+
+  if (!applicantName || !age || !timezone || !motivation || !experience || !discordHandle) {
+    return res.status(400).json({
+      error:
+        "Name, age, timezone, motivation, experience, and Discord handle are required."
+    });
+  }
+
+  const application = await createPublicApplication({
+    id: createId("application"),
+    source: "website",
+    status: "pending",
+    submittedAt: new Date().toISOString(),
+    applicantName,
+    age,
+    timezone,
+    motivation,
+    experience,
+    discordHandle,
+    discordUserId,
+    email
+  });
+
+  res.status(201).json({ ok: true, application });
+});
+
+app.get("/api/admin/applications/pending", requireAdmin, async (_req, res) => {
+  const applications = await getPendingPublicApplications();
+  res.json({ applications });
+});
+
+app.post("/api/admin/applications/:id/review-thread", requireAdmin, async (req, res) => {
+  const application = await updatePublicApplication(req.params.id, {
+    status: req.body?.status || "under_review",
+    reviewThreadId: String(req.body?.reviewThreadId || "").trim(),
+    reviewMessageId: String(req.body?.reviewMessageId || "").trim(),
+    reviewGuildId: String(req.body?.reviewGuildId || "").trim()
+  });
+
+  if (!application) {
+    return res.status(404).json({ error: "Application not found." });
+  }
+
+  res.json({ application });
 });
 
 app.post("/api/admin/settings", requireAdmin, async (req, res) => {

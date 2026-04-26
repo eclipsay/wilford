@@ -7,6 +7,7 @@ const stateNavigation = [
   { label: "Our State", href: "/information" },
   { label: "Wilford Decrypter", href: "/decrypter" },
   { label: "The People", href: "/members" },
+  { label: "Apply", href: "/apply" },
   { label: "Command Archive", href: "/commands" },
   { label: "Excommunication List", href: "/excommunication" },
   { label: "Commits", href: "/commits", align: "right" }
