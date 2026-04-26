@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import { config } from "./config.js";
 import {
+  appendCryptoLog,
   authenticatePanelUser,
   createAlliance,
   createEnemyNation,
@@ -114,6 +115,29 @@ app.get("/api/enemy-nations", async (_req, res) => {
 app.get("/api/commits", async (_req, res) => {
   const commits = await getCommits();
   res.json({ commits });
+});
+
+app.post("/api/audit/crypto", async (req, res) => {
+  const action = String(req.body?.action || "").trim().toLowerCase();
+
+  if (!["encrypt", "decrypt"].includes(action)) {
+    return res.status(400).json({ error: "Valid action is required." });
+  }
+
+  const cryptoLogs = await appendCryptoLog({
+    action,
+    source: "website",
+    messagePreview: String(req.body?.messagePreview || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160),
+    encryptedPreview: String(req.body?.encryptedPreview || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160)
+  });
+
+  res.status(201).json({ ok: true, cryptoLogs });
 });
 
 app.post("/api/panel/login", async (req, res) => {

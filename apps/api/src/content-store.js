@@ -25,7 +25,8 @@ const defaultContent = {
   alliances: [],
   excommunications: [],
   enemyNations: [],
-  panelUsers: []
+  panelUsers: [],
+  cryptoLogs: []
 };
 
 function withNormalizedOrder(items) {
@@ -81,7 +82,8 @@ async function readContentFile() {
       alliances: withNormalizedOrder(parsed.alliances || []),
       excommunications: withNormalizedOrder(parsed.excommunications || []),
       enemyNations: withNormalizedOrder(parsed.enemyNations || []),
-      panelUsers: parsed.panelUsers || []
+      panelUsers: parsed.panelUsers || [],
+      cryptoLogs: parsed.cryptoLogs || []
     };
   } catch {
     return structuredClone(defaultContent);
@@ -344,6 +346,26 @@ export async function reorderEnemyNations(orderedIds) {
 export async function getPanelUsers() {
   const content = await readContentFile();
   return content.panelUsers.map(sanitizePanelUser);
+}
+
+export async function appendCryptoLog(entry) {
+  const content = await readContentFile();
+  const nextEntry = {
+    id:
+      entry.id ||
+      `crypto-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+    action: String(entry.action || "").trim().toLowerCase(),
+    createdAt: entry.createdAt || new Date().toISOString(),
+    source: entry.source || "website",
+    messagePreview: String(entry.messagePreview || "").trim(),
+    encryptedPreview: String(entry.encryptedPreview || "").trim()
+  };
+
+  content.cryptoLogs = [nextEntry, ...(content.cryptoLogs || [])].slice(0, 250);
+  await writeContentFile(content);
+  return content.cryptoLogs;
 }
 
 export async function createPanelUser(user) {

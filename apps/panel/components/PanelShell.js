@@ -38,32 +38,23 @@ export async function PanelShell({ title, description, children }) {
   return (
     <main className="shell">
       <header className="panel-header">
-        <div className="panel-header__brand">
-          <div className="panel-brand-mark" aria-hidden="true">
-            W
+        <div className="panel-header__top">
+          <div className="panel-header__brand">
+            <div className="panel-brand-mark" aria-hidden="true">
+              W
+            </div>
+            <div>
+              <p className="panel-header__eyebrow">Wilford Internal</p>
+              <h1>{title}</h1>
+              <p className="panel-header__copy">{description}</p>
+            </div>
           </div>
-          <div>
-            <p className="panel-header__eyebrow">Wilford Internal</p>
-            <h1>{title}</h1>
-            <p className="panel-header__copy">{description}</p>
-          </div>
-        </div>
-
-        <div className="panel-header__tools">
-          <div className="panel-status-pill">
-            <span />
-            Live Control Room
-          </div>
-
-          <nav className="panel-nav">
-            {navigation.map((item) => (
-              <Link key={item.href} href={item.href}>
-                {item.label}
-              </Link>
-            ))}
-          </nav>
 
           <div className="panel-header__account">
+            <div className="panel-status-pill">
+              <span />
+              Live Control Room
+            </div>
             <span className="panel-nav__identity">
               {session?.username} / {session?.role}
             </span>
@@ -74,6 +65,14 @@ export async function PanelShell({ title, description, children }) {
             </form>
           </div>
         </div>
+
+        <nav className="panel-nav">
+          {navigation.map((item) => (
+            <Link key={item.href} href={item.href}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
       </header>
 
       {children}

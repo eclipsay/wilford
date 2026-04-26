@@ -1,11 +1,10 @@
 import { PanelShell } from "../../components/PanelShell";
 import { requireAuth } from "../../lib/auth";
-import { getPanelContentFile } from "../../lib/content-file";
+import { readAuditLog } from "../../lib/audit-log";
 
 export default async function AuditLogPage() {
   await requireAuth();
-  const content = await getPanelContentFile();
-  const cryptoLogs = content.cryptoLogs || [];
+  const cryptoLogs = await readAuditLog();
 
   return (
     <PanelShell
@@ -20,14 +19,16 @@ export default async function AuditLogPage() {
           </div>
         </div>
         {cryptoLogs.length ? (
-          <div className="record-list">
+          <div className="audit-log-list">
             {cryptoLogs.map((entry) => (
-              <article className="record-item" key={entry.id}>
-                <div className="record-copy">
+              <article className="audit-log-item" key={entry.id}>
+                <div className="audit-log-item__meta">
                   <span className="record-order">{entry.action}</span>
-                  <h2>{entry.messagePreview || "No text preview recorded."}</h2>
-                  <p>{entry.encryptedPreview || "No ciphertext preview recorded."}</p>
                   <small>{entry.createdAt}</small>
+                </div>
+                <div className="audit-log-item__body">
+                  <strong>{entry.messagePreview || "No text preview recorded."}</strong>
+                  <p>{entry.encryptedPreview || "No ciphertext preview recorded."}</p>
                 </div>
               </article>
             ))}

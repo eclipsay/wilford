@@ -1,7 +1,12 @@
+import { NextResponse } from "next/server";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { NextResponse } from "next/server";
+
+const baseUrl =
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://127.0.0.1:4000";
 
 function resolveContentFile() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -10,62 +15,83 @@ function resolveContentFile() {
     process.env.REPO_ROOT
       ? resolve(process.env.REPO_ROOT, "apps/api/data/content.json")
       : null,
-    resolve(currentDir, "../../../../api/data/content.json"),
-    resolve(process.cwd(), "../api/data/content.json"),
-    resolve(process.cwd(), "../../apps/api/data/content.json"),
-    resolve(process.cwd(), "apps/api/data/content.json")
+    resolve(currentDir, "../../../../../api/data/content.json")
   ].filter(Boolean);
 
   return candidates[0];
 }
 
-async function readContentFile() {
+function normalizeEntry(body) {
+  return {
+    id: `crypto-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`,
+    action: String(body?.action || "").trim().toLowerCase(),
+    createdAt: new Date().toISOString(),
+    source: "website",
+    messagePreview: String(body?.messagePreview || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160),
+    encryptedPreview: String(body?.encryptedPreview || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160)
+  };
+}
+
+async function appendFallbackAuditLog(body) {
   const contentFile = resolveContentFile();
 
   try {
     const raw = await readFile(contentFile, "utf8");
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    parsed.cryptoLogs = [normalizeEntry(body), ...(parsed.cryptoLogs || [])].slice(0, 250);
+    await mkdir(dirname(contentFile), { recursive: true });
+    await writeFile(contentFile, JSON.stringify(parsed, null, 2));
+    return true;
   } catch {
-    return {};
+    return false;
   }
 }
 
-async function writeContentFile(content) {
-  const contentFile = resolveContentFile();
-  await mkdir(dirname(contentFile), { recursive: true });
-  await writeFile(contentFile, JSON.stringify(content, null, 2));
-}
-
-function trimPreview(value, maxLength) {
-  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
-}
-
 export async function POST(request) {
+  let body = null;
+
   try {
-    const body = await request.json();
-    const action = String(body?.action || "").trim();
+    body = await request.json();
+    const response = await fetch(`${baseUrl}/api/audit/crypto`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body),
+      cache: "no-store"
+    });
 
-    if (!action) {
-      return NextResponse.json({ error: "Action is required." }, { status: 400 });
+    if (!response.ok) {
+      const wroteFallback = await appendFallbackAuditLog(body);
+
+      if (!wroteFallback) {
+        const payload = await response.json().catch(() => null);
+        return NextResponse.json(
+          { error: payload?.error || "Unable to write audit log." },
+          { status: response.status }
+        );
+      }
     }
-
-    const content = await readContentFile();
-    const existingLogs = Array.isArray(content.cryptoLogs) ? content.cryptoLogs : [];
-
-    const logEntry = {
-      id: `crypto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      action,
-      createdAt: new Date().toISOString(),
-      source: "website",
-      messagePreview: trimPreview(body?.messagePreview, 160),
-      encryptedPreview: trimPreview(body?.encryptedPreview, 160)
-    };
-
-    content.cryptoLogs = [logEntry, ...existingLogs].slice(0, 100);
-    await writeContentFile(content);
 
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ error: "Unable to write crypto log." }, { status: 500 });
+    const wroteFallback = body ? await appendFallbackAuditLog(body) : false;
+
+    if (wroteFallback) {
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json(
+      { error: "Unable to write audit log." },
+      { status: 500 }
+    );
   }
 }

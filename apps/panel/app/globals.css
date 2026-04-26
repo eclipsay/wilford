@@ -47,15 +47,22 @@ select {
 }
 
 .panel-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(420px, auto);
-  gap: 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
   margin-bottom: 20px;
-  padding: 20px 22px;
+  padding: 18px 20px;
   border: 1px solid var(--panel-line);
   border-radius: 18px;
   background: rgba(22, 26, 34, 0.92);
   box-shadow: var(--panel-shadow);
+}
+
+.panel-header__top {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
 .panel-header__brand {
@@ -78,10 +85,9 @@ select {
 }
 
 .panel-header__tools {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: stretch;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .panel-status-pill {
@@ -140,7 +146,9 @@ select {
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  padding-top: 2px;
+  border-top: 1px solid rgba(61, 75, 103, 0.45);
 }
 
 .panel-header__account {
@@ -148,6 +156,7 @@ select {
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .panel-nav a,
@@ -296,6 +305,50 @@ select {
 .record-list {
   display: flex;
   flex-direction: column;
+}
+
+.audit-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.audit-log-item {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(61, 75, 103, 0.55);
+}
+
+.audit-log-item:last-child {
+  border-bottom: none;
+}
+
+.audit-log-item__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audit-log-item__meta small {
+  color: var(--panel-text-soft);
+  line-height: 1.5;
+}
+
+.audit-log-item__body {
+  min-width: 0;
+}
+
+.audit-log-item__body strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--panel-text);
+  font-size: 0.98rem;
+}
+
+.audit-log-item__body p {
+  margin: 0;
 }
 
 .record-item,
@@ -494,13 +547,8 @@ select {
 }
 
 @media (max-width: 1080px) {
-  .panel-header {
-    grid-template-columns: 1fr;
-  }
-
-  .panel-header__tools {
-    width: 100%;
-    align-items: flex-start;
+  .panel-header__top {
+    flex-direction: column;
   }
 
   .panel-nav {
@@ -520,7 +568,8 @@ select {
   .panel-grid,
   .panel-split,
   .record-item,
-  .commit-admin-row {
+  .commit-admin-row,
+  .audit-log-item {
     grid-template-columns: 1fr;
   }
 
