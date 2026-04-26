@@ -15,7 +15,7 @@ function resolveContentFile() {
     process.env.REPO_ROOT
       ? resolve(process.env.REPO_ROOT, "apps/api/data/content.json")
       : null,
-    resolve(currentDir, "../../../../../api/data/content.json")
+    resolve(currentDir, "../../../../../apps/api/data/content.json")
   ].filter(Boolean);
 
   return candidates[0];
@@ -42,11 +42,19 @@ function normalizeEntry(body) {
 
 async function appendFallbackAuditLog(body) {
   const contentFile = resolveContentFile();
+  const nextEntry = normalizeEntry(body);
 
   try {
-    const raw = await readFile(contentFile, "utf8");
-    const parsed = JSON.parse(raw);
-    parsed.cryptoLogs = [normalizeEntry(body), ...(parsed.cryptoLogs || [])].slice(0, 250);
+    let parsed = {};
+
+    try {
+      const raw = await readFile(contentFile, "utf8");
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = {};
+    }
+
+    parsed.cryptoLogs = [nextEntry, ...(parsed.cryptoLogs || [])].slice(0, 250);
     await mkdir(dirname(contentFile), { recursive: true });
     await writeFile(contentFile, JSON.stringify(parsed, null, 2));
     return true;

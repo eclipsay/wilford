@@ -30,7 +30,12 @@ import {
   updateMemberPosition,
   updateSettings
 } from "./content-store.js";
-import { deployDiscordBot, deployPanel } from "./deploy.js";
+import {
+  deployDiscordBot,
+  deployPanel,
+  getDeployJob,
+  startDeployJob
+} from "./deploy.js";
 import { getCommits } from "./github.js";
 
 const app = express();
@@ -383,6 +388,11 @@ app.post("/api/admin/deploy/panel", requireAdmin, async (_req, res) => {
   }
 });
 
+app.post("/api/admin/deploy/panel/start", requireAdmin, async (_req, res) => {
+  const job = startDeployJob("panel");
+  res.status(202).json({ job });
+});
+
 app.post("/api/admin/deploy/bot", requireAdmin, async (_req, res) => {
   try {
     const result = await deployDiscordBot();
@@ -393,6 +403,21 @@ app.post("/api/admin/deploy/bot", requireAdmin, async (_req, res) => {
         error instanceof Error ? error.message : "Discord bot deploy failed."
     });
   }
+});
+
+app.post("/api/admin/deploy/bot/start", requireAdmin, async (_req, res) => {
+  const job = startDeployJob("bot");
+  res.status(202).json({ job });
+});
+
+app.get("/api/admin/deploy/jobs/:id", requireAdmin, async (req, res) => {
+  const job = getDeployJob(req.params.id);
+
+  if (!job) {
+    return res.status(404).json({ error: "Deploy job not found." });
+  }
+
+  res.json({ job });
 });
 
 app.listen(config.port, () => {
