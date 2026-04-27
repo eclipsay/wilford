@@ -4,9 +4,12 @@ import { brand } from "@wilford/shared";
 
 const stateNavigation = [
   { label: "The Chairman", href: "/chairman" },
-  { label: "Our State", href: "/information" },
-  { label: "Wilford Decrypter", href: "/decrypter" },
+  { label: "The Government", href: "/government" },
+  { label: "The Union", href: "/information" },
   { label: "The People", href: "/members" },
+  { label: "Panem Credit", href: "/panem-credit" },
+  { label: "Marketplace", href: "/marketplace" },
+  { label: "Wilford Decrypter", href: "/decrypter" },
   { label: "Apply", href: "/apply" },
   { label: "Command Archive", href: "/commands" },
   { label: "Excommunication List", href: "/excommunication" },
@@ -24,8 +27,8 @@ export function SiteLayout({ children }) {
         <Link className="brand" href="/">
           <Image
             className="brand-mark"
-            src="/creed-icons/header-w.png"
-            alt=""
+            src="/creed-icons/header-wpu.png"
+            alt="WPU symbol"
             aria-hidden="true"
             width={112}
             height={112}
