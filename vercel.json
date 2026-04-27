@@ -2,5 +2,5 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace @wilford/website",
-  "outputDirectory": "apps/website/.next"
+  "outputDirectory": ".next"
 }
