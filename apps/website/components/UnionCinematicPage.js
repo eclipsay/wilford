@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useRef } from "react";
 
 const historySections = [
@@ -438,6 +439,16 @@ export function UnionCinematicPage() {
 
       <section className="union-final-cinema union-reveal">
         <blockquote>"History divided the world. Lemmie united it."</blockquote>
+        <div className="union-final-cinema__seal union-reveal" style={{ "--delay": "180ms" }}>
+          <Image
+            className="grand-seal"
+            src="/wpu-grand-seal.png"
+            alt="Grand Seal of the Wilford Panem Union"
+            width={640}
+            height={640}
+          />
+          <p>Sealed under the authority of the Wilford Panem Union.</p>
+        </div>
         <div className="union-final-cinema__actions">
           <Link className="union-gold-button" href="/">
             <span>Return Home</span>

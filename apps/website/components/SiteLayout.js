@@ -64,6 +64,20 @@ export function SiteLayout({ children }) {
       </header>
 
       {children}
+
+      <footer className="site-footer" aria-label="Official state portal">
+        <Image
+          className="grand-seal-small"
+          src="/wpu-grand-seal.png"
+          alt="Grand Seal of the Wilford Panem Union"
+          width={128}
+          height={128}
+        />
+        <div className="site-footer__copy">
+          <strong>Official State Portal of the Wilford Panem Union</strong>
+          <span>One Union. One Future.</span>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -176,6 +176,53 @@ h3 {
     rgba(54, 19, 16, 0.92);
 }
 
+.grand-seal {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  filter: drop-shadow(0 0 18px rgba(212, 175, 55, 0.3));
+}
+
+.grand-seal-small {
+  width: 64px;
+  height: auto;
+  opacity: 0.92;
+  filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.18));
+}
+
+.site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 56px;
+  padding: 30px 4vw 34px;
+  border-top: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(10, 4, 4, 0.34), rgba(10, 4, 4, 0.86)),
+    rgba(7, 4, 4, 0.82);
+  text-align: left;
+}
+
+.site-footer__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-transform: uppercase;
+}
+
+.site-footer__copy strong {
+  color: var(--gold-bright);
+  letter-spacing: 0.08em;
+  font-size: 0.86rem;
+}
+
+.site-footer__copy span {
+  color: var(--gold);
+  letter-spacing: 0.12em;
+  font-size: 0.76rem;
+}
+
 .content {
   width: min(1240px, calc(100% - 8vw));
   margin: 0 auto;
@@ -875,6 +922,28 @@ h3 {
 .application-panel {
   max-width: 920px;
   margin: 0 auto 72px;
+}
+
+.official-access-panel {
+  max-width: 760px;
+  margin: 0 auto 72px;
+  text-align: center;
+}
+
+.official-access-panel p:not(.eyebrow) {
+  max-width: 560px;
+  margin: 14px auto 0;
+}
+
+.official-access-seal {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 22px;
+}
+
+.grand-seal-small--access {
+  width: 72px;
+  opacity: 0.96;
 }
 
 .application-notice {
@@ -2910,6 +2979,33 @@ h3 {
   justify-content: center;
 }
 
+.union-final-cinema__seal {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.union-final-cinema__seal .grand-seal {
+  max-width: 220px;
+  opacity: 0.94;
+}
+
+.union-final-cinema__seal p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--gold);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+
+.union-cinema--animated .union-final-cinema__seal.union-reveal {
+  transition-duration: 1200ms;
+}
+
 @keyframes union-drift {
   from {
     transform: translateX(-1.4%);
@@ -3184,11 +3280,14 @@ h3 {
 .government-hero {
   position: relative;
   display: grid;
-  justify-items: center;
-  padding: 58px 24px 62px;
-  text-align: center;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 360px);
+  align-items: center;
+  gap: 42px;
+  padding: 58px 52px 62px;
+  text-align: left;
   border: 1px solid rgba(190, 128, 39, 0.28);
   background:
+    radial-gradient(circle at 78% 50%, rgba(211, 161, 73, 0.14), transparent 30%),
     linear-gradient(180deg, rgba(64, 19, 15, 0.38), rgba(7, 4, 4, 0.86)),
     rgba(9, 4, 4, 0.88);
   box-shadow: 0 0 80px rgba(120, 35, 20, 0.18), var(--shadow);
@@ -3213,6 +3312,17 @@ h3 {
   right: 24px;
 }
 
+.government-hero__copy,
+.government-hero__seal {
+  position: relative;
+  z-index: 1;
+}
+
+.government-hero__seal {
+  display: flex;
+  justify-content: center;
+}
+
 .government-hero__eyebrow,
 .government-office__rank {
   margin: 0;
@@ -3235,7 +3345,7 @@ h3 {
 
 .government-hero__intro {
   max-width: 760px;
-  margin: 22px auto 0;
+  margin: 22px 0 0;
   color: rgba(245, 223, 177, 0.78);
   font-size: 1.05rem;
   line-height: 1.8;
@@ -3921,6 +4031,17 @@ h3 {
     padding-top: 64px;
   }
 
+  .government-hero {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .government-hero__intro {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .government-ministries,
   .government-principles__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4091,6 +4212,14 @@ h3 {
     padding: 36px 16px 42px;
   }
 
+  .government-hero__seal {
+    order: -1;
+  }
+
+  .government-hero__seal .grand-seal {
+    max-width: min(240px, 78vw);
+  }
+
   .government-hero::before,
   .government-hero::after {
     display: none;
@@ -4103,6 +4232,18 @@ h3 {
 
   .government-hero__intro {
     font-size: 0.96rem;
+  }
+
+  .site-footer {
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 36px;
+    text-align: center;
+  }
+
+  .site-footer__copy strong,
+  .site-footer__copy span {
+    line-height: 1.45;
   }
 
   .government-chart {

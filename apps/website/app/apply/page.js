@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
@@ -60,6 +61,15 @@ export default async function ApplyPage({ searchParams }) {
 
       <main className="content">
         <section className="panel application-panel">
+          <div className="official-access-seal">
+            <Image
+              className="grand-seal-small grand-seal-small--access"
+              src="/wpu-grand-seal.png"
+              alt="Grand Seal of the Wilford Panem Union"
+              width={128}
+              height={128}
+            />
+          </div>
           <div className="panel__header">
             <div>
               <p className="eyebrow">Website Application</p>

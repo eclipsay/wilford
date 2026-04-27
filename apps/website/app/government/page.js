@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { SiteLayout } from "../../components/SiteLayout";
 
 const ministries = [
@@ -44,13 +45,23 @@ export default function GovernmentPage() {
     <SiteLayout>
       <main className="government-page">
         <section className="government-hero" aria-labelledby="government-title">
-          <p className="government-hero__eyebrow">Union Administration</p>
-          <h1 id="government-title">Government of the Wilford Panem Union</h1>
-          <p className="government-hero__intro">
-            The Union is guided by order, faith, service, and loyalty. Under
-            the supreme leadership of Chairman Lemmie, each office serves the
-            stability and prosperity of Panem.
-          </p>
+          <div className="government-hero__copy">
+            <p className="government-hero__eyebrow">Union Administration</p>
+            <h1 id="government-title">Government of the Wilford Panem Union</h1>
+            <p className="government-hero__intro">
+              Official authority of the Union under Chairman Lemmie.
+            </p>
+          </div>
+          <div className="government-hero__seal" aria-hidden="true">
+            <Image
+              className="grand-seal"
+              src="/wpu-grand-seal.png"
+              alt=""
+              width={640}
+              height={640}
+              priority
+            />
+          </div>
         </section>
 
         <section className="government-chart" aria-label="Government hierarchy">
