@@ -30,11 +30,14 @@ const fallbackContent = {
   enemyNations: []
 };
 
+const contentFetchOptions = () => ({
+  cache: "no-store",
+  signal: AbortSignal.timeout(1500)
+});
+
 export async function getSiteContent() {
   try {
-    const response = await fetch(`${baseUrl}/api/content`, {
-      cache: "no-store"
-    });
+    const response = await fetch(`${baseUrl}/api/content`, contentFetchOptions());
 
     if (!response.ok) {
       throw new Error("Failed to load content");
@@ -48,9 +51,7 @@ export async function getSiteContent() {
 
 export async function getVisibleCommits() {
   try {
-    const response = await fetch(`${baseUrl}/api/commits`, {
-      cache: "no-store"
-    });
+    const response = await fetch(`${baseUrl}/api/commits`, contentFetchOptions());
 
     if (!response.ok) {
       throw new Error("Failed to load commits");

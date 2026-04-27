@@ -190,6 +190,26 @@ h3 {
   filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.18));
 }
 
+.portrait-frame {
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 22px rgba(212, 175, 55, 0.22));
+  animation: portrait-fade-in 700ms ease both;
+}
+
+@keyframes portrait-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .site-footer {
   display: flex;
   align-items: center;
@@ -789,6 +809,50 @@ h3 {
 .panel p {
   color: var(--text-soft);
   line-height: 1.75;
+}
+
+.chairman-portrait-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.88fr);
+  gap: clamp(28px, 5vw, 72px);
+  align-items: center;
+  margin: 24px auto 76px;
+  padding: clamp(24px, 4vw, 48px);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 78% 40%, rgba(212, 175, 55, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(108, 24, 17, 0.13), rgba(16, 8, 7, 0.92)),
+    rgba(13, 7, 7, 0.92);
+  box-shadow: var(--shadow);
+}
+
+.chairman-portrait-hero__copy {
+  min-width: 0;
+}
+
+.chairman-portrait-hero__figure {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  margin: 0;
+}
+
+.chairman-portrait-hero__figure figcaption {
+  color: var(--gold-bright);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.chairman-portrait-hero__figure figcaption span {
+  display: block;
+  margin-top: 4px;
+  color: var(--gold);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
 }
 
 .panel--feature h2,
@@ -1576,6 +1640,17 @@ h3 {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.biography-card--featured .biography-card__image-wrap {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.biography-card--featured .biography-card__image {
+  height: auto;
+  object-fit: contain;
 }
 
 .biography-card__body {
@@ -3079,6 +3154,10 @@ h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .portrait-frame {
+    animation: none;
+  }
+
   .union-cinema *,
   .union-cinema *::before,
   .union-cinema *::after {
@@ -3402,9 +3481,22 @@ h3 {
 }
 
 .government-office--chairman {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.58fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
   width: min(840px, 100%);
   border-color: rgba(243, 204, 138, 0.5);
   box-shadow: 0 0 54px rgba(211, 161, 73, 0.13), var(--shadow);
+}
+
+.government-office__portrait {
+  display: flex;
+  justify-content: center;
+}
+
+.government-office__portrait .portrait-frame {
+  max-width: 280px;
 }
 
 .government-office h2,
@@ -4027,6 +4119,19 @@ h3 {
     grid-row: span 1;
   }
 
+  .chairman-portrait-hero {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .chairman-portrait-hero__figure {
+    order: -1;
+  }
+
+  .chairman-portrait-hero__copy {
+    width: 100%;
+  }
+
   .government-page {
     padding-top: 64px;
   }
@@ -4196,6 +4301,19 @@ h3 {
     grid-column: span 1;
   }
 
+  .chairman-portrait-hero {
+    margin-bottom: 52px;
+    padding: 22px 16px;
+  }
+
+  .chairman-portrait-hero__figure {
+    width: 100%;
+  }
+
+  .chairman-portrait-hero__figure figcaption {
+    font-size: 0.9rem;
+  }
+
   .biography-card__image-wrap--empty {
     min-height: 140px;
   }
@@ -4259,6 +4377,14 @@ h3 {
 
   .government-office {
     padding: 24px 18px 26px;
+  }
+
+  .government-office--chairman {
+    grid-template-columns: 1fr;
+  }
+
+  .government-office__portrait .portrait-frame {
+    max-width: min(320px, 100%);
   }
 
   .government-office h2,

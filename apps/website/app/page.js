@@ -9,7 +9,7 @@ export default async function HomePage() {
     {
       name: "Chairman Lemmie",
       title: "Transformation Era",
-      image: "/lemmie-portrait.png",
+      image: "/chairman-lemmie-portrait.png",
       summary:
         "Chairman Lemmie assumed control of Wilford Industries following the departure of its founder, Mr Wilford, and reshaped it into the modern company-state seen today.",
       details: [
@@ -134,7 +134,7 @@ export default async function HomePage() {
                       alt={`Official portrait of ${entry.name}`}
                       width={480}
                       height={600}
-                      className="biography-card__image"
+                      className="biography-card__image portrait-frame"
                     />
                   </div>
                 ) : (

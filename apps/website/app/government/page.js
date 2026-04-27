@@ -66,14 +66,25 @@ export default function GovernmentPage() {
 
         <section className="government-chart" aria-label="Government hierarchy">
           <article className="government-office government-office--chairman">
-            <p className="government-office__rank">Supreme Authority</p>
-            <h2>Chairman Lemmie</h2>
-            <strong>Supreme Chairman of the Wilford Panem Union</strong>
-            <p>
-              Founder, Leader, and Eternal Steward of the Union. Chairman
-              Lemmie embodies the will of the state and serves as the final
-              authority over all ministries, districts, and institutions.
-            </p>
+            <div className="government-office__portrait">
+              <Image
+                src="/chairman-lemmie-portrait.png"
+                alt="Official portrait of Chairman Lemmie"
+                width={1122}
+                height={1402}
+                className="portrait-frame"
+              />
+            </div>
+            <div>
+              <p className="government-office__rank">Supreme Authority</p>
+              <h2>Chairman Lemmie</h2>
+              <strong>Supreme Chairman of the Wilford Panem Union</strong>
+              <p>
+                Founder, Leader, and Eternal Steward of the Union. Chairman
+                Lemmie embodies the will of the state and serves as the final
+                authority over all ministries, districts, and institutions.
+              </p>
+            </div>
           </article>
 
           <article className="government-office government-office--executive">
