@@ -8,18 +8,13 @@ const stateNavigation = [
   { label: "The Union", href: "/information" },
   { label: "The People", href: "/members" },
   { label: "Panem Credit", href: "/panem-credit" },
-  { label: "Marketplace", href: "/marketplace" },
-  { label: "Wilford Decrypter", href: "/decrypter" },
-  { label: "Apply", href: "/apply" },
-  { label: "Command Archive", href: "/commands" },
-  { label: "Excommunication List", href: "/excommunication" },
-  { label: "Commits", href: "/commits", align: "right" }
+  { label: "Ministry of State Security", href: "/ministry-of-state-security" },
+  { label: "Citizen Portal", href: "/citizen-portal" },
+  { label: "Government Access", href: "/government-access", align: "right" }
 ];
 
 export function SiteLayout({ children }) {
-  const panelUrl =
-    process.env.NEXT_PUBLIC_PANEL_URL ||
-    "https://panel.wilfordindustries.org";
+  const panelUrl = "https://panel.wilfordindustries.org/";
 
   return (
     <div className="site-shell">
@@ -53,7 +48,7 @@ export function SiteLayout({ children }) {
         </nav>
 
         <a
-          className="button"
+          className="button admin-portal-button"
           href={panelUrl}
           target="_blank"
           rel="noreferrer"
@@ -76,6 +71,15 @@ export function SiteLayout({ children }) {
         <div className="site-footer__copy">
           <strong>Official State Portal of the Wilford Panem Union</strong>
           <span>One Union. One Future.</span>
+          <nav className="site-footer__links" aria-label="Footer navigation">
+            <Link href="/government">Government</Link>
+            <Link href="/information">The Union</Link>
+            <Link href="/panem-credit">Panem Credit</Link>
+            <Link href="/apply">Apply</Link>
+            <Link href="/chairman">The Chairman</Link>
+            <Link href="/citizen-portal">Citizen Portal</Link>
+            <Link href="/government-access">Government Access</Link>
+          </nav>
         </div>
       </footer>
     </div>

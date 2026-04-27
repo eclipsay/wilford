@@ -7,7 +7,7 @@ const baseUrl =
 
 const fallbackContent = {
   settings: {
-    homepageHeadline: "Wilford Industries",
+    homepageHeadline: "Wilford Panem Union",
     homepageEyebrow: "Welcome to",
     homepageDescription:
       "A monument to order, expansion, and industrial discipline under the leadership of Chairman Lemmie.",
@@ -21,7 +21,7 @@ const fallbackContent = {
       role: "Chairman",
       division: "Executive Office",
       status: "Active",
-      notes: "Supreme authority over Wilford Industries.",
+      notes: "Supreme authority over the Wilford Panem Union.",
       order: 0
     }
   ],

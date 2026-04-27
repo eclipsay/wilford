@@ -13,7 +13,7 @@ export default function CommandsPage() {
       <PageHero
         eyebrow="Command Archive"
         title="Discord Command Registry"
-        description="A compact field guide for Wilford Industries Discord commands, moderation tools, and the application review pipeline."
+        description="A compact field guide for Wilford Panem Union Discord commands, moderation tools, and the application review pipeline."
       />
 
       <main className="content">
@@ -75,7 +75,7 @@ export default function CommandsPage() {
               <div>
                 <h3>Step 2</h3>
                 <p>
-                  The applicant answers the official Wilford questions one at a time.
+                  The applicant answers the official Union questions one at a time.
                   When finished, the bot creates a staff review thread and posts the full record.
                 </p>
               </div>

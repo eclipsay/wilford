@@ -6,8 +6,8 @@ import { useEffect, useRef } from "react";
 
 const historySections = [
   {
-    marker: "Section 1",
-    title: "The Final Days of Snowpiercer",
+    marker: "Chapter 1",
+    title: "The Fall of Wilford",
     text: [
       "After the death of Mr Wilford, Snowpiercer drifted leaderless through the frozen world. Factions rose, discipline weakened, and uncertainty spread through the final refuge of mankind.",
       "In this hour of crisis, Chairman Lemmie seized command.",
@@ -16,8 +16,8 @@ const historySections = [
     visual: "frost"
   },
   {
-    marker: "Section 2",
-    title: "A Signal Beyond the Ice",
+    marker: "Chapter 2",
+    title: "The Great Turn South",
     text: [
       "Recovered transmissions spoke of a distant land untouched by the freeze - Panem.",
       "A fractured civilization of districts, Capitol excess, and civil war.",
@@ -27,8 +27,8 @@ const historySections = [
     visual: "signal"
   },
   {
-    marker: "Section 3",
-    title: "The Day Two Worlds Met",
+    marker: "Chapter 3",
+    title: "Arrival In Panem",
     text: [
       "When Snowpiercer arrived, Panem stood in chaos.",
       "President Snow had fallen beneath the crowd. Coin sought control. The Capitol burned.",
@@ -37,7 +37,7 @@ const historySections = [
     visual: "capitol"
   },
   {
-    marker: "Section 4",
+    marker: "Chapter 4",
     title: "Bread Before Politics",
     text: [
       "While factions fought for power, Lemmie opened Snowpiercer's reserves.",
@@ -47,14 +47,53 @@ const historySections = [
     visual: "relief"
   },
   {
-    marker: "Section 5",
-    title: "One People. One Future.",
+    marker: "Chapter 5",
+    title: "The Union Declared",
     text: [
       "Before the shattered Capitol, Chairman Lemmie united Snowpiercer and Panem.",
       "The train brought endurance. Panem brought land. The Union brought destiny.",
       "Thus was born the Wilford Panem Union."
     ],
     quote: "From motion came strength. From division came unity.",
+    visual: "banners"
+  },
+  {
+    marker: "Chapter 6",
+    title: "Districts Reborn",
+    text: [
+      "Districts once organized for punishment were rebuilt as pillars of national production.",
+      "Wages, housing, rail access, and civic records replaced hunger and spectacle.",
+      "Every district received purpose beneath the Grand Seal."
+    ],
+    visual: "relief"
+  },
+  {
+    marker: "Chapter 7",
+    title: "The Eternal Engine",
+    text: [
+      "Snowpiercer became the grand artery of the Union, carrying leadership, commerce, relief, and authority.",
+      "Its rails joined old wounds into a single living state.",
+      "The engine no longer fled the world. It governed it."
+    ],
+    visual: "signal"
+  },
+  {
+    marker: "Chapter 8",
+    title: "Panem Credit Introduced",
+    text: [
+      "A unified currency replaced barter, faction debt, and district isolation.",
+      "Verified identity linked wages, trade, taxation, and civic rewards to one national ledger."
+    ],
+    visual: "capitol"
+  },
+  {
+    marker: "Chapter 9",
+    title: "The Modern Age",
+    text: [
+      "Today the Union stands disciplined, fed, connected, and watched over by the institutions Lemmie built.",
+      "History divided the world. Lemmie united it."
+    ],
+    quote: "History divided the world. Lemmie united it.",
     visual: "banners"
   }
 ];
@@ -317,7 +356,7 @@ export function UnionCinematicPage() {
 
           <ol className="union-scroll-history__markers" aria-hidden="true">
             {historySections.map((section) => (
-              <li key={section.title}>{section.marker.replace("Section ", "")}</li>
+              <li key={section.title}>{section.marker.replace("Chapter ", "")}</li>
             ))}
           </ol>
         </div>
@@ -349,7 +388,7 @@ export function UnionCinematicPage() {
 
       <section className="union-archive-section union-reveal">
         <div className="union-section-heading">
-          <p className="union-cinema-eyebrow">Section 6</p>
+          <p className="union-cinema-eyebrow">Chapter 6</p>
           <h2>The Districts Reborn</h2>
           <p>
             The districts were transformed from instruments of punishment into
@@ -376,7 +415,7 @@ export function UnionCinematicPage() {
 
       <section className="union-engine-section union-reveal">
         <div className="union-engine-section__copy">
-          <p className="union-cinema-eyebrow">Section 7</p>
+          <p className="union-cinema-eyebrow">Chapter 7</p>
           <h2>The Eternal Engine</h2>
           <p>
             Once mankind's last refuge, Snowpiercer became the grand artery of
@@ -401,7 +440,7 @@ export function UnionCinematicPage() {
 
       <section className="union-credit-section union-reveal">
         <div>
-          <p className="union-cinema-eyebrow">Section 8</p>
+          <p className="union-cinema-eyebrow">Chapter 8</p>
           <h2>A Nation Connected</h2>
           <p>
             The Union introduced Panem Credit, a secure digital currency linking
@@ -426,7 +465,7 @@ export function UnionCinematicPage() {
           <span />
           <span />
         </div>
-        <p className="union-cinema-eyebrow">Section 9</p>
+        <p className="union-cinema-eyebrow">Chapter 9</p>
         <h2>Prosperity Through Unity</h2>
         <p>
           Today the Union stands as the greatest civilization of the modern age.

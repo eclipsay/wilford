@@ -6,9 +6,9 @@ export default function DecrypterPage() {
   return (
     <SiteLayout>
       <PageHero
-        eyebrow="AES256"
-        title="Decrypter"
-        description="Decrypt messages created with the Wilford AES256 tool using the correct passphrase."
+        eyebrow="Secure Communications"
+        title="Encrypted State Channel"
+        description="Decrypt messages created with the Union AES256 tool using the correct passphrase."
       />
 
       <main className="content">

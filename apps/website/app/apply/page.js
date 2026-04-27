@@ -55,12 +55,38 @@ export default async function ApplyPage({ searchParams }) {
     <SiteLayout>
       <PageHero
         eyebrow="Recruitment Intake"
-        title="Apply To Wilford"
-        description="Submit your application through the public intake form. Completed submissions are forwarded into the internal Discord review thread system."
+        title="Serve The Union"
+        description="Service is the highest form of loyalty."
       />
 
-      <main className="content">
-        <section className="panel application-panel">
+      <main className="content content--wide">
+        <section className="state-section recruitment-overview scroll-fade">
+          <div>
+            <p className="eyebrow">Why Serve?</p>
+            <h2>Purpose, Rank, And Duty</h2>
+            <p>
+              Union service places citizens inside the machinery of order:
+              administration, security, production, transport, and civic
+              reconstruction.
+            </p>
+          </div>
+          <div className="premium-grid premium-grid--three recruitment-roles">
+            {[
+              "Civic Administration",
+              "Ministry of State Security",
+              "Ministry of Order",
+              "Industrial Labour",
+              "Rail Command",
+              "Ministry Assistant"
+            ].map((role) => (
+              <article className="premium-card" key={role}>
+                <h3>{role}</h3>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel application-panel scroll-fade">
           <div className="official-access-seal">
             <Image
               className="grand-seal-small grand-seal-small--access"
@@ -85,7 +111,7 @@ export default async function ApplyPage({ searchParams }) {
               <strong>Application Submitted</strong>
               <p>
                 Your application has been recorded and will be forwarded into the
-                Wilford review thread workflow for staff review.
+                Union review thread workflow for staff review.
               </p>
             </div>
           ) : null}
@@ -125,7 +151,7 @@ export default async function ApplyPage({ searchParams }) {
                   type="text"
                 />
                 <small className="public-application-help">
-                  This is required so Wilford staff know who you are in Discord.
+                  This is required so Union staff know who you are in Discord.
                 </small>
               </label>
 
@@ -152,7 +178,7 @@ export default async function ApplyPage({ searchParams }) {
             </label>
 
             <label className="public-application-field">
-              <span>Why do you want to join Wilford Industries?</span>
+              <span>Why do you want to serve the Wilford Panem Union?</span>
               <textarea name="motivation" required rows="6" />
             </label>
 
@@ -168,6 +194,7 @@ export default async function ApplyPage({ searchParams }) {
             </div>
           </form>
         </section>
+        <p className="service-line">Service is the highest form of loyalty.</p>
       </main>
     </SiteLayout>
   );

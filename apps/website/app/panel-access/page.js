@@ -7,8 +7,8 @@ export default function PanelAccessPage() {
     <SiteLayout>
       <PageHero
         eyebrow="Restricted Systems"
-        title="Panel Access"
-        description="Reserved for secure internal controls and future administrative workflows."
+        title="Executive Notices"
+        description="Reserved for secure internal controls, executive notices, and future administrative workflows."
       />
       <main className="content">
         <section className="panel official-access-panel">
@@ -22,8 +22,8 @@ export default function PanelAccessPage() {
               priority
             />
           </div>
-          <p className="eyebrow">Administrative Authority</p>
-          <h2>Official Admin Portal</h2>
+          <p className="eyebrow">Executive Authority</p>
+          <h2>Official Executive Notices</h2>
           <p>
             Access is reserved for authorized Union officers and internal state
             operations.

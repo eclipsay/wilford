@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Wilford Industries",
-  description: "Official public portal of Wilford Industries."
+  title: "Wilford Panem Union",
+  description: "Official State Portal of the Wilford Panem Union."
 };
 
 export default function RootLayout({ children }) {

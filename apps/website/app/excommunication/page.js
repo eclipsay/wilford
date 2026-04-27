@@ -14,17 +14,17 @@ export default async function ExcommunicationPage() {
   return (
     <SiteLayout>
       <PageHero
-        eyebrow="Discipline Register"
-        title="Excommunications And Enemy Nations"
-        description="A formal register of removed individuals and hostile nations."
+        eyebrow="National Security Register"
+        title="National Security Register"
+        description="A formal register of removed individuals, hostile nations, and state adversaries."
       />
 
       <main className="content">
         <section className="panel list-panel">
           <div className="panel__header">
             <div>
-              <p className="eyebrow">Formal Register</p>
-              <h2>Excommunications</h2>
+              <p className="eyebrow">Internal Stability</p>
+              <h2>Removed Individuals</h2>
             </div>
           </div>
           {excommunications.length ? (
@@ -47,7 +47,7 @@ export default async function ExcommunicationPage() {
               ))}
             </div>
           ) : (
-            <p className="lead">No excommunications are currently published.</p>
+            <p className="lead">No removed individuals are currently published.</p>
           )}
         </section>
 

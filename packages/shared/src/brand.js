@@ -1,5 +1,5 @@
 export const brand = {
-  name: "Wilford Panem Union",
-  tagline: "One Union, One Future",
+  name: "WILFORD PANEM UNION",
+  tagline: "ONE UNION. ONE FUTURE.",
   chairman: "Lemmie"
 };

@@ -165,6 +165,26 @@ h3 {
   background: rgba(44, 14, 12, 0.84);
 }
 
+.admin-portal-button {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  border-color: rgba(243, 204, 138, 0.78);
+  background:
+    linear-gradient(180deg, rgba(243, 204, 138, 0.12), rgba(46, 12, 10, 0.84)),
+    rgba(8, 4, 4, 0.84);
+  box-shadow: inset 0 0 0 1px rgba(243, 204, 138, 0.08), 0 0 18px rgba(211, 161, 73, 0.08);
+  white-space: nowrap;
+}
+
+.admin-portal-button:hover,
+.admin-portal-button:focus-visible {
+  border-color: var(--gold-bright);
+  background:
+    linear-gradient(180deg, rgba(243, 204, 138, 0.2), rgba(71, 18, 14, 0.92)),
+    rgba(8, 4, 4, 0.92);
+  box-shadow: 0 0 28px rgba(243, 204, 138, 0.24), inset 0 0 0 1px rgba(243, 204, 138, 0.14);
+}
+
 .button--active {
   background: rgba(67, 18, 14, 0.96);
   border-color: var(--gold);
@@ -4498,5 +4518,808 @@ h3 {
 
   .union-final .state-hero__button {
     width: min(320px, 100%);
+  }
+}
+
+/* Premium WPU redesign layer */
+body {
+  background:
+    radial-gradient(circle at 16% 8%, rgba(116, 24, 18, 0.28), transparent 28%),
+    radial-gradient(circle at 78% 18%, rgba(216, 168, 95, 0.08), transparent 24%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 14px),
+    linear-gradient(180deg, #120606 0%, #070303 48%, #020202 100%);
+}
+
+.site-shell {
+  border: 0;
+  background:
+    linear-gradient(90deg, rgba(218, 170, 96, 0.08) 0 1px, transparent 1px calc(100% - 1px), rgba(218, 170, 96, 0.08) calc(100% - 1px)),
+    linear-gradient(180deg, rgba(255, 232, 184, 0.035), transparent 18%);
+}
+
+.topbar {
+  padding: 14px clamp(18px, 3vw, 56px);
+  border-bottom-color: rgba(218, 170, 96, 0.34);
+  background:
+    linear-gradient(180deg, rgba(12, 4, 4, 0.96), rgba(12, 4, 4, 0.82)),
+    rgba(12, 4, 4, 0.9);
+}
+
+.brand-mark {
+  width: 58px;
+  height: 58px;
+  padding: 4px;
+  object-fit: contain;
+}
+
+.brand-copy strong {
+  font-size: 0.92rem;
+}
+
+.brand-copy small {
+  color: var(--gold);
+  letter-spacing: 0.16em;
+}
+
+.nav {
+  gap: clamp(12px, 1.5vw, 22px);
+}
+
+.site-footer {
+  justify-content: space-between;
+  padding-inline: clamp(18px, 4vw, 72px);
+}
+
+.site-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-top: 10px;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+}
+
+.content,
+.government-hero,
+.government-chart,
+.government-principles,
+.union-scroll-history__stage,
+.union-history-cards,
+.union-archive-section,
+.union-engine-section,
+.union-credit-section,
+.union-modern-section,
+.union-final-cinema {
+  width: min(1500px, calc(100% - 48px));
+}
+
+.content--wide {
+  width: min(1540px, calc(100% - 48px));
+}
+
+.hero {
+  padding: clamp(76px, 9vw, 126px) 24px 46px;
+  position: relative;
+}
+
+.hero::after,
+.state-section::before,
+.state-mandates::before {
+  content: "";
+  display: block;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(243, 204, 138, 0.62), transparent);
+  box-shadow: 0 0 18px rgba(243, 204, 138, 0.2);
+}
+
+.hero::after {
+  width: min(760px, 70vw);
+  margin: 28px auto 0;
+}
+
+.state-home {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(113, 25, 19, 0.22), transparent 30%),
+    linear-gradient(180deg, #070303, #020202);
+}
+
+.state-hero {
+  background-image:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08) 34%, rgba(0, 0, 0, 0.56) 70%, rgba(0, 0, 0, 0.92) 100%),
+    url("/lemmie-16x9.png");
+  background-position:
+    center center,
+    center top;
+  background-size:
+    100% 100%,
+    105% auto;
+}
+
+.state-hero__copy {
+  width: min(820px, 100%);
+}
+
+.state-hero h1 {
+  color: var(--gold-bright);
+  font-size: clamp(3rem, 6vw, 6.8rem);
+  text-shadow: 0 0 34px rgba(216, 168, 95, 0.22), 0 16px 44px rgba(0, 0, 0, 0.92);
+}
+
+.state-hero__decree {
+  max-width: 700px;
+  color: rgba(245, 223, 177, 0.9);
+  line-height: 1.5;
+}
+
+.state-creed {
+  background:
+    linear-gradient(180deg, rgba(22, 7, 6, 0.74), rgba(0, 0, 0, 0.86)),
+    rgba(0, 0, 0, 0.78);
+}
+
+.state-mandates,
+.state-section {
+  position: relative;
+  margin: 0 auto;
+  padding: clamp(56px, 7vw, 96px) 0;
+}
+
+.state-mandates {
+  width: min(1500px, calc(100% - 48px));
+}
+
+.state-mandates__heading,
+.state-section > .eyebrow,
+.state-section > h2 {
+  text-align: center;
+}
+
+.state-mandates__heading {
+  margin-bottom: 28px;
+}
+
+.state-section::before,
+.state-mandates::before {
+  width: 100%;
+  margin-bottom: clamp(34px, 4vw, 52px);
+}
+
+.state-mandates__grid,
+.premium-grid,
+.people-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.state-mandates__grid,
+.premium-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.premium-grid--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.premium-card,
+.quote-card,
+.people-card,
+.finance-panel,
+.wallet-card {
+  border: 1px solid rgba(218, 170, 96, 0.3);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 82% 0%, rgba(243, 204, 138, 0.09), transparent 34%),
+    linear-gradient(180deg, rgba(88, 20, 16, 0.48), rgba(8, 4, 4, 0.96)),
+    rgba(12, 5, 5, 0.92);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.premium-card:hover,
+.people-card:hover,
+.finance-panel:hover,
+.wallet-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(243, 204, 138, 0.76);
+  box-shadow: 0 0 42px rgba(211, 161, 73, 0.15), 0 24px 70px rgba(0, 0, 0, 0.44);
+}
+
+.premium-card {
+  min-height: 170px;
+  padding: 24px;
+}
+
+.premium-card p,
+.state-section p,
+.people-card span,
+.finance-panel,
+.wallet-card span {
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+
+.chairman-page .chairman-portrait-hero {
+  max-width: none;
+  border-radius: 8px;
+}
+
+.chairman-page .chairman-portrait-hero__figure {
+  order: 0;
+}
+
+.state-timeline {
+  display: grid;
+  gap: 14px;
+  max-width: 980px;
+  margin: 28px auto 0;
+  padding: 0;
+  list-style: none;
+}
+
+.state-timeline li {
+  padding: 20px 22px;
+  border: 1px solid rgba(218, 170, 96, 0.24);
+  border-radius: 8px;
+  background: rgba(7, 4, 4, 0.62);
+}
+
+.state-timeline span,
+.quote-card {
+  color: var(--gold-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.state-timeline p {
+  margin: 8px 0 0;
+}
+
+.quote-card {
+  margin: 0;
+  min-height: 180px;
+  padding: 26px;
+  font-size: clamp(1.15rem, 2vw, 1.6rem);
+  line-height: 1.35;
+}
+
+.government-page {
+  padding-top: clamp(82px, 9vw, 150px);
+}
+
+.government-ministries {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.government-ministry {
+  border-radius: 8px;
+}
+
+.government-ministry p:not(.government-office__rank) {
+  color: var(--text-soft);
+  line-height: 1.68;
+}
+
+.government-ministry strong {
+  display: block;
+  margin-top: 18px;
+  color: var(--gold-bright);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.government-ministry--mss {
+  grid-column: span 2;
+  min-height: 340px;
+  border-color: rgba(243, 204, 138, 0.58);
+  background:
+    radial-gradient(circle at 78% 10%, rgba(243, 204, 138, 0.14), transparent 32%),
+    linear-gradient(180deg, rgba(20, 7, 7, 0.96), rgba(4, 4, 5, 0.98)),
+    #050505;
+  box-shadow: 0 0 46px rgba(211, 161, 73, 0.12), var(--shadow);
+}
+
+.people-directory .state-section {
+  padding-top: 42px;
+}
+
+.people-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 28px;
+}
+
+.people-card {
+  overflow: hidden;
+}
+
+.people-card__portrait {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  border-bottom: 1px solid rgba(218, 170, 96, 0.22);
+  background:
+    radial-gradient(circle at 50% 12%, rgba(243, 204, 138, 0.16), transparent 40%),
+    #090404;
+}
+
+.people-card__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 16px;
+  filter: drop-shadow(0 0 16px rgba(211, 161, 73, 0.18));
+}
+
+.people-card__body {
+  padding: 22px;
+}
+
+.people-card__body p {
+  margin: 0 0 8px;
+  color: var(--gold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.people-card__body span,
+.people-card__body strong {
+  display: block;
+  margin-top: 12px;
+}
+
+.people-card__body strong {
+  color: var(--gold-bright);
+}
+
+.finance-portal {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1fr);
+  gap: 22px;
+  margin-bottom: 22px;
+}
+
+.wallet-card,
+.finance-panel {
+  padding: 26px;
+}
+
+.wallet-card {
+  min-height: 390px;
+  display: grid;
+  align-content: space-between;
+  background:
+    linear-gradient(135deg, rgba(243, 204, 138, 0.16), transparent 42%),
+    linear-gradient(180deg, rgba(6, 13, 13, 0.92), rgba(8, 4, 4, 0.98));
+}
+
+.wallet-card p,
+.wallet-card h2 {
+  margin: 0;
+}
+
+.wallet-card__balance {
+  color: var(--gold-bright);
+  font-size: clamp(2.4rem, 5vw, 5rem);
+  line-height: 1;
+  text-shadow: 0 0 28px rgba(243, 204, 138, 0.2);
+}
+
+.finance-panel--metrics {
+  grid-column: 2;
+}
+
+.finance-bars {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.finance-bar span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.finance-bar i {
+  display: block;
+  width: var(--value);
+  max-width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6f1711, var(--gold-bright));
+  box-shadow: 0 0 18px rgba(243, 204, 138, 0.2);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric-grid span {
+  padding: 18px;
+  border: 1px solid rgba(218, 170, 96, 0.18);
+  border-radius: 6px;
+  background: rgba(5, 5, 5, 0.46);
+}
+
+.metric-grid strong {
+  display: block;
+  color: var(--gold-bright);
+  font-size: 1.9rem;
+}
+
+.state-warning,
+.service-line {
+  margin: 30px auto 0;
+  color: var(--gold-bright);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.application-panel {
+  max-width: 1080px;
+  border-radius: 8px;
+}
+
+.recruitment-overview > div:first-child {
+  max-width: 780px;
+  margin: 0 auto 26px;
+  text-align: center;
+}
+
+.recruitment-roles .premium-card {
+  min-height: 100px;
+}
+
+.union-scroll-history {
+  min-height: 760vh;
+}
+
+.union-track__train {
+  width: min(900px, 60vw);
+  transform: translateX(calc(var(--union-progress) * 0.24vw));
+}
+
+.union-scroll-history__markers {
+  grid-template-columns: repeat(9, 1fr);
+}
+
+.union-panem-map__continent {
+  fill: rgba(33, 18, 9, 0.72);
+  stroke: rgba(243, 204, 138, 0.62);
+}
+
+.union-cinema--animated .scroll-fade,
+.scroll-fade {
+  animation: none;
+}
+
+@supports (animation-timeline: view()) {
+  .scroll-fade {
+    opacity: 0;
+    transform: translateY(28px);
+    animation: wpu-scroll-fade both;
+    animation-timeline: view();
+    animation-range: entry 8% cover 28%;
+  }
+}
+
+@keyframes wpu-scroll-fade {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1160px) {
+  .government-ministries,
+  .people-grid,
+  .premium-grid--four,
+  .state-mandates__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-portal {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-panel--metrics {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .content,
+  .content--wide,
+  .state-mandates,
+  .government-hero,
+  .government-chart,
+  .government-principles {
+    width: min(100% - 24px, 1500px);
+  }
+
+  .site-footer {
+    justify-content: center;
+  }
+
+  .site-footer__links {
+    justify-content: center;
+  }
+
+  .brand-mark {
+    width: 64px;
+    height: 64px;
+  }
+
+  .state-hero {
+    background-size:
+      100% 100%,
+      cover;
+  }
+
+  .state-hero h1 {
+    font-size: clamp(2.15rem, 11vw, 3rem);
+  }
+
+  .state-mandates__grid,
+  .premium-grid,
+  .premium-grid--three,
+  .premium-grid--four,
+  .people-grid,
+  .government-ministries,
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .government-ministry--mss {
+    grid-column: auto;
+  }
+
+  .wallet-card {
+    min-height: 310px;
+  }
+}
+
+/* State portal navigation and access hubs */
+.portal-page {
+  padding-bottom: 86px;
+}
+
+.portal-intro,
+.mss-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  gap: 24px;
+  align-items: stretch;
+  margin-bottom: 28px;
+  padding: clamp(26px, 4vw, 44px);
+  border: 1px solid rgba(218, 170, 96, 0.32);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(243, 204, 138, 0.11), transparent 30%),
+    linear-gradient(180deg, rgba(88, 20, 16, 0.36), rgba(8, 4, 4, 0.94)),
+    rgba(12, 5, 5, 0.92);
+  box-shadow: var(--shadow);
+}
+
+.portal-page--citizen .portal-intro {
+  background:
+    radial-gradient(circle at 78% 16%, rgba(243, 204, 138, 0.15), transparent 30%),
+    linear-gradient(180deg, rgba(111, 27, 19, 0.44), rgba(12, 5, 5, 0.92)),
+    rgba(12, 5, 5, 0.92);
+}
+
+.portal-intro h2,
+.mss-command h2 {
+  margin-top: 8px;
+  font-size: clamp(1.9rem, 4vw, 3.8rem);
+  line-height: 0.98;
+}
+
+.portal-intro p,
+.mss-command p {
+  color: var(--text-soft);
+  line-height: 1.75;
+}
+
+.portal-status,
+.mss-seal {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 230px;
+  padding: 24px;
+  border: 1px solid rgba(243, 204, 138, 0.28);
+  border-radius: 8px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(243, 204, 138, 0.18), transparent 42%),
+    rgba(7, 4, 4, 0.58);
+}
+
+.portal-status span,
+.restricted-banner span,
+.mss-seal strong {
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+}
+
+.portal-status strong,
+.mss-seal span {
+  display: block;
+  margin-top: 8px;
+  color: var(--gold-bright);
+  font-size: clamp(2rem, 4vw, 4rem);
+  line-height: 1;
+  text-transform: uppercase;
+  text-shadow: 0 0 26px rgba(243, 204, 138, 0.18);
+}
+
+.portal-status p {
+  margin: 16px 0 0;
+}
+
+.portal-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.portal-grid--restricted {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.portal-card {
+  min-height: 230px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 22px;
+  border: 1px solid rgba(218, 170, 96, 0.28);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 82% 4%, rgba(243, 204, 138, 0.09), transparent 34%),
+    linear-gradient(180deg, rgba(74, 18, 14, 0.42), rgba(8, 4, 4, 0.95)),
+    rgba(9, 4, 4, 0.9);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.portal-card:hover,
+.portal-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: rgba(243, 204, 138, 0.76);
+  box-shadow: 0 0 42px rgba(211, 161, 73, 0.15), var(--shadow);
+}
+
+.portal-card span {
+  color: var(--gold-bright);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.portal-card p {
+  color: var(--text-soft);
+  line-height: 1.65;
+}
+
+.portal-card strong {
+  color: var(--gold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.portal-card--public {
+  background:
+    radial-gradient(circle at 82% 4%, rgba(243, 204, 138, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(103, 25, 18, 0.46), rgba(8, 4, 4, 0.92)),
+    rgba(9, 4, 4, 0.9);
+}
+
+.portal-page--restricted {
+  background:
+    radial-gradient(circle at 50% 8%, rgba(243, 204, 138, 0.08), transparent 24%),
+    linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.16));
+}
+
+.restricted-banner {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 28px;
+  padding: clamp(22px, 3vw, 34px);
+  border: 1px solid rgba(243, 204, 138, 0.46);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.78), rgba(41, 9, 8, 0.88)),
+    rgba(5, 5, 5, 0.96);
+  box-shadow: 0 0 42px rgba(211, 161, 73, 0.1), var(--shadow);
+}
+
+.restricted-banner strong {
+  color: var(--gold-bright);
+  font-size: clamp(1.25rem, 2.4vw, 2.1rem);
+  text-transform: uppercase;
+}
+
+.restricted-banner p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.65;
+}
+
+.government-access-comms {
+  padding-bottom: clamp(36px, 5vw, 66px);
+}
+
+.government-access-comms .public-crypto-form,
+.government-access-comms .panel {
+  max-width: 980px;
+  margin-inline: auto;
+}
+
+.portal-card--restricted {
+  border-color: rgba(243, 204, 138, 0.38);
+  background:
+    linear-gradient(180deg, rgba(16, 16, 18, 0.92), rgba(5, 5, 5, 0.98)),
+    #050505;
+}
+
+.mss-page {
+  padding-bottom: 86px;
+}
+
+.mss-command {
+  background:
+    radial-gradient(circle at 82% 16%, rgba(243, 204, 138, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(14, 14, 16, 0.94), rgba(5, 5, 5, 0.98)),
+    #050505;
+}
+
+.mss-seal {
+  border-color: rgba(243, 204, 138, 0.5);
+}
+
+.premium-card--security {
+  background:
+    linear-gradient(180deg, rgba(16, 16, 18, 0.92), rgba(5, 5, 5, 0.98)),
+    #050505;
+}
+
+.restricted-banner--mss {
+  margin-top: 28px;
+}
+
+@media (max-width: 1300px) {
+  .portal-grid,
+  .portal-grid--restricted {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .portal-intro,
+  .mss-command {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .portal-grid,
+  .portal-grid--restricted {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-card {
+    min-height: 190px;
   }
 }

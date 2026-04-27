@@ -86,6 +86,6 @@ export const applicationQuestions = [
   "What name should Wilford staff use for you?",
   "How old are you?",
   "What timezone are you in and when are you usually active?",
-  "Why do you want to join Wilford Industries?",
+  "Why do you want to serve the Wilford Panem Union?",
   "What skills, experience, or roles would you bring to the group?"
 ];
