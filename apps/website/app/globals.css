@@ -1704,10 +1704,10 @@ h3 {
     url("/lemmie-16x9.png");
   background-position:
     center center,
-    center center;
+    center top;
   background-size:
     100% 100%,
-    cover;
+    100% auto;
   background-repeat: no-repeat;
 }
 
@@ -4080,6 +4080,14 @@ h3 {
   margin: 0;
 }
 
+@media (min-width: 1800px) {
+  .state-hero {
+    background-size:
+      100% 100%,
+      1900px auto;
+  }
+}
+
 @media (max-width: 1160px) {
   .topbar {
     position: sticky;
@@ -4103,7 +4111,10 @@ h3 {
     min-height: 900px;
     background-position:
       center center,
-      center center;
+      center top;
+    background-size:
+      100% 100%,
+      100% auto;
   }
 
   .state-hero::before {
