@@ -1,28 +1,49 @@
 import Link from "next/link";
-import { PublicDecrypter } from "../../components/PublicDecrypter";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
+import {
+  canAccess,
+  getAuditLog,
+  getGovernmentUsers,
+  requireGovernmentUser
+} from "../../lib/government-auth";
 
-const restrictedRecords = [
+const systems = [
   {
-    title: "Command Registry",
-    text: "Operational command references, staff tools, and review workflows.",
-    href: "/commands"
+    title: "User Control Panel",
+    text: "Manage government users, roles, status, temporary passwords, and account notes.",
+    href: "/government-access/users",
+    permission: "userControl"
   },
   {
-    title: "National Security Register",
-    text: "Formal register of removed individuals, hostile nations, and state adversaries.",
-    href: "/excommunication"
+    title: "Bulletin Control",
+    text: "Create and maintain public WPU News Bulletin directives.",
+    href: "/government-access/bulletins",
+    permission: "bulletinControl"
   },
   {
-    title: "Internal Records",
-    text: "Restricted administrative ledgers and ministry record indexes.",
-    href: "/commits"
+    title: "Supreme Court Control",
+    text: "Manage cases, rulings, evidence, access keys, and formal statements.",
+    href: "/government-access/supreme-court",
+    permission: "supremeCourtControl"
   },
   {
-    title: "Executive Notices",
-    text: "Priority notices issued for executive review and state continuity.",
-    href: "/panel-access"
+    title: "MSS Console",
+    text: "Ministry of State Security command tools and protected registries.",
+    href: "/government-access/mss-console",
+    permission: "mssTools"
+  },
+  {
+    title: "Citizenship Review",
+    text: "Review citizenship applications and clerk intake material.",
+    href: "/government-access/citizenship",
+    permission: "citizenshipReview"
+  },
+  {
+    title: "Audit Log",
+    text: "View login attempts, access denials, user actions, and restricted edits.",
+    href: "/government-access/audit",
+    permission: "auditLog"
   }
 ];
 
@@ -30,39 +51,139 @@ export const metadata = {
   title: "Government Access"
 };
 
-export default function GovernmentAccessPage() {
+export default async function GovernmentAccessPage({ searchParams }) {
+  const user = await requireGovernmentUser("dashboard");
+  const params = await searchParams;
+  const users = await getGovernmentUsers();
+  const auditLog = await getAuditLog();
+  const recentLogins = users
+    .filter((item) => item.lastLoginAt)
+    .sort((a, b) => new Date(b.lastLoginAt) - new Date(a.lastLoginAt))
+    .slice(0, 5);
+
   return (
     <SiteLayout>
       <PageHero
-        eyebrow="Restricted Government Channel"
+        eyebrow="Restricted Government System"
         title="Government Access"
-        description="Secure communications, command records, security registers, internal records, and executive notices."
+        description="Secure WPU command dashboard for authorised personnel."
       />
 
-      <main className="content content--wide portal-page portal-page--restricted">
-        <section className="restricted-banner scroll-fade">
-          <span>Restricted State Access</span>
-          <strong>Ministry credentials required beyond this point.</strong>
+      <main className="content content--wide portal-page portal-page--restricted government-command-page">
+        <section className="restricted-banner government-secure-banner scroll-fade">
+          <span>Restricted Government System</span>
+          <strong>Unauthorised access is prohibited.</strong>
           <p>
-            Unauthorized handling of government material is recorded by the
-            Ministry of State Security.
+            Access is logged. Credentials are role-bound. Do not share government accounts,
+            temporary passwords, or restricted case keys.
           </p>
         </section>
 
-        <section className="state-section government-access-comms scroll-fade" aria-labelledby="secure-comms-title">
-          <p className="eyebrow">Secure Communications</p>
-          <h2 id="secure-comms-title">Encrypted State Channel</h2>
-          <PublicDecrypter />
+        {params?.denied ? (
+          <section className="application-notice application-notice--error">
+            <strong>Access Denied</strong>
+            <p>Your assigned role does not permit that restricted system.</p>
+          </section>
+        ) : null}
+
+        {params?.passwordChanged ? (
+          <section className="application-notice">
+            <strong>Password Updated</strong>
+            <p>Your temporary password has been replaced.</p>
+          </section>
+        ) : null}
+
+        {user.forcePasswordChange ? (
+          <section className="application-notice application-notice--error">
+            <strong>Password Change Required</strong>
+            <p>Replace your temporary password before using restricted tools.</p>
+            <Link className="button button--solid-site" href="/government-access/change-password">
+              Change Password
+            </Link>
+          </section>
+        ) : null}
+
+        <section className="government-dashboard-grid scroll-fade">
+          <article className="government-status-panel">
+            <p className="eyebrow">Access Status</p>
+            <h2>Authenticated</h2>
+            <dl>
+              <div>
+                <dt>Logged-in User</dt>
+                <dd>{user.displayName || user.username}</dd>
+              </div>
+              <div>
+                <dt>User Role</dt>
+                <dd>{user.role}</dd>
+              </div>
+              <div>
+                <dt>Account Status</dt>
+                <dd>{user.active ? "Active" : "Inactive"}</dd>
+              </div>
+            </dl>
+            <form action="/government-access/logout" method="post">
+              <button className="button button--danger-site" type="submit">
+                Logout
+              </button>
+            </form>
+          </article>
+
+          <article className="government-status-panel">
+            <p className="eyebrow">Recent Logins</p>
+            <h2>Credential Activity</h2>
+            <ul className="government-mini-list">
+              {recentLogins.map((item) => (
+                <li key={item.username}>
+                  <span>{item.displayName || item.username}</span>
+                  <strong>{item.lastLoginAt}</strong>
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="government-status-panel">
+            <p className="eyebrow">Security Notices</p>
+            <h2>Standing Orders</h2>
+            <ul className="government-mini-list">
+              <li>
+                <span>Password Policy</span>
+                <strong>Password hidden for security.</strong>
+              </li>
+              <li>
+                <span>Temporary Passwords</span>
+                <strong>Shown once only after creation or reset.</strong>
+              </li>
+              <li>
+                <span>Audit Events</span>
+                <strong>{auditLog.length} entries recorded.</strong>
+              </li>
+            </ul>
+          </article>
         </section>
 
-        <section className="portal-grid portal-grid--restricted scroll-fade" aria-label="Government access records">
-          {restrictedRecords.map((record) => (
-            <Link className="portal-card portal-card--restricted" href={record.href} key={record.title}>
-              <span>{record.title}</span>
-              <p>{record.text}</p>
-              <strong>Authorize</strong>
-            </Link>
-          ))}
+        <section className="state-section scroll-fade" aria-labelledby="restricted-systems-title">
+          <p className="eyebrow">Restricted Systems</p>
+          <h2 id="restricted-systems-title">Command Modules</h2>
+          <div className="portal-grid portal-grid--restricted government-system-grid">
+            {systems.map((system) => {
+              const allowed = canAccess(user, system.permission);
+              const CardTag = allowed && !user.forcePasswordChange ? Link : "article";
+
+              return (
+                <CardTag
+                  className={`portal-card portal-card--restricted government-system-card ${
+                    allowed && !user.forcePasswordChange ? "" : "government-system-card--locked"
+                  }`}
+                  href={allowed && !user.forcePasswordChange ? system.href : undefined}
+                  key={system.title}
+                >
+                  <span>{system.title}</span>
+                  <p>{system.text}</p>
+                  <strong>{allowed ? "Authorised" : "Restricted"}</strong>
+                </CardTag>
+              );
+            })}
+          </div>
         </section>
       </main>
     </SiteLayout>

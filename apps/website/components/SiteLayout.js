@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { brand } from "@wilford/shared";
+import { NewsTicker } from "./NewsTicker";
 
 const stateNavigation = [
   { label: "The Chairman", href: "/chairman" },
@@ -9,11 +10,13 @@ const stateNavigation = [
   { label: "The People", href: "/members" },
   { label: "Panem Credit", href: "/panem-credit" },
   { label: "Ministry of State Security", href: "/ministry-of-state-security" },
+  { label: "SUPREME COURT", href: "/supreme-court" },
   { label: "Citizen Portal", href: "/citizen-portal" },
+  { label: "CITIZENSHIP", href: "/citizenship" },
   { label: "Government Access", href: "/government-access", align: "right" }
 ];
 
-export function SiteLayout({ children }) {
+export async function SiteLayout({ children }) {
   const panelUrl = "https://panel.wilfordindustries.org/";
 
   return (
@@ -58,6 +61,8 @@ export function SiteLayout({ children }) {
         </a>
       </header>
 
+      <NewsTicker />
+
       {children}
 
       <footer className="site-footer" aria-label="Official state portal">
@@ -75,7 +80,8 @@ export function SiteLayout({ children }) {
             <Link href="/government">Government</Link>
             <Link href="/information">The Union</Link>
             <Link href="/panem-credit">Panem Credit</Link>
-            <Link href="/apply">Apply</Link>
+            <Link href="/supreme-court">Supreme Court</Link>
+            <Link href="/citizenship">Citizenship</Link>
             <Link href="/chairman">The Chairman</Link>
             <Link href="/citizen-portal">Citizen Portal</Link>
             <Link href="/government-access">Government Access</Link>
