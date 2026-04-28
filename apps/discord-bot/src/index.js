@@ -1185,6 +1185,50 @@ function classificationForBroadcast(broadcast, issuerName) {
   return "Official News";
 }
 
+async function getLinkedBroadcastArticle(broadcast) {
+  if (broadcast.linkedType !== "article" || !broadcast.linkedId) {
+    return null;
+  }
+
+  const response = await fetch(`${apiUrl}/api/content`, {
+    cache: "no-store"
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    return null;
+  }
+
+  const payload = await response.json().catch(() => null);
+  const articles = Array.isArray(payload?.articles) ? payload.articles : [];
+  return articles.find((article) => article.id === broadcast.linkedId) || null;
+}
+
+async function enrichArticleBroadcast(broadcast) {
+  const article = await getLinkedBroadcastArticle(broadcast);
+
+  if (!article) {
+    return broadcast;
+  }
+
+  const articleImage =
+    article.imageUrl ||
+    article.heroImage ||
+    article.image ||
+    article.thumbnail ||
+    article.thumbnailUrl ||
+    "";
+
+  return {
+    ...broadcast,
+    headline: broadcast.headline || article.title,
+    excerpt: broadcast.excerpt || article.subtitle || article.body,
+    issuer: broadcast.issuer || article.source || article.category,
+    classification: broadcast.classification || article.category || "Official News",
+    imageUrl: broadcast.imageUrl || articleImage,
+    articleUrl: broadcast.articleUrl || `/news/${article.id}`
+  };
+}
+
 function buildBroadcastEmbed(broadcast) {
   const parsed = parseLegacyBroadcastBody(broadcast.body);
   const headline = cleanBroadcastLine(
@@ -1307,6 +1351,7 @@ async function notifyLemmieForBroadcastApproval(broadcast) {
 }
 
 async function sendBroadcastToChannel(broadcast, results) {
+  const enrichedBroadcast = await enrichArticleBroadcast(broadcast);
   const channelId = channelIdForBroadcast(broadcast);
 
   if (!channelId) {
@@ -1324,14 +1369,15 @@ async function sendBroadcastToChannel(broadcast, results) {
   }
 
   await channel.send({
-    embeds: [buildBroadcastEmbed(broadcast)],
-    components: buildBroadcastComponents(broadcast)
+    embeds: [buildBroadcastEmbed(enrichedBroadcast)],
+    components: buildBroadcastComponents(enrichedBroadcast)
   });
   results.recipients.push({ target: channelId, method: "channel" });
   results.successCount += 1;
 }
 
 async function sendBroadcastDm(userId, broadcast, results) {
+  const enrichedBroadcast = await enrichArticleBroadcast(broadcast);
   const user = await client.users.fetch(userId).catch(() => null);
 
   if (!user || user.bot) {
@@ -1342,8 +1388,8 @@ async function sendBroadcastDm(userId, broadcast, results) {
 
   try {
     await user.send({
-      embeds: [buildBroadcastEmbed(broadcast)],
-      components: buildBroadcastComponents(broadcast)
+      embeds: [buildBroadcastEmbed(enrichedBroadcast)],
+      components: buildBroadcastComponents(enrichedBroadcast)
     });
     results.recipients.push({ target: userId, method: "dm" });
     results.successCount += 1;
