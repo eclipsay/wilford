@@ -34,7 +34,9 @@ import {
   updatePublicApplication,
   updateAlliancePosition,
   updateBulletin,
+  updateGovernmentAccessStore,
   updateMemberPosition,
+  updateSupremeCourtStore,
   updateSettings
 } from "./content-store.js";
 import {
@@ -92,7 +94,22 @@ app.get("/health", (_req, res) => {
 
 app.get("/api/content", async (_req, res) => {
   const content = await getContent();
-  const { panelUsers, ...publicContent } = content;
+  const {
+    panelUsers,
+    governmentUsers,
+    governmentAuditLog,
+    ...publicContent
+  } = content;
+
+  if (Array.isArray(publicContent.supremeCourtCases)) {
+    publicContent.supremeCourtCases = publicContent.supremeCourtCases.map(
+      ({ accessKeys, statements, ...courtCase }) => ({
+        ...courtCase,
+        statementCount: Array.isArray(statements) ? statements.length : 0
+      })
+    );
+  }
+
   res.json(publicContent);
 });
 
@@ -223,6 +240,31 @@ app.post("/api/admin/applications/:id/review-thread", requireAdmin, async (req, 
 app.post("/api/admin/settings", requireAdmin, async (req, res) => {
   const content = await updateSettings(req.body || {});
   res.json({ settings: content.settings });
+});
+
+app.get("/api/admin/government-access-store", requireAdmin, async (_req, res) => {
+  const content = await getContent();
+  res.json({
+    governmentUsers: content.governmentUsers || [],
+    governmentAuditLog: content.governmentAuditLog || []
+  });
+});
+
+app.post("/api/admin/government-access-store", requireAdmin, async (req, res) => {
+  const store = await updateGovernmentAccessStore(req.body || {});
+  res.json(store);
+});
+
+app.get("/api/admin/supreme-court-store", requireAdmin, async (_req, res) => {
+  const content = await getContent();
+  res.json({
+    supremeCourtCases: content.supremeCourtCases || []
+  });
+});
+
+app.post("/api/admin/supreme-court-store", requireAdmin, async (req, res) => {
+  const store = await updateSupremeCourtStore(req.body || {});
+  res.json(store);
 });
 
 app.post("/api/admin/bulletins", requireAdmin, async (req, res) => {

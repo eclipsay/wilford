@@ -30,6 +30,9 @@ const defaultContent = {
   panelUsers: [],
   cryptoLogs: [],
   publicApplications: [],
+  governmentUsers: [],
+  governmentAuditLog: [],
+  supremeCourtCases: [],
   bulletins: [
     {
       id: "bulletin-default-1",
@@ -156,6 +159,9 @@ async function readContentFile() {
       panelUsers: parsed.panelUsers || [],
       cryptoLogs: parsed.cryptoLogs || [],
       publicApplications: parsed.publicApplications || [],
+      governmentUsers: parsed.governmentUsers || [],
+      governmentAuditLog: parsed.governmentAuditLog || [],
+      supremeCourtCases: parsed.supremeCourtCases || [],
       bulletins: withNormalizedOrder(parsed.bulletins || defaultContent.bulletins)
     };
   } catch {
@@ -245,6 +251,37 @@ function reorderOrderedItems(items, orderedIds) {
 
 export async function getContent() {
   return readContentFile();
+}
+
+export async function updateGovernmentAccessStore(fields) {
+  const content = await readContentFile();
+
+  if (Array.isArray(fields.governmentUsers)) {
+    content.governmentUsers = fields.governmentUsers;
+  }
+
+  if (Array.isArray(fields.governmentAuditLog)) {
+    content.governmentAuditLog = fields.governmentAuditLog;
+  }
+
+  await writeContentFile(content);
+  return {
+    governmentUsers: content.governmentUsers,
+    governmentAuditLog: content.governmentAuditLog
+  };
+}
+
+export async function updateSupremeCourtStore(fields) {
+  const content = await readContentFile();
+
+  if (Array.isArray(fields.supremeCourtCases)) {
+    content.supremeCourtCases = fields.supremeCourtCases;
+  }
+
+  await writeContentFile(content);
+  return {
+    supremeCourtCases: content.supremeCourtCases
+  };
 }
 
 export function sanitizePanelUser(user) {

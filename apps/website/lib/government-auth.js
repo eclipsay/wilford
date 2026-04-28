@@ -9,6 +9,13 @@ import { fileURLToPath } from "node:url";
 
 export const governmentSessionCookie = "wpu_government_session";
 
+const baseUrl =
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === "production"
+    ? "https://api.wilfordindustries.org"
+    : "http://localhost:4000");
+
 export const accessRoles = [
   "Supreme Chairman",
   "Executive Director",
@@ -110,6 +117,60 @@ function resolveServerlessWritableFile() {
   return resolve(tmpdir(), "wilford-government-content.json");
 }
 
+function adminApiKey() {
+  return process.env.GOVERNMENT_STORE_API_KEY || process.env.BULLETIN_API_KEY || process.env.ADMIN_API_KEY;
+}
+
+async function readRemoteStore() {
+  const key = adminApiKey();
+
+  if (!key) {
+    throw new Error("Missing admin API key.");
+  }
+
+  const response = await fetch(`${baseUrl}/api/admin/government-access-store`, {
+    headers: {
+      "x-admin-key": key
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(4000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Government Access store read failed with status ${response.status}.`);
+  }
+
+  return response.json();
+}
+
+async function writeRemoteStore(content) {
+  const key = adminApiKey();
+
+  if (!key) {
+    throw new Error("Missing admin API key.");
+  }
+
+  const response = await fetch(`${baseUrl}/api/admin/government-access-store`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": key
+    },
+    body: JSON.stringify({
+      governmentUsers: content.governmentUsers || [],
+      governmentAuditLog: content.governmentAuditLog || []
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(5000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Government Access store write failed with status ${response.status}.`);
+  }
+
+  return response.json();
+}
+
 function authSecret() {
   return (
     process.env.GOVERNMENT_AUTH_SECRET ||
@@ -174,6 +235,14 @@ function normalizeAudit(entry, index) {
 }
 
 async function readContentFile() {
+  try {
+    const parsed = await readRemoteStore();
+    return {
+      governmentUsers: (parsed.governmentUsers?.length ? parsed.governmentUsers : seedUsers).map(normalizeUser),
+      governmentAuditLog: (parsed.governmentAuditLog || []).map(normalizeAudit)
+    };
+  } catch {}
+
   const contentFile = resolveContentFile();
   const fallbackFile = resolveServerlessWritableFile();
 
@@ -204,6 +273,11 @@ async function readContentFile() {
 }
 
 async function writeContentFile(content) {
+  try {
+    await writeRemoteStore(content);
+    return true;
+  } catch {}
+
   const contentFile = resolveContentFile();
   const payload = JSON.stringify(content, null, 2);
 

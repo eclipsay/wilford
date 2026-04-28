@@ -4,6 +4,13 @@ import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
+const baseUrl =
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === "production"
+    ? "https://api.wilfordindustries.org"
+    : "http://localhost:4000");
+
 export const courtStatuses = [
   "Filed",
   "Under Review",
@@ -144,6 +151,66 @@ function resolveServerlessWritableFile() {
   return resolve(tmpdir(), "wilford-supreme-court-content.json");
 }
 
+function adminApiKey() {
+  return process.env.SUPREME_COURT_API_KEY || process.env.BULLETIN_API_KEY || process.env.ADMIN_API_KEY;
+}
+
+async function readRemoteStore(includeRestricted = true) {
+  const key = adminApiKey();
+
+  if (includeRestricted && key) {
+    const response = await fetch(`${baseUrl}/api/admin/supreme-court-store`, {
+      headers: {
+        "x-admin-key": key
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000)
+    });
+
+    if (response.ok) {
+      return response.json();
+    }
+  }
+
+  const response = await fetch(`${baseUrl}/api/content`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(4000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supreme Court store read failed with status ${response.status}.`);
+  }
+
+  return response.json();
+}
+
+async function writeRemoteStore(content) {
+  const key = adminApiKey();
+
+  if (!key) {
+    throw new Error("Missing Supreme Court API key.");
+  }
+
+  const response = await fetch(`${baseUrl}/api/admin/supreme-court-store`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": key
+    },
+    body: JSON.stringify({
+      supremeCourtCases: content.supremeCourtCases || []
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(5000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supreme Court store write failed with status ${response.status}.`);
+  }
+
+  return response.json();
+}
+
 function normalizeList(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item || "").trim()).filter(Boolean);
@@ -232,7 +299,15 @@ function toPublicCase(courtCase) {
   };
 }
 
-async function readContentFile() {
+async function readContentFile({ includeRestricted = true } = {}) {
+  try {
+    const parsed = await readRemoteStore(includeRestricted);
+    return {
+      ...parsed,
+      supremeCourtCases: normalizeCases(parsed.supremeCourtCases?.length ? parsed.supremeCourtCases : defaultCases)
+    };
+  } catch {}
+
   const contentFile = resolveContentFile();
   const fallbackFile = resolveServerlessWritableFile();
 
@@ -260,6 +335,11 @@ async function readContentFile() {
 }
 
 async function writeContentFile(content) {
+  try {
+    await writeRemoteStore(content);
+    return;
+  } catch {}
+
   const contentFile = resolveContentFile();
   const payload = JSON.stringify(content, null, 2);
 
@@ -275,7 +355,7 @@ async function writeContentFile(content) {
 }
 
 export async function getSupremeCourtCases({ includeRestricted = false } = {}) {
-  const content = await readContentFile();
+  const content = await readContentFile({ includeRestricted });
   return includeRestricted
     ? normalizeCases(content.supremeCourtCases)
     : normalizeCases(content.supremeCourtCases).map(toPublicCase);
