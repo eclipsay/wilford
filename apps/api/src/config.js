@@ -14,6 +14,7 @@ export const config = {
   adminApiKey: process.env.ADMIN_API_KEY || "",
   dataFile: resolve(currentDir, "../data/content.json"),
   repoRoot: process.env.REPO_ROOT || resolve(currentDir, "../../.."),
+  apiPm2Name: process.env.API_PM2_NAME || "wilford-api",
   panelPm2Name: process.env.PANEL_PM2_NAME || "wilford-panel",
   botPm2Name: process.env.BOT_PM2_NAME || "wilford-discord-bot",
   panelDeployCommand:

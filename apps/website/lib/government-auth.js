@@ -123,12 +123,13 @@ function adminApiKey() {
 
 async function readRemoteStore() {
   const key = adminApiKey();
+  const requestUrl = `${baseUrl}/api/admin/government-access-store`;
 
   if (!key) {
     throw new Error("Missing admin API key.");
   }
 
-  const response = await fetch(`${baseUrl}/api/admin/government-access-store`, {
+  const response = await fetch(requestUrl, {
     headers: {
       "x-admin-key": key
     },
@@ -137,7 +138,7 @@ async function readRemoteStore() {
   });
 
   if (!response.ok) {
-    throw new Error(`Government Access store read failed with status ${response.status}.`);
+    throw new Error(`Government Access store read failed: ${requestUrl} returned ${response.status}.`);
   }
 
   return response.json();
@@ -145,12 +146,13 @@ async function readRemoteStore() {
 
 async function writeRemoteStore(content) {
   const key = adminApiKey();
+  const requestUrl = `${baseUrl}/api/admin/government-access-store`;
 
   if (!key) {
     throw new Error("Missing admin API key.");
   }
 
-  const response = await fetch(`${baseUrl}/api/admin/government-access-store`, {
+  const response = await fetch(requestUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -165,7 +167,7 @@ async function writeRemoteStore(content) {
   });
 
   if (!response.ok) {
-    throw new Error(`Government Access store write failed with status ${response.status}.`);
+    throw new Error(`Government Access store write failed: ${requestUrl} returned ${response.status}.`);
   }
 
   return response.json();

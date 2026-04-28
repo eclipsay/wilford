@@ -157,9 +157,10 @@ function adminApiKey() {
 
 async function readRemoteStore(includeRestricted = true) {
   const key = adminApiKey();
+  const adminUrl = `${baseUrl}/api/admin/supreme-court-store`;
 
   if (includeRestricted && key) {
-    const response = await fetch(`${baseUrl}/api/admin/supreme-court-store`, {
+    const response = await fetch(adminUrl, {
       headers: {
         "x-admin-key": key
       },
@@ -170,15 +171,18 @@ async function readRemoteStore(includeRestricted = true) {
     if (response.ok) {
       return response.json();
     }
+
+    throw new Error(`Supreme Court store read failed: ${adminUrl} returned ${response.status}.`);
   }
 
-  const response = await fetch(`${baseUrl}/api/content`, {
+  const publicUrl = `${baseUrl}/api/content`;
+  const response = await fetch(publicUrl, {
     cache: "no-store",
     signal: AbortSignal.timeout(4000)
   });
 
   if (!response.ok) {
-    throw new Error(`Supreme Court store read failed with status ${response.status}.`);
+    throw new Error(`Supreme Court store read failed: ${publicUrl} returned ${response.status}.`);
   }
 
   return response.json();
@@ -186,12 +190,13 @@ async function readRemoteStore(includeRestricted = true) {
 
 async function writeRemoteStore(content) {
   const key = adminApiKey();
+  const requestUrl = `${baseUrl}/api/admin/supreme-court-store`;
 
   if (!key) {
     throw new Error("Missing Supreme Court API key.");
   }
 
-  const response = await fetch(`${baseUrl}/api/admin/supreme-court-store`, {
+  const response = await fetch(requestUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -205,7 +210,7 @@ async function writeRemoteStore(content) {
   });
 
   if (!response.ok) {
-    throw new Error(`Supreme Court store write failed with status ${response.status}.`);
+    throw new Error(`Supreme Court store write failed: ${requestUrl} returned ${response.status}.`);
   }
 
   return response.json();

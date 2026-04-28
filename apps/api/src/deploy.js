@@ -32,7 +32,9 @@ function getDeployPlan(target) {
     return [
       {
         shellCommand: config.panelDeployCommand
-      }
+      },
+      { command: "npm", args: ["run", "build", "--workspace", "@wilford/api"] },
+      { command: "pm2", args: ["restart", config.apiPm2Name] }
     ];
   }
 
@@ -54,7 +56,10 @@ function getDeployPlan(target) {
 
   return [
     { command: "git", args: ["pull", "--ff-only", "origin", "main"] },
+    { command: "npm", args: ["install"] },
+    { command: "npm", args: ["run", "build", "--workspace", "@wilford/api"] },
     { command: "npm", args: ["run", "build", "--workspace", "@wilford/panel"] },
+    { command: "pm2", args: ["restart", config.apiPm2Name] },
     { command: "pm2", args: ["restart", config.panelPm2Name] }
   ];
 }

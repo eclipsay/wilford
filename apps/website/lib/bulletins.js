@@ -287,12 +287,13 @@ async function writeContentFile(content) {
 
 async function requestAdminBulletins(path, options = {}) {
   const adminKey = process.env.BULLETIN_API_KEY || process.env.ADMIN_API_KEY;
+  const requestUrl = `${baseUrl}${path}`;
 
   if (!adminKey) {
     throw new Error("Missing BULLETIN_API_KEY or ADMIN_API_KEY in the website environment.");
   }
 
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetch(requestUrl, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -307,7 +308,7 @@ async function requestAdminBulletins(path, options = {}) {
     const data = await response.json().catch(() => null);
     throw new Error(
       data?.error ||
-        `Bulletin API request failed with status ${response.status}.`
+        `Bulletin API request failed: ${requestUrl} returned ${response.status}.`
     );
   }
 
