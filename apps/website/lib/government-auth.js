@@ -171,6 +171,10 @@ async function writeRemoteStore(content) {
   return response.json();
 }
 
+function isProductionRuntime() {
+  return process.env.NODE_ENV === "production";
+}
+
 function authSecret() {
   return (
     process.env.GOVERNMENT_AUTH_SECRET ||
@@ -276,7 +280,11 @@ async function writeContentFile(content) {
   try {
     await writeRemoteStore(content);
     return true;
-  } catch {}
+  } catch (error) {
+    if (isProductionRuntime()) {
+      throw error;
+    }
+  }
 
   const contentFile = resolveContentFile();
   const payload = JSON.stringify(content, null, 2);

@@ -211,6 +211,10 @@ async function writeRemoteStore(content) {
   return response.json();
 }
 
+function isProductionRuntime() {
+  return process.env.NODE_ENV === "production";
+}
+
 function normalizeList(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item || "").trim()).filter(Boolean);
@@ -338,7 +342,11 @@ async function writeContentFile(content) {
   try {
     await writeRemoteStore(content);
     return;
-  } catch {}
+  } catch (error) {
+    if (isProductionRuntime()) {
+      throw error;
+    }
+  }
 
   const contentFile = resolveContentFile();
   const payload = JSON.stringify(content, null, 2);

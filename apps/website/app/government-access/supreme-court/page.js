@@ -43,6 +43,22 @@ export default async function SupremeCourtControlPage({ searchParams }) {
               <CourtIssuedKeyNotice accessKey={String(params.generated)} />
             ) : null}
 
+            {params?.error === "storage" ? (
+              <section className="application-notice application-notice--error">
+                <strong>Supreme Court Storage Error</strong>
+                <p>
+                  Supreme Court changes could not be saved. Confirm the website
+                  has API_URL and SUPREME_COURT_API_KEY, BULLETIN_API_KEY, or
+                  ADMIN_API_KEY configured for the production API.
+                </p>
+                {params?.detail ? (
+                  <p className="public-application-help">
+                    API detail: {String(params.detail)}
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+
             <section className="panel bulletin-control-panel">
               <div className="panel__header">
                 <div>
