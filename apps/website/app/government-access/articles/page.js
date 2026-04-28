@@ -7,6 +7,7 @@ import {
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import { requireGovernmentUser } from "../../../lib/government-auth";
+import { broadcastDistributions, broadcastTypes } from "../../../lib/discord-broadcasts";
 
 export const metadata = {
   title: "Article Control | Government Access"
@@ -23,6 +24,43 @@ function toDateTimeLocal(value) {
   }
 
   return date.toISOString().slice(0, 16);
+}
+
+function DiscordBroadcastFields() {
+  return (
+    <fieldset className="broadcast-fieldset">
+      <legend>Discord Broadcast Optional</legend>
+      <label className="public-application-field">
+        <span>Delivery</span>
+        <select defaultValue="none" name="discordDistribution">
+          {broadcastDistributions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="public-application-field">
+        <span>Broadcast type</span>
+        <select defaultValue="news" name="broadcastType">
+          {broadcastTypes.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <div className="public-application-grid public-application-grid--two">
+        <label className="public-application-field">
+          <span>Specific Discord User ID</span>
+          <input name="targetDiscordId" placeholder="Required only for specific Discord ID" type="text" />
+        </label>
+        <label className="public-application-toggle">
+          <input name="confirmDiscordBroadcast" type="checkbox" />
+          <span>Confirm dangerous broadcast / DM all members</span>
+        </label>
+      </div>
+      <p className="public-application-help">
+        Broadcasts are queued for the Discord bot and audited with delivery counts.
+      </p>
+    </fieldset>
+  );
 }
 
 export default async function ArticleControlPage({ searchParams }) {
@@ -42,7 +80,7 @@ export default async function ArticleControlPage({ searchParams }) {
         {params?.saved ? (
           <section className="application-notice">
             <strong>Article Register Updated</strong>
-            <p>Publication records have been saved.</p>
+            <p>Publication records have been saved{params?.broadcast ? " and Discord delivery has been queued." : "."}</p>
           </section>
         ) : null}
 
@@ -123,6 +161,7 @@ export default async function ArticleControlPage({ searchParams }) {
                 <span>Featured article</span>
               </label>
             </div>
+            <DiscordBroadcastFields />
             <button className="button button--solid-site" type="submit">
               Add Article
             </button>
@@ -196,6 +235,7 @@ export default async function ArticleControlPage({ searchParams }) {
                       <span>Featured article</span>
                     </label>
                   </div>
+                  <DiscordBroadcastFields />
                   <div className="bulletin-editor-card__actions">
                     <button className="button button--solid-site" type="submit">
                       Save Article

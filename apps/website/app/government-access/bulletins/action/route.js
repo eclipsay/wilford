@@ -7,9 +7,89 @@ import {
   updateBulletin
 } from "../../../../lib/bulletins";
 import { addAuditEvent, assertTrustedPostOrigin, requireGovernmentUser } from "../../../../lib/government-auth";
+import {
+  createDiscordBroadcast,
+  formatBroadcastMessage,
+  parseBroadcastOptions
+} from "../../../../lib/discord-broadcasts";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
+}
+
+function canBroadcast(user, fields, type) {
+  if (type === "treason_notice") {
+    return ["Supreme Chairman", "Executive Director", "Security Command"].includes(user.role);
+  }
+
+  if (["Supreme Chairman", "Executive Director"].includes(user.role)) {
+    return true;
+  }
+
+  if (String(fields.category || "").includes("MSS")) {
+    return user.role === "Security Command";
+  }
+
+  return ["Minister", "Government Official"].includes(user.role);
+}
+
+function broadcastTypeForBulletin(fields) {
+  if (String(fields.category || "").includes("MSS")) {
+    return "mss_alert";
+  }
+
+  return fields.priority === "emergency" ? "emergency" : "news";
+}
+
+function titleForBroadcastType(type) {
+  if (type === "emergency") {
+    return "Emergency Directive";
+  }
+
+  if (type === "mss_alert") {
+    return "Ministry of State Security Advisory";
+  }
+
+  if (type === "treason_notice") {
+    return "MSS Security Directive";
+  }
+
+  return "Official WPU News Broadcast";
+}
+
+async function enqueueBulletinBroadcast(user, formData, fields, linkedId = "") {
+  const options = parseBroadcastOptions(formData);
+
+  if (!options.enabled) {
+    return null;
+  }
+
+  const type = options.type || broadcastTypeForBulletin(fields);
+
+  if (!canBroadcast(user, fields, type)) {
+    throw new Error("Your role is not authorised to send this broadcast.");
+  }
+
+  if (type === "treason_notice" && !options.confirmed) {
+    throw new Error("Enemy of the State notices require confirmation.");
+  }
+
+  return createDiscordBroadcast({
+    type,
+    title: titleForBroadcastType(type),
+    body: formatBroadcastMessage(type, {
+      title: fields.headline,
+      body: `${fields.category} bulletin. Priority: ${fields.priority}.`,
+      link: fields.linkedArticleId ? `/news/${fields.linkedArticleId}` : ""
+    }),
+    distribution: options.distribution,
+    targetDiscordId: options.targetDiscordId,
+    confirmed: options.confirmed,
+    linkedType: "bulletin",
+    linkedId,
+    requestedBy: user.username,
+    requestedRole: user.role
+  });
 }
 
 export async function POST(request) {
@@ -29,9 +109,14 @@ export async function POST(request) {
     }
 
     try {
-      await createBulletin(fields);
+      const bulletins = await createBulletin(fields);
+      const createdBulletin = bulletins.find((bulletin) => bulletin.headline === fields.headline);
+      const broadcast = await enqueueBulletinBroadcast(user, formData, fields, createdBulletin?.id || "");
       await addAuditEvent(user.username, "bulletin added", fields.headline, "success");
-      return redirectTo(request, "/government-access/bulletins?saved=1");
+      if (broadcast) {
+        await addAuditEvent(user.username, "discord broadcast queued", broadcast.id, "success");
+      }
+      return redirectTo(request, `/government-access/bulletins?saved=1${broadcast ? "&broadcast=queued" : ""}`);
     } catch (error) {
       return redirectTo(
         request,
@@ -50,8 +135,12 @@ export async function POST(request) {
 
     try {
       await updateBulletin(id, fields);
+      const broadcast = await enqueueBulletinBroadcast(user, formData, fields, id);
       await addAuditEvent(user.username, "bulletin edited", id, "success");
-      return redirectTo(request, "/government-access/bulletins?saved=1");
+      if (broadcast) {
+        await addAuditEvent(user.username, "discord broadcast queued", broadcast.id, "success");
+      }
+      return redirectTo(request, `/government-access/bulletins?saved=1${broadcast ? "&broadcast=queued" : ""}`);
     } catch (error) {
       return redirectTo(
         request,

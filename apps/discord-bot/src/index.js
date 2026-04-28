@@ -22,7 +22,7 @@ import {
 
 dotenv.config();
 
-const token = process.env.DISCORD_TOKEN;
+const token = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const stateFile = resolve(currentDir, "../data/state.json");
 const apiUrl = process.env.API_URL || "http://127.0.0.1:4000";
@@ -38,6 +38,9 @@ const applicationRoleId = String(
   process.env.DISCORD_APPLICATION_ROLE_ID || ""
 ).trim();
 const adminApiKey = String(process.env.ADMIN_API_KEY || "").trim();
+const broadcastGuildId = String(process.env.DISCORD_GUILD_ID || "").trim();
+const announcementChannelId = String(process.env.DISCORD_ANNOUNCEMENT_CHANNEL_ID || "").trim();
+const mssChannelId = String(process.env.DISCORD_MSS_CHANNEL_ID || "").trim();
 const applicationGuildId = String(
   process.env.DISCORD_APPLICATION_GUILD_ID || process.env.DISCORD_GUILD_ID || ""
 ).trim();
@@ -56,7 +59,7 @@ const timeoutUnitMap = {
 const maxTimeoutMs = 28 * 24 * 60 * 60 * 1000;
 
 if (!token) {
-  console.log("Discord bot not started: DISCORD_TOKEN is missing.");
+  console.log("Discord bot not started: DISCORD_BOT_TOKEN or DISCORD_TOKEN is missing.");
   process.exit(0);
 }
 
@@ -699,6 +702,208 @@ async function markWebsiteApplicationThread(applicationId, payload) {
   });
 }
 
+async function getPendingDiscordBroadcasts() {
+  if (!adminApiKey) {
+    return [];
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/discord-broadcasts?status=pending`, {
+    headers: {
+      "x-admin-key": adminApiKey
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pending broadcasts request failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload?.broadcasts) ? payload.broadcasts : [];
+}
+
+async function markDiscordBroadcast(broadcastId, payload) {
+  if (!adminApiKey) {
+    return;
+  }
+
+  await fetch(`${apiUrl}/api/admin/discord-broadcasts/${encodeURIComponent(broadcastId)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store"
+  });
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function channelIdForBroadcast(broadcast) {
+  if (broadcast.distribution === "mss_only" || broadcast.distribution === "government_officials") {
+    return mssChannelId || announcementChannelId;
+  }
+
+  return announcementChannelId;
+}
+
+function buildBroadcastEmbed(broadcast) {
+  const colorByType = {
+    news: 0xd7a85f,
+    emergency: 0xb3261e,
+    mss_alert: 0x1f4f46,
+    treason_notice: 0x681313
+  };
+
+  return new EmbedBuilder()
+    .setColor(colorByType[broadcast.type] || 0xd7a85f)
+    .setTitle(broadcast.title || "Official WPU Broadcast")
+    .setDescription(String(broadcast.body || "").slice(0, 4000))
+    .addFields(
+      {
+        name: "Issued By",
+        value: `${broadcast.requestedBy || "Government Access"} / ${broadcast.requestedRole || "Official"}`,
+        inline: true
+      },
+      {
+        name: "Reference",
+        value: broadcast.linkedId ? `${broadcast.linkedType || "record"}: ${broadcast.linkedId}` : "Unlinked broadcast",
+        inline: true
+      }
+    )
+    .setFooter({ text: "Wilford Panem Union - Official Communications" })
+    .setTimestamp(new Date(broadcast.createdAt || Date.now()));
+}
+
+async function sendBroadcastToChannel(broadcast, results) {
+  const channelId = channelIdForBroadcast(broadcast);
+
+  if (!channelId) {
+    results.failures.push({ target: "channel", error: "No channel configured." });
+    results.failureCount += 1;
+    return;
+  }
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+
+  if (!channel?.isTextBased() || channel.type === ChannelType.DM) {
+    results.failures.push({ target: channelId, error: "Configured channel is not text-capable." });
+    results.failureCount += 1;
+    return;
+  }
+
+  await channel.send({ embeds: [buildBroadcastEmbed(broadcast)] });
+  results.recipients.push({ target: channelId, method: "channel" });
+  results.successCount += 1;
+}
+
+async function sendBroadcastDm(userId, broadcast, results) {
+  const user = await client.users.fetch(userId).catch(() => null);
+
+  if (!user || user.bot) {
+    results.failures.push({ target: userId, error: "User not found or is a bot." });
+    results.failureCount += 1;
+    return;
+  }
+
+  try {
+    await user.send({ embeds: [buildBroadcastEmbed(broadcast)] });
+    results.recipients.push({ target: userId, method: "dm" });
+    results.successCount += 1;
+  } catch (error) {
+    results.failures.push({
+      target: userId,
+      error: error instanceof Error ? error.message : "DM failed."
+    });
+    results.failureCount += 1;
+  }
+}
+
+async function sendBroadcastDmAll(broadcast, results) {
+  const guildId = broadcastGuildId || applicationGuildId;
+  const guild = guildId ? await client.guilds.fetch(guildId).catch(() => null) : null;
+
+  if (!guild) {
+    results.failures.push({ target: "guild", error: "DISCORD_GUILD_ID is not configured or unavailable." });
+    results.failureCount += 1;
+    return;
+  }
+
+  const members = await guild.members.fetch().catch(() => null);
+
+  if (!members) {
+    results.failures.push({ target: guild.id, error: "Unable to fetch guild members." });
+    results.failureCount += 1;
+    return;
+  }
+
+  for (const member of members.values()) {
+    if (member.user.bot) {
+      continue;
+    }
+
+    await sendBroadcastDm(member.user.id, broadcast, results);
+    await wait(1250);
+  }
+}
+
+async function processDiscordBroadcast(broadcast) {
+  await markDiscordBroadcast(broadcast.id, {
+    status: "processing",
+    recipients: [],
+    successCount: 0,
+    failureCount: 0,
+    failures: []
+  });
+
+  const results = {
+    recipients: [],
+    successCount: 0,
+    failureCount: 0,
+    failures: []
+  };
+
+  try {
+    if (
+      ["announcement", "announcement_and_dm_all", "mss_only", "government_officials"].includes(
+        broadcast.distribution
+      )
+    ) {
+      await sendBroadcastToChannel(broadcast, results);
+    }
+
+    if (broadcast.distribution === "specific_user") {
+      await sendBroadcastDm(broadcast.targetDiscordId, broadcast, results);
+    }
+
+    if (["dm_all", "announcement_and_dm_all"].includes(broadcast.distribution)) {
+      if (!broadcast.confirmed) {
+        throw new Error("Broadcast requires confirmation before DMing all members.");
+      }
+
+      await sendBroadcastDmAll(broadcast, results);
+    }
+
+    const status = results.successCount > 0 && results.failureCount === 0 ? "completed" : "failed";
+    await markDiscordBroadcast(broadcast.id, {
+      status,
+      processedAt: new Date().toISOString(),
+      ...results,
+      error: status === "failed" ? "One or more broadcast deliveries failed." : ""
+    });
+  } catch (error) {
+    await markDiscordBroadcast(broadcast.id, {
+      status: "failed",
+      processedAt: new Date().toISOString(),
+      ...results,
+      error: error instanceof Error ? error.message : "Broadcast delivery failed."
+    });
+  }
+}
+
 async function postWebsiteApplicationToReview(application) {
   if (!applicationsChannelId) {
     throw new Error("DISCORD_APPLICATIONS_CHANNEL_ID is not configured.");
@@ -925,6 +1130,7 @@ async function publishCommitUpdates() {
 
 let isPublishing = false;
 let isProcessingWebsiteApplications = false;
+let isProcessingDiscordBroadcasts = false;
 
 async function runCommitLoop() {
   if (isPublishing) {
@@ -967,6 +1173,30 @@ async function runWebsiteApplicationsLoop() {
     );
   } finally {
     isProcessingWebsiteApplications = false;
+  }
+}
+
+async function runDiscordBroadcastLoop() {
+  if (isProcessingDiscordBroadcasts) {
+    return;
+  }
+
+  isProcessingDiscordBroadcasts = true;
+
+  try {
+    const broadcasts = await getPendingDiscordBroadcasts();
+
+    for (const broadcast of broadcasts) {
+      await processDiscordBroadcast(broadcast);
+    }
+  } catch (error) {
+    console.log(
+      `Discord broadcast queue error: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  } finally {
+    isProcessingDiscordBroadcasts = false;
   }
 }
 
@@ -1114,6 +1344,8 @@ client.once("ready", () => {
   setInterval(runCommitLoop, pollIntervalMs);
   runWebsiteApplicationsLoop();
   setInterval(runWebsiteApplicationsLoop, 20000);
+  runDiscordBroadcastLoop();
+  setInterval(runDiscordBroadcastLoop, 15000);
 });
 
 client.on("messageCreate", async (message) => {

@@ -71,6 +71,10 @@ npm run build
 - For the application review flow, configure these environment variables in `apps/discord-bot/.env`:
   `DISCORD_APPLICATIONS_CHANNEL_ID`, `DISCORD_APPLICATION_REVIEW_ROLE_ID`,
   `DISCORD_APPLICATION_ROLE_ID`, and optionally `DISCORD_APPLICATION_GUILD_ID`.
+- Official WPU broadcasts are queued through the API and delivered by the bot. Configure:
+  `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_ANNOUNCEMENT_CHANNEL_ID`,
+  `DISCORD_MSS_CHANNEL_ID`, and matching `ADMIN_API_KEY` values for the website,
+  API, and bot.
 
 ## PM2
 

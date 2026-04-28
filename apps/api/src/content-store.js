@@ -49,6 +49,7 @@ const defaultContent = {
   ],
   governmentUsers: [],
   governmentAuditLog: [],
+  discordBroadcasts: [],
   supremeCourtCases: [],
   bulletins: [
     {
@@ -179,6 +180,7 @@ async function readContentFile() {
       articles: parsed.articles || defaultContent.articles,
       governmentUsers: parsed.governmentUsers || [],
       governmentAuditLog: parsed.governmentAuditLog || [],
+      discordBroadcasts: parsed.discordBroadcasts || [],
       supremeCourtCases: parsed.supremeCourtCases || [],
       bulletins: withNormalizedOrder(parsed.bulletins || defaultContent.bulletins)
     };
@@ -292,6 +294,98 @@ export async function updateGovernmentAccessStore(fields) {
     governmentAuditLog: content.governmentAuditLog,
     publicApplications: content.publicApplications || []
   };
+}
+
+function cleanBroadcastText(value, maxLength = 4000) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[<>]/g, "")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function normalizeBroadcast(entry, index = 0) {
+  const now = new Date().toISOString();
+  const status = String(entry?.status || "pending").trim().toLowerCase();
+
+  return {
+    id: String(entry?.id || `broadcast-${Date.now().toString(36)}-${index}`),
+    status: ["pending", "processing", "completed", "failed"].includes(status)
+      ? status
+      : "pending",
+    type: cleanBroadcastText(entry?.type || "news", 80),
+    title: cleanBroadcastText(entry?.title || "Official WPU Broadcast", 160),
+    body: cleanBroadcastText(entry?.body || "", 4000),
+    distribution: cleanBroadcastText(entry?.distribution || "none", 80),
+    targetDiscordId: cleanBroadcastText(entry?.targetDiscordId || "", 80),
+    linkedType: cleanBroadcastText(entry?.linkedType || "", 80),
+    linkedId: cleanBroadcastText(entry?.linkedId || "", 160),
+    requiresApproval: Boolean(entry?.requiresApproval),
+    confirmed: Boolean(entry?.confirmed),
+    requestedBy: cleanBroadcastText(entry?.requestedBy || "system", 120),
+    requestedRole: cleanBroadcastText(entry?.requestedRole || "", 120),
+    createdAt: entry?.createdAt || now,
+    updatedAt: entry?.updatedAt || now,
+    processedAt: entry?.processedAt || "",
+    recipients: Array.isArray(entry?.recipients) ? entry.recipients : [],
+    successCount: Number(entry?.successCount || 0),
+    failureCount: Number(entry?.failureCount || 0),
+    failures: Array.isArray(entry?.failures) ? entry.failures.slice(0, 100) : [],
+    error: cleanBroadcastText(entry?.error || "", 1000)
+  };
+}
+
+export async function createDiscordBroadcast(entry) {
+  const content = await readContentFile();
+  const broadcast = normalizeBroadcast(
+    {
+      ...entry,
+      id:
+        entry.id ||
+        `broadcast-${Date.now().toString(36)}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    0
+  );
+
+  content.discordBroadcasts = [broadcast, ...(content.discordBroadcasts || [])].slice(0, 500);
+  await writeContentFile(content);
+  return broadcast;
+}
+
+export async function getDiscordBroadcasts({ status = "" } = {}) {
+  const content = await readContentFile();
+  const broadcasts = (content.discordBroadcasts || []).map(normalizeBroadcast);
+  return status ? broadcasts.filter((item) => item.status === status) : broadcasts;
+}
+
+export async function updateDiscordBroadcast(id, fields) {
+  const content = await readContentFile();
+  let updatedBroadcast = null;
+
+  content.discordBroadcasts = (content.discordBroadcasts || []).map((entry, index) => {
+    if (entry.id !== id) {
+      return normalizeBroadcast(entry, index);
+    }
+
+    updatedBroadcast = normalizeBroadcast(
+      {
+        ...entry,
+        ...fields,
+        id: entry.id,
+        updatedAt: new Date().toISOString()
+      },
+      index
+    );
+    return updatedBroadcast;
+  });
+
+  await writeContentFile(content);
+  return updatedBroadcast;
 }
 
 export async function updateSupremeCourtStore(fields) {

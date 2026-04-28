@@ -1265,6 +1265,10 @@ h3 {
   gap: 16px;
 }
 
+.public-application-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .public-application-field {
   display: flex;
   flex-direction: column;
@@ -1320,6 +1324,22 @@ h3 {
   width: 18px;
   height: 18px;
   accent-color: var(--gold);
+}
+
+.broadcast-fieldset {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(215, 168, 95, 0.24);
+  background: linear-gradient(135deg, rgba(215, 168, 95, 0.1), rgba(23, 12, 8, 0.58));
+}
+
+.broadcast-fieldset legend {
+  padding: 0 8px;
+  color: var(--gold-bright);
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .panel--list {
