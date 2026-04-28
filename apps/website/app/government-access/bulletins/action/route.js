@@ -32,8 +32,11 @@ export async function POST(request) {
       await createBulletin(fields);
       await addAuditEvent(user.username, "bulletin added", fields.headline, "success");
       return redirectTo(request, "/government-access/bulletins?saved=1");
-    } catch {
-      return redirectTo(request, "/government-access/bulletins?error=storage");
+    } catch (error) {
+      return redirectTo(
+        request,
+        `/government-access/bulletins?error=storage&detail=${encodeURIComponent(error.message)}`
+      );
     }
   }
 
@@ -49,8 +52,11 @@ export async function POST(request) {
       await updateBulletin(id, fields);
       await addAuditEvent(user.username, "bulletin edited", id, "success");
       return redirectTo(request, "/government-access/bulletins?saved=1");
-    } catch {
-      return redirectTo(request, "/government-access/bulletins?error=storage");
+    } catch (error) {
+      return redirectTo(
+        request,
+        `/government-access/bulletins?error=storage&detail=${encodeURIComponent(error.message)}`
+      );
     }
   }
 
@@ -61,8 +67,11 @@ export async function POST(request) {
       try {
         await deleteBulletin(id);
         await addAuditEvent(user.username, "bulletin deleted", id, "success");
-      } catch {
-        return redirectTo(request, "/government-access/bulletins?error=storage");
+      } catch (error) {
+        return redirectTo(
+          request,
+          `/government-access/bulletins?error=storage&detail=${encodeURIComponent(error.message)}`
+        );
       }
     }
 
@@ -76,8 +85,11 @@ export async function POST(request) {
     if (id) {
       try {
         await moveBulletin(id, direction);
-      } catch {
-        return redirectTo(request, "/government-access/bulletins?error=storage");
+      } catch (error) {
+        return redirectTo(
+          request,
+          `/government-access/bulletins?error=storage&detail=${encodeURIComponent(error.message)}`
+        );
       }
     }
 

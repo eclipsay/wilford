@@ -138,10 +138,10 @@ async function writeContentFile(content) {
 }
 
 async function requestAdminBulletins(path, options = {}) {
-  const adminKey = process.env.ADMIN_API_KEY;
+  const adminKey = process.env.BULLETIN_API_KEY || process.env.ADMIN_API_KEY;
 
   if (!adminKey) {
-    throw new Error("ADMIN_API_KEY is required to manage bulletins.");
+    throw new Error("Missing BULLETIN_API_KEY or ADMIN_API_KEY in the website environment.");
   }
 
   const response = await fetch(`${baseUrl}${path}`, {
@@ -157,7 +157,10 @@ async function requestAdminBulletins(path, options = {}) {
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new Error(data?.error || "Bulletin API request failed.");
+    throw new Error(
+      data?.error ||
+        `Bulletin API request failed with status ${response.status}.`
+    );
   }
 
   const data = await response.json();

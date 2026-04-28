@@ -63,8 +63,14 @@ export default async function BulletinControlPage({ searchParams }) {
                 <strong>Bulletin Storage Error</strong>
                 <p>
                   Bulletin changes could not be saved. Confirm the website has
-                  API_URL and ADMIN_API_KEY configured for the production API.
+                  API_URL and BULLETIN_API_KEY or ADMIN_API_KEY configured for
+                  the production API.
                 </p>
+                {params?.detail ? (
+                  <p className="public-application-help">
+                    API detail: {String(params.detail)}
+                  </p>
+                ) : null}
               </section>
             ) : null}
 
