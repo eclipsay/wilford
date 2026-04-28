@@ -309,12 +309,15 @@ export async function getCurrentGovernmentUser() {
   const user = users.find((item) => item.username === session.username && item.active);
 
   if (user) {
+    const sessionHasPasswordFlag = Object.hasOwn(session, "forcePasswordChange");
+
     return {
       ...user,
       role: accessRoles.includes(session.role) ? session.role : user.role,
       displayName: session.displayName || user.displayName,
-      forcePasswordChange:
-        session.forcePasswordChange === false ? false : Boolean(user.forcePasswordChange)
+      forcePasswordChange: sessionHasPasswordFlag
+        ? Boolean(session.forcePasswordChange)
+        : false
     };
   }
 
