@@ -57,9 +57,9 @@ const executives = [
     subtitle: "Executive Director of Union Administration",
     description:
       "Oversees ministry execution, district governance, national logistics, administration, and implementation of the Chairman's directives. Responsible for day-to-day operation of the Union state.",
-    image: "/wpu-grand-seal.png",
-    imageAlt: "Grand Seal of the Wilford Panem Union",
-    imageClassName: "portrait-frame portrait-frame--seal"
+    image: "/EclipPortrait.png",
+    imageAlt: "Official portrait of Executive Director Eclip",
+    imageClassName: "portrait-frame portrait-frame--official"
   },
   {
     name: "First Minister Sir Flukkston",

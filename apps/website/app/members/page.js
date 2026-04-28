@@ -10,6 +10,7 @@ const directory = [
         name: "Chairman Lemmie",
         title: "Supreme Chairman",
         portrait: "/chairman-lemmie-portrait.png",
+        portraitClassName: "people-card__image people-card__image--portrait",
         bio: "Founder and final authority of the Wilford Panem Union.",
         motto: "Build the future. Command the present."
       }
@@ -21,7 +22,8 @@ const directory = [
       {
         name: "Executive Director Eclip",
         title: "Executive Director of Union Administration",
-        portrait: "/wpu-grand-seal.png",
+        portrait: "/EclipPortrait.png",
+        portraitClassName: "people-card__image people-card__image--portrait",
         bio: "Coordinates the ministries and ensures state doctrine becomes operational policy.",
         motto: "Directive becomes action."
       },
@@ -29,6 +31,7 @@ const directory = [
         name: "First Minister Sir Flukkston",
         title: "First Minister of State Vision and National Development",
         portrait: "/SirFluk.png",
+        portraitClassName: "people-card__image people-card__image--portrait",
         bio:
           "Chief adviser to Chairman Lemmie and equal executive authority alongside Executive Director Eclip. Guides long-term national vision, ceremonial affairs, elite appointments, and the future direction of the Union.",
         motto: "Vision secures the future."
@@ -97,9 +100,10 @@ export default function MembersPage() {
                   <div className="people-card__portrait">
                     <Image
                       src={person.portrait}
-                      alt={`Official portrait or seal for ${person.name}`}
+                      alt={`${person.portraitClassName ? "Official portrait" : "Official seal"} of ${person.name}`}
                       width={420}
                       height={520}
+                      className={person.portraitClassName || "people-card__image"}
                     />
                   </div>
                   <div className="people-card__body">
