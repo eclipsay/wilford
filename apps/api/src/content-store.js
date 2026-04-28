@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { config } from "./config.js";
 
 const defaultContent = {
@@ -28,7 +29,75 @@ const defaultContent = {
   enemyNations: [],
   panelUsers: [],
   cryptoLogs: [],
-  publicApplications: []
+  publicApplications: [],
+  bulletins: [
+    {
+      id: "bulletin-default-1",
+      headline: "Chairman Lemmie announces new prosperity initiative",
+      category: "Chairman",
+      priority: "standard",
+      active: true,
+      order: 0,
+      expiresAt: "",
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z"
+    },
+    {
+      id: "bulletin-default-2",
+      headline: "Supreme Court opens hearings at The Capitol Parliament",
+      category: "Supreme Court",
+      priority: "standard",
+      active: true,
+      order: 1,
+      expiresAt: "",
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z"
+    },
+    {
+      id: "bulletin-default-3",
+      headline: "Eternal Engine departs for District 6 inspection route",
+      category: "Eternal Engine",
+      priority: "standard",
+      active: true,
+      order: 2,
+      expiresAt: "",
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z"
+    },
+    {
+      id: "bulletin-default-4",
+      headline: "Ministry of Production reports record district output",
+      category: "Districts",
+      priority: "standard",
+      active: true,
+      order: 3,
+      expiresAt: "",
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z"
+    },
+    {
+      id: "bulletin-default-5",
+      headline: "Panem Credit adoption reaches record levels",
+      category: "Panem Credit",
+      priority: "standard",
+      active: true,
+      order: 4,
+      expiresAt: "",
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z"
+    },
+    {
+      id: "bulletin-default-6",
+      headline: "Ministry of State Security issues internal advisory",
+      category: "MSS",
+      priority: "standard",
+      active: true,
+      order: 5,
+      expiresAt: "",
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z"
+    }
+  ]
 };
 
 function withNormalizedOrder(items) {
@@ -86,7 +155,8 @@ async function readContentFile() {
       enemyNations: withNormalizedOrder(parsed.enemyNations || []),
       panelUsers: parsed.panelUsers || [],
       cryptoLogs: parsed.cryptoLogs || [],
-      publicApplications: parsed.publicApplications || []
+      publicApplications: parsed.publicApplications || [],
+      bulletins: withNormalizedOrder(parsed.bulletins || defaultContent.bulletins)
     };
   } catch {
     return structuredClone(defaultContent);
@@ -94,6 +164,7 @@ async function readContentFile() {
 }
 
 async function writeContentFile(content) {
+  await mkdir(dirname(config.dataFile), { recursive: true });
   await writeFile(config.dataFile, JSON.stringify(content, null, 2));
 }
 
@@ -193,6 +264,62 @@ export async function updateSettings(nextSettings) {
   };
   await writeContentFile(content);
   return content;
+}
+
+export async function createBulletin(entry) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+  const bulletin = {
+    id: entry.id || `bulletin-${Date.now().toString(36)}`,
+    headline: String(entry.headline || "").replace(/\s+/g, " ").trim(),
+    category: String(entry.category || "General").trim(),
+    priority: String(entry.priority || "standard").trim().toLowerCase(),
+    active: Boolean(entry.active),
+    order: Number(entry.order ?? content.bulletins.length),
+    expiresAt: String(entry.expiresAt || "").trim(),
+    createdAt: now,
+    updatedAt: now
+  };
+
+  content.bulletins = withNormalizedOrder([...(content.bulletins || []), bulletin]);
+  await writeContentFile(content);
+  return content.bulletins;
+}
+
+export async function updateBulletin(id, fields) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+  content.bulletins = withNormalizedOrder(
+    (content.bulletins || []).map((bulletin) =>
+      bulletin.id === id
+        ? {
+            ...bulletin,
+            headline: String(fields.headline || bulletin.headline || "").replace(/\s+/g, " ").trim(),
+            category: String(fields.category || bulletin.category || "General").trim(),
+            priority: String(fields.priority || bulletin.priority || "standard").trim().toLowerCase(),
+            active: Boolean(fields.active),
+            expiresAt: String(fields.expiresAt || "").trim(),
+            updatedAt: now
+          }
+        : bulletin
+    )
+  );
+  await writeContentFile(content);
+  return content.bulletins;
+}
+
+export async function deleteBulletin(id) {
+  const content = await readContentFile();
+  content.bulletins = withNormalizedOrder((content.bulletins || []).filter((item) => item.id !== id));
+  await writeContentFile(content);
+  return content.bulletins;
+}
+
+export async function moveBulletin(id, direction) {
+  const content = await readContentFile();
+  content.bulletins = moveOrderedItem(content.bulletins || [], id, direction);
+  await writeContentFile(content);
+  return content.bulletins;
 }
 
 export async function createMember(member) {

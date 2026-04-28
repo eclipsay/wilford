@@ -3,6 +3,13 @@ import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
+const baseUrl =
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === "production"
+    ? "https://api.wilfordindustries.org"
+    : "http://localhost:4000");
+
 const categories = [
   "Chairman",
   "Government",
@@ -85,6 +92,21 @@ function normalizeBulletins(items) {
 }
 
 async function readContentFile() {
+  try {
+    const response = await fetch(`${baseUrl}/api/content`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(2000)
+    });
+
+    if (response.ok) {
+      const parsed = await response.json();
+      return {
+        ...parsed,
+        bulletins: normalizeBulletins(parsed.bulletins || defaultBulletins)
+      };
+    }
+  } catch {}
+
   const contentFile = resolveContentFile();
   const fallbackFile = resolveServerlessWritableFile();
 
@@ -112,6 +134,37 @@ async function readContentFile() {
 }
 
 async function writeContentFile(content) {
+  return content;
+}
+
+async function requestAdminBulletins(path, options = {}) {
+  const adminKey = process.env.ADMIN_API_KEY;
+
+  if (!adminKey) {
+    throw new Error("ADMIN_API_KEY is required to manage bulletins.");
+  }
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminKey,
+      ...(options.headers || {})
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(5000)
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error || "Bulletin API request failed.");
+  }
+
+  const data = await response.json();
+  return normalizeBulletins(data.bulletins || []);
+}
+
+async function writeLocalContentFile(content) {
   const contentFile = resolveContentFile();
   const payload = JSON.stringify(content, null, 2);
 
@@ -150,6 +203,17 @@ export function hasEmergencyBulletin(bulletins) {
 }
 
 export async function createBulletin(fields) {
+  try {
+    return await requestAdminBulletins("/api/admin/bulletins", {
+      method: "POST",
+      body: JSON.stringify(fields)
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw error;
+    }
+  }
+
   const content = await readContentFile();
   const now = new Date().toISOString();
   const bulletins = normalizeBulletins(content.bulletins);
@@ -168,11 +232,22 @@ export async function createBulletin(fields) {
   );
 
   content.bulletins = normalizeBulletins([...bulletins, nextBulletin]);
-  await writeContentFile(content);
+  await writeLocalContentFile(content);
   return content.bulletins;
 }
 
 export async function updateBulletin(id, fields) {
+  try {
+    return await requestAdminBulletins(`/api/admin/bulletins/${encodeURIComponent(id)}`, {
+      method: "POST",
+      body: JSON.stringify(fields)
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw error;
+    }
+  }
+
   const content = await readContentFile();
   const now = new Date().toISOString();
   const bulletins = normalizeBulletins(content.bulletins);
@@ -195,20 +270,41 @@ export async function updateBulletin(id, fields) {
     )
   );
 
-  await writeContentFile(content);
+  await writeLocalContentFile(content);
   return content.bulletins;
 }
 
 export async function deleteBulletin(id) {
+  try {
+    return await requestAdminBulletins(`/api/admin/bulletins/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw error;
+    }
+  }
+
   const content = await readContentFile();
   content.bulletins = normalizeBulletins(
     normalizeBulletins(content.bulletins).filter((bulletin) => bulletin.id !== id)
   );
-  await writeContentFile(content);
+  await writeLocalContentFile(content);
   return content.bulletins;
 }
 
 export async function moveBulletin(id, direction) {
+  try {
+    return await requestAdminBulletins(`/api/admin/bulletins/${encodeURIComponent(id)}/move`, {
+      method: "POST",
+      body: JSON.stringify({ direction })
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw error;
+    }
+  }
+
   const content = await readContentFile();
   const bulletins = normalizeBulletins(content.bulletins);
   const index = bulletins.findIndex((bulletin) => bulletin.id === id);
@@ -224,7 +320,7 @@ export async function moveBulletin(id, direction) {
   next.splice(targetIndex, 0, item);
 
   content.bulletins = normalizeBulletins(next);
-  await writeContentFile(content);
+  await writeLocalContentFile(content);
   return content.bulletins;
 }
 

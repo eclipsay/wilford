@@ -58,6 +58,16 @@ export default async function BulletinControlPage({ searchParams }) {
               </section>
             ) : null}
 
+            {params?.error === "storage" ? (
+              <section className="application-notice application-notice--error">
+                <strong>Bulletin Storage Error</strong>
+                <p>
+                  Bulletin changes could not be saved. Confirm the website has
+                  API_URL and ADMIN_API_KEY configured for the production API.
+                </p>
+              </section>
+            ) : null}
+
             <section className="panel bulletin-control-panel">
               <div className="panel__header">
                 <div>

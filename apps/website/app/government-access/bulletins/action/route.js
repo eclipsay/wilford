@@ -28,9 +28,13 @@ export async function POST(request) {
       return redirectTo(request, "/government-access/bulletins?error=headline");
     }
 
-    await createBulletin(fields);
-    await addAuditEvent(user.username, "bulletin added", fields.headline, "success");
-    return redirectTo(request, "/government-access/bulletins?saved=1");
+    try {
+      await createBulletin(fields);
+      await addAuditEvent(user.username, "bulletin added", fields.headline, "success");
+      return redirectTo(request, "/government-access/bulletins?saved=1");
+    } catch {
+      return redirectTo(request, "/government-access/bulletins?error=storage");
+    }
   }
 
   if (intent === "update") {
@@ -41,17 +45,25 @@ export async function POST(request) {
       return redirectTo(request, "/government-access/bulletins?error=headline");
     }
 
-    await updateBulletin(id, fields);
-    await addAuditEvent(user.username, "bulletin edited", id, "success");
-    return redirectTo(request, "/government-access/bulletins?saved=1");
+    try {
+      await updateBulletin(id, fields);
+      await addAuditEvent(user.username, "bulletin edited", id, "success");
+      return redirectTo(request, "/government-access/bulletins?saved=1");
+    } catch {
+      return redirectTo(request, "/government-access/bulletins?error=storage");
+    }
   }
 
   if (intent === "delete") {
     const id = String(formData.get("id") || "").trim();
 
     if (id) {
-      await deleteBulletin(id);
-      await addAuditEvent(user.username, "bulletin deleted", id, "success");
+      try {
+        await deleteBulletin(id);
+        await addAuditEvent(user.username, "bulletin deleted", id, "success");
+      } catch {
+        return redirectTo(request, "/government-access/bulletins?error=storage");
+      }
     }
 
     return redirectTo(request, "/government-access/bulletins?saved=1");
@@ -62,7 +74,11 @@ export async function POST(request) {
     const direction = String(formData.get("direction") || "down") === "up" ? "up" : "down";
 
     if (id) {
-      await moveBulletin(id, direction);
+      try {
+        await moveBulletin(id, direction);
+      } catch {
+        return redirectTo(request, "/government-access/bulletins?error=storage");
+      }
     }
 
     return redirectTo(request, "/government-access/bulletins?saved=1");

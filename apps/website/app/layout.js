@@ -5,6 +5,9 @@ export const metadata = {
   description: "Official State Portal of the Wilford Panem Union."
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

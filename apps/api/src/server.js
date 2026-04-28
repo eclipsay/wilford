@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import {
   appendCryptoLog,
   authenticatePanelUser,
+  createBulletin,
   createAlliance,
   createEnemyNation,
   createExcommunication,
@@ -11,6 +12,7 @@ import {
   createPanelUser,
   createPublicApplication,
   deleteAlliance,
+  deleteBulletin,
   deleteEnemyNation,
   deleteExcommunication,
   deleteMember,
@@ -19,6 +21,7 @@ import {
   getPendingPublicApplications,
   getPanelUsers,
   moveAlliance,
+  moveBulletin,
   moveEnemyNation,
   moveExcommunication,
   moveMember,
@@ -30,6 +33,7 @@ import {
   replaceMembers,
   updatePublicApplication,
   updateAlliancePosition,
+  updateBulletin,
   updateMemberPosition,
   updateSettings
 } from "./content-store.js";
@@ -219,6 +223,55 @@ app.post("/api/admin/applications/:id/review-thread", requireAdmin, async (req, 
 app.post("/api/admin/settings", requireAdmin, async (req, res) => {
   const content = await updateSettings(req.body || {});
   res.json({ settings: content.settings });
+});
+
+app.post("/api/admin/bulletins", requireAdmin, async (req, res) => {
+  const headline = String(req.body?.headline || "").trim();
+
+  if (!headline) {
+    return res.status(400).json({ error: "Headline is required." });
+  }
+
+  const bulletins = await createBulletin({
+    headline,
+    category: req.body?.category || "General",
+    priority: req.body?.priority || "standard",
+    active: Boolean(req.body?.active),
+    expiresAt: req.body?.expiresAt || ""
+  });
+
+  res.status(201).json({ bulletins });
+});
+
+app.post("/api/admin/bulletins/:id", requireAdmin, async (req, res) => {
+  const headline = String(req.body?.headline || "").trim();
+
+  if (!headline) {
+    return res.status(400).json({ error: "Headline is required." });
+  }
+
+  const bulletins = await updateBulletin(req.params.id, {
+    headline,
+    category: req.body?.category || "General",
+    priority: req.body?.priority || "standard",
+    active: Boolean(req.body?.active),
+    expiresAt: req.body?.expiresAt || ""
+  });
+
+  res.json({ bulletins });
+});
+
+app.post("/api/admin/bulletins/:id/move", requireAdmin, async (req, res) => {
+  const bulletins = await moveBulletin(
+    req.params.id,
+    req.body?.direction === "up" ? "up" : "down"
+  );
+  res.json({ bulletins });
+});
+
+app.delete("/api/admin/bulletins/:id", requireAdmin, async (req, res) => {
+  const bulletins = await deleteBulletin(req.params.id);
+  res.json({ bulletins });
 });
 
 app.get("/api/admin/users", requireOwner, async (_req, res) => {
