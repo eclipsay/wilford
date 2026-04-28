@@ -28,11 +28,16 @@ function formatDate(value) {
   }).format(date);
 }
 
-const filters = ["pending", "under_review", "appealed", "approved", "rejected", "archived", "all"];
+const activeStatuses = ["pending", "under_review", "appealed"];
+const filters = ["active", "pending", "under_review", "appealed", "approved", "rejected", "archived", "all"];
 
 function applicationMatchesFilter(application, filter) {
   if (!filter || filter === "all") {
     return true;
+  }
+
+  if (filter === "active") {
+    return activeStatuses.includes(application.status) && !application.archived;
   }
 
   if (filter === "archived") {
@@ -60,7 +65,7 @@ export default async function CitizenshipReviewPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("citizenshipReview");
   const applications = await getCitizenApplications();
-  const activeFilter = String(params?.filter || "pending").trim();
+  const activeFilter = String(params?.filter || "active").trim();
   const search = String(params?.q || "").trim().toLowerCase();
   const sort = String(params?.sort || "newest").trim();
   const visibleApplications = sortApplications(
@@ -147,7 +152,7 @@ export default async function CitizenshipReviewPage({ searchParams }) {
                 href={`/government-access/citizenship?filter=${filter}${search ? `&q=${encodeURIComponent(search)}` : ""}&sort=${sort}`}
                 key={filter}
               >
-                {filter === "all" ? "All" : formatApplicationStatus(filter)}
+                {filter === "all" ? "All" : filter === "active" ? "Active" : formatApplicationStatus(filter)}
                 <span>{counts[filter] || 0}</span>
               </Link>
             ))}

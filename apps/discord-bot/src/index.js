@@ -173,6 +173,9 @@ function buildHelpText() {
     "",
     "Application Review Thread Commands",
     ...staffLines,
+    "-status <status> [note] - Set pending, under_review, approved, rejected, appealed, or archived.",
+    "-underreview [note] - Mark the application as Under Review.",
+    "-requestinfo [message] - Request more information from the applicant.",
     "",
     `Full command archive: ${applicationCommandUrl}`
   ].join("\n");
@@ -182,6 +185,43 @@ function buildApplicationSummary(application) {
   return application.answers
     .map((answer, index) => `**Q${index + 1}.** ${applicationQuestions[index]}\n${answer}`)
     .join("\n\n");
+}
+
+const applicationStatusLabels = {
+  pending: "Pending",
+  under_review: "Under Review",
+  approved: "Approved",
+  rejected: "Rejected",
+  appealed: "Appealed",
+  archived: "Archived"
+};
+
+const applicantReplyStatuses = new Set(["pending", "under_review", "appealed"]);
+
+function normalizeApplicationStatus(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  const aliases = {
+    accept: "approved",
+    accepted: "approved",
+    approve: "approved",
+    deny: "rejected",
+    denied: "rejected",
+    reject: "rejected",
+    info: "under_review",
+    information_requested: "under_review",
+    request_info: "under_review",
+    underreview: "under_review",
+    review: "under_review"
+  };
+  const status = aliases[normalized] || normalized;
+  return Object.hasOwn(applicationStatusLabels, status) ? status : "";
+}
+
+function formatApplicationStatusLabel(status) {
+  return applicationStatusLabels[normalizeApplicationStatus(status)] || String(status || "Unknown");
 }
 
 async function findReviewApplicationByThread(threadId) {
@@ -257,6 +297,35 @@ async function updateRemoteApplication(applicationId, fields) {
   }
 
   return response.json().catch(() => null);
+}
+
+async function setApplicationReviewStatus(application, status, options = {}) {
+  const normalizedStatus = normalizeApplicationStatus(status);
+
+  if (!normalizedStatus) {
+    return null;
+  }
+
+  const updated = await setApplicationStatus(application.id, {
+    status: normalizedStatus,
+    decisionBy: options.actorId || "",
+    decisionNote: options.decisionNote || "",
+    needsAttention: Boolean(options.needsAttention),
+    updatedAt: new Date().toISOString()
+  });
+
+  await updateRemoteApplication(application.id, {
+    status: normalizedStatus,
+    decisionNote: options.decisionNote || "",
+    publicResponse: options.publicResponse || "",
+    requestInfo: Boolean(options.requestInfo),
+    needsAttention: Boolean(options.needsAttention),
+    archived: normalizedStatus === "archived",
+    suppressDiscordEvents: Boolean(options.suppressDiscordEvents),
+    actor: options.actorId ? `discord:${options.actorId}` : "discord"
+  }).catch(() => null);
+
+  return updated;
 }
 
 async function getActiveApplicationSession(userId) {
@@ -540,6 +609,38 @@ async function handleReviewThreadCommand(message, commandName, args) {
   const hasLinkedDiscordUser = Boolean(String(application.applicantId || "").trim());
   const reviewThread = message.channel;
 
+  async function announceStatusChange(status, note = "") {
+    const label = formatApplicationStatusLabel(status);
+    await reviewThread.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(status === "rejected" ? 0x8a3f38 : status === "approved" ? 0x4f8a5b : 0xd7a85f)
+          .setTitle("Citizenship Application Status Updated")
+          .setDescription(
+            [
+              `Ministry of Credit and Records: Application status changed to ${label}.`,
+              note ? `\n${note}` : ""
+            ].join("")
+          )
+          .addFields(
+            {
+              name: "Updated By",
+              value: `<@${message.author.id}>`,
+              inline: true
+            },
+            {
+              name: "Applicant",
+              value: hasLinkedDiscordUser
+                ? `<@${application.applicantId}>`
+                : application.applicantTag || "Website applicant",
+              inline: true
+            }
+          )
+          .setTimestamp(new Date())
+      ]
+    });
+  }
+
   async function closeReviewThread(status, note) {
     if (!reviewThread?.isThread?.()) {
       return;
@@ -629,12 +730,59 @@ async function handleReviewThreadCommand(message, commandName, args) {
     return true;
   }
 
+  if (commandName === "status") {
+    const requestedStatus = normalizeApplicationStatus(args.shift());
+    const note = args.join(" ").trim();
+
+    if (!requestedStatus) {
+      await message.reply("Use `-status pending|under_review|approved|rejected|appealed|archived [note]`.");
+      return true;
+    }
+
+    await setApplicationReviewStatus(application, requestedStatus, {
+      actorId: message.author.id,
+      decisionNote: note,
+      publicResponse: note,
+      needsAttention: requestedStatus === "appealed"
+    });
+    await announceStatusChange(requestedStatus, note);
+    await message.reply(`Application status set to ${formatApplicationStatusLabel(requestedStatus)}.`);
+    return true;
+  }
+
+  if (["underreview", "under-review", "review"].includes(commandName)) {
+    const note = args.join(" ").trim();
+    await setApplicationReviewStatus(application, "under_review", {
+      actorId: message.author.id,
+      decisionNote: note,
+      publicResponse: note || "Your application is now under review."
+    });
+    await announceStatusChange("under_review", note);
+    await message.reply("Application status set to Under Review.");
+    return true;
+  }
+
+  if (["requestinfo", "request-info", "info"].includes(commandName)) {
+    const note = args.join(" ").trim();
+    const publicResponse = note || "Additional information is required.";
+    await setApplicationReviewStatus(application, "under_review", {
+      actorId: message.author.id,
+      decisionNote: note,
+      publicResponse,
+      requestInfo: true,
+      needsAttention: true
+    });
+    await announceStatusChange("under_review", publicResponse);
+    await message.reply("Information request sent and application marked Under Review.");
+    return true;
+  }
+
   if (commandName === "accept") {
     const note = args.join(" ").trim();
-    const updated = await setApplicationStatus(application.id, {
-      status: "accepted",
-      decisionBy: message.author.id,
-      decisionNote: note
+    const updated = await setApplicationReviewStatus(application, "approved", {
+      actorId: message.author.id,
+      decisionNote: note,
+      suppressDiscordEvents: true
     });
     const roleGranted = hasLinkedDiscordUser ? await grantApplicantRole(updated) : false;
 
@@ -646,12 +794,6 @@ async function handleReviewThreadCommand(message, commandName, args) {
           : "Ministry of Credit and Records: Your citizenship application has been approved."
       );
     }
-    await updateRemoteApplication(application.id, {
-      status: "approved",
-      decisionNote: note,
-      actor: `discord:${message.author.id}`
-    }).catch(() => null);
-
     await message.reply(
       hasLinkedDiscordUser
         ? roleGranted
@@ -666,10 +808,10 @@ async function handleReviewThreadCommand(message, commandName, args) {
 
   if (commandName === "deny") {
     const note = args.join(" ").trim();
-    const updated = await setApplicationStatus(application.id, {
-      status: "denied",
-      decisionBy: message.author.id,
-      decisionNote: note
+    const updated = await setApplicationReviewStatus(application, "rejected", {
+      actorId: message.author.id,
+      decisionNote: note,
+      suppressDiscordEvents: true
     });
 
     if (hasLinkedDiscordUser) {
@@ -680,12 +822,6 @@ async function handleReviewThreadCommand(message, commandName, args) {
           : "Ministry of Credit and Records: Your citizenship application has been rejected."
       );
     }
-    await updateRemoteApplication(application.id, {
-      status: "rejected",
-      decisionNote: note,
-      actor: `discord:${message.author.id}`
-    }).catch(() => null);
-
     await message.reply(
       hasLinkedDiscordUser
         ? "Application denied and applicant notified."
@@ -1719,9 +1855,9 @@ client.on("messageCreate", async (message) => {
           return;
         }
 
-        if (status !== "pending" && status !== "appealed") {
+        if (!applicantReplyStatuses.has(normalizeApplicationStatus(status))) {
           await message.channel.send(
-            `Ministry of Credit and Records: Your application is currently marked ${status.replace(/_/g, " ")}. Further messages have not been forwarded as a standard follow-up.`
+            `Ministry of Credit and Records: Your application is currently marked ${formatApplicationStatusLabel(status)}. Further messages have not been forwarded as a standard follow-up.`
           );
           return;
         }

@@ -942,6 +942,10 @@ export async function updatePublicApplication(id, nextFields) {
       });
     }
 
+    if (nextFields.suppressDiscordEvents) {
+      events.length = 0;
+    }
+
     updatedApplication = {
       ...normalized,
       ...nextFields,

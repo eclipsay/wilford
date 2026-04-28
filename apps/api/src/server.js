@@ -256,6 +256,7 @@ app.post("/api/admin/applications/:id", requireAdmin, async (req, res) => {
     archived: Boolean(req.body?.archived),
     archivedAt: req.body?.archived ? new Date().toISOString() : req.body?.archivedAt || "",
     needsAttention: Boolean(req.body?.needsAttention),
+    suppressDiscordEvents: Boolean(req.body?.suppressDiscordEvents),
     actor: String(req.body?.actor || "government-access").trim()
   });
 
