@@ -193,6 +193,7 @@ function ensureDiscordWallet(economy, user) {
     district: "",
     status: "active",
       title: "",
+      salary: 125,
       taxStatus: "compliant",
     exempt: false,
     underReview: false,
@@ -326,17 +327,18 @@ async function handleEconomySlashCommand(interaction) {
       await replyEconomy(interaction, ministryEmbed("Daily Stipend", "Your civic stipend has already been claimed today."));
       return true;
     }
-    wallet.balance += 125;
+    const salary = Math.max(0, Number(wallet.salary ?? 125));
+    wallet.balance += salary;
     pushEconomyTransaction(economy, {
       fromWalletId: "treasury",
       toWalletId: wallet.id,
-      amount: 125,
+      amount: salary,
       type: "daily_stipend",
-      reason: "Daily civic stipend",
+      reason: "Daily civic salary",
       createdBy: interaction.user.id
     });
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed("Daily Civic Stipend", `${formatCredits(125)} has been issued to your wallet.`));
+    await replyEconomy(interaction, ministryEmbed("Daily Civic Salary", `${formatCredits(salary)} has been issued to your wallet.`));
     return true;
   }
 

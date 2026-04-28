@@ -76,8 +76,9 @@ export default async function PanemCreditControlPage({ searchParams }) {
                 <label className="public-application-field"><span>Display name</span><input name="displayName" required /></label>
                 <label className="public-application-field"><span>Discord ID optional</span><input name="discordId" /></label>
               </div>
-              <div className="public-application-grid public-application-grid--two">
+              <div className="public-application-grid public-application-grid--three">
                 <label className="public-application-field"><span>Opening balance</span><input defaultValue="500" min="0" name="balance" type="number" /></label>
+                <label className="public-application-field"><span>Daily salary</span><input defaultValue="125" min="0" name="salary" type="number" /></label>
                 <label className="public-application-field">
                   <span>District</span>
                   <select name="district">
@@ -106,6 +107,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
                 </div>
                 <div className="metric-grid">
                   <span><strong>{formatCredits(wallet.balance)}</strong> Balance</span>
+                  <span><strong>{formatCredits(wallet.salary ?? 125)}</strong> Daily salary</span>
                   <span><strong>{wallet.district || "Unassigned"}</strong> District</span>
                   <span><strong>{wallet.taxStatus}</strong> Tax status</span>
                   <span><strong>{wallet.title || titleForBalance(wallet.balance)}</strong> Title</span>
@@ -117,9 +119,10 @@ export default async function PanemCreditControlPage({ searchParams }) {
                     <div className="public-application-grid public-application-grid--three">
                       <label className="public-application-field"><span>Display name</span><input defaultValue={wallet.displayName} name="displayName" /></label>
                       <label className="public-application-field"><span>Balance</span><input defaultValue={wallet.balance} min="0" name="balance" type="number" /></label>
-                      <label className="public-application-field"><span>Discord ID</span><input defaultValue={wallet.discordId} name="discordId" /></label>
+                      <label className="public-application-field"><span>Daily salary</span><input defaultValue={wallet.salary ?? 125} min="0" name="salary" type="number" /></label>
                     </div>
                     <div className="public-application-grid public-application-grid--three">
+                      <label className="public-application-field"><span>Discord ID</span><input defaultValue={wallet.discordId} name="discordId" /></label>
                       <label className="public-application-field">
                         <span>District</span>
                         <select defaultValue={wallet.district || ""} name="district">

@@ -20,11 +20,11 @@ const baseUrl = (
 ).replace(/\/+$/, "");
 
 const seedWallets = [
-  ["wallet-chairman", "chairman", "", "Chairman Lemmie", 125000, "The Capitol"],
-  ["wallet-eclip", "eclip", "", "Executive Director Eclip", 82000, "District 3"],
-  ["wallet-flukkston", "flukkston", "", "Sir Flukkston", 64000, "District 2"],
-  ["wallet-citizen", "citizen", "", "Registered Citizen", 12480, "District 8"]
-].map(([id, userId, discordId, displayName, balance, district]) => ({
+  ["wallet-chairman", "chairman", "", "Chairman Lemmie", 125000, "The Capitol", 1500],
+  ["wallet-eclip", "eclip", "", "Executive Director Eclip", 82000, "District 3", 1000],
+  ["wallet-flukkston", "flukkston", "", "Sir Flukkston", 64000, "District 2", 900],
+  ["wallet-citizen", "citizen", "", "Registered Citizen", 12480, "District 8", 125]
+].map(([id, userId, discordId, displayName, balance, district, salary]) => ({
   id,
   userId,
   discordId,
@@ -32,6 +32,7 @@ const seedWallets = [
     balance,
     district,
     title: "",
+    salary,
     status: "active",
   taxStatus: "compliant",
   exempt: false,
@@ -73,7 +74,10 @@ export function normalizeEconomyStore(economy = {}) {
   });
 
   return {
-    wallets: Array.isArray(economy.wallets) && economy.wallets.length ? economy.wallets : seedWallets,
+    wallets: (Array.isArray(economy.wallets) && economy.wallets.length ? economy.wallets : seedWallets).map((wallet) => ({
+      ...wallet,
+      salary: Math.max(0, Number(wallet.salary ?? 125))
+    })),
     transactions: Array.isArray(economy.transactions) ? economy.transactions : [],
     marketItems,
     listings: Array.isArray(economy.listings) ? economy.listings : [],
@@ -262,6 +266,7 @@ export async function createWallet(fields, actor = "system") {
     balance: Math.max(0, Number(fields.balance || 0)),
     district: cleanText(fields.district, 80),
     title: cleanText(fields.title, 80),
+    salary: Math.max(0, Number(fields.salary ?? 125)),
     status: walletStatuses.includes(fields.status) ? fields.status : "active",
     taxStatus: cleanText(fields.taxStatus || "compliant", 80),
     exempt: Boolean(fields.exempt),

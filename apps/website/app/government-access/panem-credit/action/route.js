@@ -60,6 +60,7 @@ export async function POST(request) {
       discordId: formData.get("discordId"),
       displayName: formData.get("displayName"),
       balance: formData.get("balance"),
+      salary: formData.get("salary"),
       district: formData.get("district")
     }, actorName);
   }
@@ -69,6 +70,7 @@ export async function POST(request) {
     const wallet = getWallet(store, String(formData.get("walletId") || "").trim());
     if (wallet) {
       wallet.balance = Math.max(0, Number(formData.get("balance") || 0));
+      wallet.salary = Math.max(0, Number(formData.get("salary") ?? wallet.salary ?? 125));
       wallet.displayName = String(formData.get("displayName") || wallet.displayName || "").replace(/[<>]/g, "").trim().slice(0, 120);
       wallet.discordId = String(formData.get("discordId") || "").replace(/[<>]/g, "").trim().slice(0, 80);
       wallet.district = String(formData.get("district") || "").replace(/[<>]/g, "").trim().slice(0, 80);

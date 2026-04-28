@@ -75,6 +75,7 @@ export default async function PanemCreditPage({ searchParams }) {
             <div className="metric-grid">
               <span><strong>{formatCredits(paidTax)}</strong> Taxes paid</span>
               <span><strong>{formatCredits(outstandingTax)}</strong> Outstanding tax</span>
+              <span><strong>{formatCredits(selectedWallet.salary ?? 125)}</strong> Daily salary</span>
               <span><strong>{selectedWallet.taxStatus}</strong> Current status</span>
               <span><strong>{selectedWallet.district || "Unassigned"}</strong> District affiliation</span>
             </div>

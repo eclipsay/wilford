@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import {
   buyMarketItem,
   createListing,
+  getEconomyStore,
+  getWallet,
   transferCredits,
   treasuryPayment
 } from "../../../lib/panem-credit";
@@ -27,10 +29,13 @@ export async function POST(request) {
   }
 
   if (intent === "daily") {
+    const store = await getEconomyStore();
+    const wallet = getWallet(store, walletId);
+    const salary = Math.max(0, Number(wallet?.salary ?? 125));
     const result = await treasuryPayment({
       walletId,
-      amount: 125,
-      reason: "Daily civic stipend",
+      amount: salary,
+      reason: "Daily civic salary",
       type: "daily_stipend",
       actor: walletId
     });
