@@ -23,6 +23,13 @@ const mandates = [
   }
 ];
 
+const anthemLines = [
+  "From iron rail to Capitol flame, the Union speaks one sacred name.",
+  "Through storm and ash, through night and snow, our golden banners rise and glow.",
+  "One law, one heart, one future drawn; the Wilford Panem Union dawns.",
+  "In faith and service we remain, the engine, district, crown, and train."
+];
+
 export default function HomePage() {
   return (
     <SiteLayout>
@@ -80,6 +87,32 @@ export default function HomePage() {
                 <p>{mandate.text}</p>
               </article>
             ))}
+          </div>
+        </section>
+
+        <section className="anthem-showcase scroll-fade" aria-labelledby="anthem-title">
+          <div className="anthem-showcase__media" aria-label="Anthem media showcase">
+            <div className="anthem-showcase__screen">
+              <span>WPU</span>
+              <strong>National Anthem Broadcast</strong>
+              <p>Video embed support enabled for official ceremony footage.</p>
+            </div>
+            <audio className="anthem-showcase__audio" controls preload="none">
+              <source src="/anthem.mp3" type="audio/mpeg" />
+            </audio>
+          </div>
+          <div className="anthem-showcase__copy">
+            <p className="eyebrow">State Ceremony</p>
+            <h2 id="anthem-title">National Anthem of the Wilford Panem Union</h2>
+            <p>
+              A formal anthem presentation for ceremonies, broadcasts, public
+              observances, and Union civic events.
+            </p>
+            <div className="anthem-showcase__lyrics">
+              {anthemLines.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </div>
           </div>
         </section>
       </main>

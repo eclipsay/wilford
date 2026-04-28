@@ -50,6 +50,29 @@ const ministries = [
 
 const principles = ["Faith", "Order", "Service", "Unity"];
 
+const executives = [
+  {
+    name: "Executive Director Eclip",
+    rank: "Executive Director",
+    subtitle: "Executive Director of Union Administration",
+    description:
+      "Oversees ministry execution, district governance, national logistics, administration, and implementation of the Chairman's directives. Responsible for day-to-day operation of the Union state.",
+    image: "/wpu-grand-seal.png",
+    imageAlt: "Grand Seal of the Wilford Panem Union",
+    imageClassName: "portrait-frame portrait-frame--seal"
+  },
+  {
+    name: "First Minister Sir Flukkston",
+    rank: "Executive Director",
+    subtitle: "First Minister of State Vision and National Development",
+    description:
+      "Chief advisor to Chairman Lemmie and equal executive authority alongside Director Eclip. Guides long-term national vision, state philosophy, ceremonial affairs, elite appointments, and future direction of the Union.",
+    image: "/SirFluk.png",
+    imageAlt: "Official portrait of First Minister Sir Flukkston",
+    imageClassName: "portrait-frame"
+  }
+];
+
 export const metadata = {
   title: "Government of the Wilford Panem Union"
 };
@@ -91,7 +114,7 @@ export default function GovernmentPage() {
               />
             </div>
             <div>
-              <p className="government-office__rank">Supreme Authority</p>
+              <p className="government-office__rank">Supreme Chairman</p>
               <h2>Chairman Lemmie</h2>
               <strong>Founder and Supreme Chairman</strong>
               <p>
@@ -101,15 +124,35 @@ export default function GovernmentPage() {
             </div>
           </article>
 
-          <article className="government-office government-office--executive">
-            <p className="government-office__rank">Executive Command</p>
-            <h2>Executive Director Eclip</h2>
-            <strong>Executive Director of Union Administration</strong>
-            <p>
-              Coordinates ministry execution, district governance, and the
-              implementation of the Chairman&apos;s directives.
-            </p>
-          </article>
+          <div className="government-executive-tier" aria-label="Senior executive command">
+            {executives.map((executive) => (
+              <article className="government-office government-office--executive" key={executive.name}>
+                <div className="government-office__portrait government-office__portrait--executive">
+                  <Image
+                    src={executive.image}
+                    alt={executive.imageAlt}
+                    width={420}
+                    height={520}
+                    className={executive.imageClassName}
+                  />
+                </div>
+                <div>
+                  <p className="government-office__rank">{executive.rank}</p>
+                  <h2>{executive.name}</h2>
+                  <strong>{executive.subtitle}</strong>
+                  <p>{executive.description}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="government-command-statement">
+            <p className="government-office__rank">Dual Executive Command</p>
+            <blockquote>
+              The Union is administered through twin pillars of state authority:
+              governance and vision.
+            </blockquote>
+          </div>
 
           <div className="government-ministries">
             {ministries.map((ministry) => (

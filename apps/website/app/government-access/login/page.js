@@ -3,6 +3,7 @@ import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import {
   developmentPasswordNotice,
+  assertTrustedPostOrigin,
   getCurrentGovernmentUser,
   loginGovernmentUser
 } from "../../../lib/government-auth";
@@ -12,6 +13,12 @@ async function loginAction(formData) {
 
   const username = String(formData.get("username") || "").trim();
   const password = String(formData.get("password") || "");
+  const trusted = await assertTrustedPostOrigin();
+
+  if (!trusted) {
+    redirect("/government-access/login?error=1");
+  }
+
   const result = await loginGovernmentUser(username, password);
 
   if (!result.ok) {

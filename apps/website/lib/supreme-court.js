@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 export const courtStatuses = [
@@ -139,6 +140,10 @@ function resolveContentFile() {
   return candidates[0];
 }
 
+function resolveServerlessWritableFile() {
+  return resolve(tmpdir(), "wilford-supreme-court-content.json");
+}
+
 function normalizeList(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item || "").trim()).filter(Boolean);
@@ -229,6 +234,16 @@ function toPublicCase(courtCase) {
 
 async function readContentFile() {
   const contentFile = resolveContentFile();
+  const fallbackFile = resolveServerlessWritableFile();
+
+  try {
+    const raw = await readFile(fallbackFile, "utf8");
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      supremeCourtCases: normalizeCases(parsed.supremeCourtCases || defaultCases)
+    };
+  } catch {}
 
   try {
     const raw = await readFile(contentFile, "utf8");
@@ -246,8 +261,17 @@ async function readContentFile() {
 
 async function writeContentFile(content) {
   const contentFile = resolveContentFile();
-  await mkdir(dirname(contentFile), { recursive: true });
-  await writeFile(contentFile, JSON.stringify(content, null, 2));
+  const payload = JSON.stringify(content, null, 2);
+
+  try {
+    await mkdir(dirname(contentFile), { recursive: true });
+    await writeFile(contentFile, payload);
+    return;
+  } catch {}
+
+  const fallbackFile = resolveServerlessWritableFile();
+  await mkdir(dirname(fallbackFile), { recursive: true });
+  await writeFile(fallbackFile, payload);
 }
 
 export async function getSupremeCourtCases({ includeRestricted = false } = {}) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   createGovernmentUser,
+  assertTrustedPostOrigin,
   deleteGovernmentUser,
   disableGovernmentUser,
   parseUserForm,
@@ -14,6 +15,10 @@ function redirectTo(request, path) {
 }
 
 export async function POST(request) {
+  if (!(await assertTrustedPostOrigin())) {
+    return redirectTo(request, "/government-access?denied=1");
+  }
+
   const actor = await requireGovernmentUser("userControl");
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();

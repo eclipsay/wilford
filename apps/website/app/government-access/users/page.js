@@ -75,6 +75,10 @@ export default async function GovernmentUserControlPage({ searchParams }) {
                 Stored as a hash only. The temporary password appears once after creation.
               </small>
             </label>
+            <label className="public-application-toggle">
+              <input defaultChecked name="forcePasswordChange" type="checkbox" />
+              <span>Force password change on first login</span>
+            </label>
             <label className="public-application-field">
               <span>Notes</span>
               <textarea name="notes" rows="3" />

@@ -6,13 +6,17 @@ import {
   parseBulletinForm,
   updateBulletin
 } from "../../../../lib/bulletins";
-import { addAuditEvent, requireGovernmentUser } from "../../../../lib/government-auth";
+import { addAuditEvent, assertTrustedPostOrigin, requireGovernmentUser } from "../../../../lib/government-auth";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
 }
 
 export async function POST(request) {
+  if (!(await assertTrustedPostOrigin())) {
+    return redirectTo(request, "/government-access?denied=1");
+  }
+
   const user = await requireGovernmentUser("bulletinControl");
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();

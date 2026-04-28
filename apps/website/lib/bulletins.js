@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const categories = [
@@ -53,6 +54,10 @@ function resolveContentFile() {
   return candidates[0];
 }
 
+function resolveServerlessWritableFile() {
+  return resolve(tmpdir(), "wilford-bulletins-content.json");
+}
+
 function normalizeBulletin(entry, index) {
   const now = new Date().toISOString();
   const priority = String(entry?.priority || "standard").toLowerCase();
@@ -81,6 +86,16 @@ function normalizeBulletins(items) {
 
 async function readContentFile() {
   const contentFile = resolveContentFile();
+  const fallbackFile = resolveServerlessWritableFile();
+
+  try {
+    const raw = await readFile(fallbackFile, "utf8");
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      bulletins: normalizeBulletins(parsed.bulletins || defaultBulletins)
+    };
+  } catch {}
 
   try {
     const raw = await readFile(contentFile, "utf8");
@@ -98,8 +113,17 @@ async function readContentFile() {
 
 async function writeContentFile(content) {
   const contentFile = resolveContentFile();
-  await mkdir(dirname(contentFile), { recursive: true });
-  await writeFile(contentFile, JSON.stringify(content, null, 2));
+  const payload = JSON.stringify(content, null, 2);
+
+  try {
+    await mkdir(dirname(contentFile), { recursive: true });
+    await writeFile(contentFile, payload);
+    return;
+  } catch {}
+
+  const fallbackFile = resolveServerlessWritableFile();
+  await mkdir(dirname(fallbackFile), { recursive: true });
+  await writeFile(fallbackFile, payload);
 }
 
 function isExpired(bulletin, now = new Date()) {

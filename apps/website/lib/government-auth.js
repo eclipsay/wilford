@@ -1,51 +1,52 @@
 import { createHmac, randomBytes, timingSafeEqual, pbkdf2Sync } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 export const governmentSessionCookie = "wpu_government_session";
 
 export const accessRoles = [
-  "Supreme Authority",
-  "Executive Command",
-  "Ministry Command",
-  "MSS Command",
-  "Court Official",
+  "Supreme Chairman",
+  "Executive Director",
+  "Minister",
+  "Security Command",
+  "Judicial Officer",
+  "District Governor",
   "Government Official",
   "Citizen Clerk",
-  "Read-Only Observer"
+  "Citizen"
 ];
 
 export const permissions = {
   dashboard: accessRoles,
-  bulletinControl: [
-    "Supreme Authority",
-    "Executive Command",
-    "Ministry Command",
-    "Government Official"
-  ],
-  supremeCourtControl: ["Supreme Authority", "Executive Command", "Court Official"],
-  mssTools: ["Supreme Authority", "Executive Command", "MSS Command"],
+  bulletinControl: ["Supreme Chairman", "Executive Director", "Minister", "Government Official"],
+  supremeCourtControl: ["Supreme Chairman", "Executive Director", "Judicial Officer"],
+  mssTools: ["Supreme Chairman", "Executive Director", "Security Command"],
   citizenshipReview: [
-    "Supreme Authority",
-    "Executive Command",
+    "Supreme Chairman",
+    "Executive Director",
     "Citizen Clerk",
     "Government Official"
   ],
-  userControl: ["Supreme Authority", "Executive Command"],
-  auditLog: ["Supreme Authority", "Executive Command"]
+  userControl: ["Supreme Chairman", "Executive Director"],
+  auditLog: ["Supreme Chairman", "Executive Director"]
 };
 
 const devTemporaryPassword = "WPU-DEV-CHANGE-ME";
+const loginAttempts = new Map();
+const maxLoginAttempts = 8;
+const loginWindowMs = 10 * 60 * 1000;
 
 const seedUsers = [
-  ["chairman", "Chairman", "Supreme Authority"],
-  ["eclip", "Eclip", "Executive Command"],
-  ["flukkston", "Flukkston", "Executive Command"],
-  ["mss_command", "MSS Command", "MSS Command"],
-  ["court_clerk", "Court Clerk", "Court Official"]
+  ["chairman", "Chairman Lemmie", "Supreme Chairman"],
+  ["eclip", "Executive Director Eclip", "Executive Director"],
+  ["flukkston", "First Minister Sir Flukkston", "Executive Director"],
+  ["mss_command", "MSS Command", "Security Command"],
+  ["court_clerk", "Court Clerk", "Judicial Officer"]
 ].map(([username, displayName, role], index) => ({
   id: `dev-user-${index + 1}`,
   username,
@@ -62,6 +63,33 @@ const seedUsers = [
 export const developmentPasswordNotice =
   "Development seed users use temporary password WPU-DEV-CHANGE-ME and are marked for replacement.";
 
+function cleanText(value, maxLength = 600) {
+  return String(value || "")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function isRateLimited(username) {
+  const key = cleanText(username || "unknown", 80).toLowerCase();
+  const now = Date.now();
+  const entry = loginAttempts.get(key) || { count: 0, resetAt: now + loginWindowMs };
+
+  if (entry.resetAt <= now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + loginWindowMs });
+    return false;
+  }
+
+  entry.count += 1;
+  loginAttempts.set(key, entry);
+  return entry.count > maxLoginAttempts;
+}
+
+function clearRateLimit(username) {
+  loginAttempts.delete(cleanText(username || "unknown", 80).toLowerCase());
+}
+
 function resolveContentFile() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
@@ -76,6 +104,10 @@ function resolveContentFile() {
   ].filter(Boolean);
 
   return candidates[0];
+}
+
+function resolveServerlessWritableFile() {
+  return resolve(tmpdir(), "wilford-government-content.json");
 }
 
 function authSecret() {
@@ -105,19 +137,28 @@ export function verifyPassword(password, storedHash) {
 }
 
 function normalizeUser(user, index) {
-  const role = accessRoles.includes(user?.role) ? user.role : "Read-Only Observer";
+  const roleAliases = {
+    "Supreme Authority": "Supreme Chairman",
+    "Executive Command": "Executive Director",
+    "Ministry Command": "Minister",
+    "MSS Command": "Security Command",
+    "Court Official": "Judicial Officer",
+    "Read-Only Observer": "Citizen"
+  };
+  const requestedRole = roleAliases[user?.role] || user?.role;
+  const role = accessRoles.includes(requestedRole) ? requestedRole : "Citizen";
 
   return {
     id: String(user?.id || `user-${Date.now().toString(36)}-${index}`),
     username: String(user?.username || "").trim().toLowerCase(),
-    displayName: String(user?.displayName || user?.username || "").trim(),
+    displayName: cleanText(user?.displayName || user?.username || "", 120),
     role,
     active: user?.active !== false,
     forcePasswordChange: Boolean(user?.forcePasswordChange),
     passwordHash: String(user?.passwordHash || "").trim(),
     createdAt: user?.createdAt || new Date().toISOString(),
     lastLoginAt: user?.lastLoginAt || "",
-    notes: String(user?.notes || "").trim()
+    notes: cleanText(user?.notes || "", 1000)
   };
 }
 
@@ -125,15 +166,26 @@ function normalizeAudit(entry, index) {
   return {
     id: String(entry?.id || `audit-${index}`),
     at: entry?.at || new Date().toISOString(),
-    actor: String(entry?.actor || "system").trim(),
-    action: String(entry?.action || "event").trim(),
-    detail: String(entry?.detail || "").trim(),
-    status: String(entry?.status || "info").trim()
+    actor: cleanText(entry?.actor || "system", 120),
+    action: cleanText(entry?.action || "event", 120),
+    detail: cleanText(entry?.detail || "", 1000),
+    status: cleanText(entry?.status || "info", 40)
   };
 }
 
 async function readContentFile() {
   const contentFile = resolveContentFile();
+  const fallbackFile = resolveServerlessWritableFile();
+
+  try {
+    const raw = await readFile(fallbackFile, "utf8");
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      governmentUsers: (parsed.governmentUsers || seedUsers).map(normalizeUser),
+      governmentAuditLog: (parsed.governmentAuditLog || []).map(normalizeAudit)
+    };
+  } catch {}
 
   try {
     const raw = await readFile(contentFile, "utf8");
@@ -153,8 +205,22 @@ async function readContentFile() {
 
 async function writeContentFile(content) {
   const contentFile = resolveContentFile();
-  await mkdir(dirname(contentFile), { recursive: true });
-  await writeFile(contentFile, JSON.stringify(content, null, 2));
+  const payload = JSON.stringify(content, null, 2);
+
+  try {
+    await mkdir(dirname(contentFile), { recursive: true });
+    await writeFile(contentFile, payload);
+    return true;
+  } catch {}
+
+  try {
+    const fallbackFile = resolveServerlessWritableFile();
+    await mkdir(dirname(fallbackFile), { recursive: true });
+    await writeFile(fallbackFile, payload);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function writeAudit(content, actor, action, detail, status = "info") {
@@ -245,7 +311,7 @@ export async function requireGovernmentUser(permission = "dashboard") {
   }
 
   if (!canAccess(user, permission)) {
-    await addAuditEvent(user.username, "access denied", `Denied ${permission}`, "denied");
+    await addAuditEvent(user.username, "access denied", `Denied ${permission}`, "denied").catch(() => {});
     redirect("/government-access?denied=1");
   }
 
@@ -254,7 +320,14 @@ export async function requireGovernmentUser(permission = "dashboard") {
 
 export async function loginGovernmentUser(username, password) {
   const content = await readContentFile();
-  const normalizedUsername = String(username || "").trim().toLowerCase();
+  const normalizedUsername = cleanText(username, 80).toLowerCase();
+
+  if (isRateLimited(normalizedUsername)) {
+    await writeAudit(content, normalizedUsername || "unknown", "failed login", "Rate limit exceeded", "failed");
+    await writeContentFile(content);
+    return { ok: false, rateLimited: true };
+  }
+
   const user = content.governmentUsers.find((item) => item.username === normalizedUsername);
 
   if (!user || !user.active || !verifyPassword(password, user.passwordHash)) {
@@ -264,6 +337,7 @@ export async function loginGovernmentUser(username, password) {
   }
 
   const now = new Date().toISOString();
+  clearRateLimit(normalizedUsername);
   content.governmentUsers = content.governmentUsers.map((item) =>
     item.username === user.username ? { ...item, lastLoginAt: now } : item
   );
@@ -330,14 +404,14 @@ export async function createGovernmentUser(actor, fields) {
     {
       id: `user-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`,
       username,
-      displayName: fields.displayName,
+      displayName: cleanText(fields.displayName, 120),
       role: fields.role,
       active: true,
-      forcePasswordChange: true,
+      forcePasswordChange: fields.forcePasswordChange !== false,
       passwordHash: hashPassword(password),
       createdAt: new Date().toISOString(),
       lastLoginAt: "",
-      notes: fields.notes
+      notes: cleanText(fields.notes, 1000)
     },
     content.governmentUsers.length
   );
@@ -359,7 +433,7 @@ export async function updateGovernmentUser(actor, username, fields) {
             role: fields.role,
             active: fields.active,
             forcePasswordChange: fields.forcePasswordChange,
-            notes: fields.notes
+            notes: cleanText(fields.notes, 1000)
           },
           0
         )
@@ -406,7 +480,7 @@ export function parseUserForm(formData) {
   return {
     username: String(formData.get("username") || "").trim(),
     displayName: String(formData.get("displayName") || "").trim(),
-    role: String(formData.get("role") || "Read-Only Observer").trim(),
+    role: String(formData.get("role") || "Citizen").trim(),
     active: formData.get("active") === "on",
     forcePasswordChange: formData.get("forcePasswordChange") === "on",
     temporaryPassword: String(formData.get("temporaryPassword") || "").trim(),
@@ -416,4 +490,20 @@ export function parseUserForm(formData) {
 
 export function generateTemporaryPassword() {
   return `WPU-TEMP-${randomBytes(6).toString("hex").toUpperCase()}`;
+}
+
+export async function assertTrustedPostOrigin() {
+  const incoming = await headers();
+  const origin = incoming.get("origin");
+  const host = incoming.get("host");
+
+  if (!origin || !host) {
+    return true;
+  }
+
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }

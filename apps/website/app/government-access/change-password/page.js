@@ -3,6 +3,7 @@ import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import {
   changeOwnPassword,
+  assertTrustedPostOrigin,
   getCurrentGovernmentUser
 } from "../../../lib/government-auth";
 
@@ -10,8 +11,9 @@ async function changePasswordAction(formData) {
   "use server";
 
   const user = await getCurrentGovernmentUser();
+  const trusted = await assertTrustedPostOrigin();
 
-  if (!user) {
+  if (!user || !trusted) {
     redirect("/government-access/login");
   }
 
