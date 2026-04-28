@@ -20,6 +20,9 @@ const baseUrl = (
 export const accessRoles = [
   "Supreme Chairman",
   "Executive Director",
+  "MSS Command",
+  "Minister of State Security",
+  "MSS Agent",
   "Minister",
   "Security Command",
   "Judicial Officer",
@@ -33,8 +36,23 @@ export const permissions = {
   dashboard: accessRoles,
   bulletinControl: ["Supreme Chairman", "Executive Director", "Minister", "Government Official"],
   articleControl: ["Supreme Chairman", "Executive Director", "Minister", "Government Official"],
-  supremeCourtControl: ["Supreme Chairman", "Executive Director", "Judicial Officer", "Security Command"],
-  mssTools: ["Supreme Chairman", "Executive Director", "Security Command"],
+  supremeCourtControl: ["Supreme Chairman", "Executive Director", "Judicial Officer", "MSS Command", "Security Command"],
+  mssTools: ["Supreme Chairman", "Executive Director", "MSS Command", "Security Command"],
+  enemyRegistryDraft: [
+    "Supreme Chairman",
+    "Executive Director",
+    "MSS Command",
+    "Security Command",
+    "Minister of State Security",
+    "MSS Agent"
+  ],
+  enemyRegistryPublic: [
+    "Supreme Chairman",
+    "Executive Director",
+    "MSS Command",
+    "Security Command",
+    "Minister of State Security"
+  ],
   broadcastApproval: ["Supreme Chairman"],
   citizenshipReview: [
     "Supreme Chairman",
@@ -211,7 +229,7 @@ function normalizeUser(user, index) {
     "Supreme Authority": "Supreme Chairman",
     "Executive Command": "Executive Director",
     "Ministry Command": "Minister",
-    "MSS Command": "Security Command",
+    "Security Command": "MSS Command",
     "Court Official": "Judicial Officer",
     "Read-Only Observer": "Citizen"
   };

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   addAuditEvent,
   assertTrustedPostOrigin,
+  canAccess,
   requireGovernmentUser
 } from "../../../../lib/government-auth";
 import {
@@ -11,6 +12,16 @@ import {
   mssThreatLevels,
   requiresChairmanApproval
 } from "../../../../lib/discord-broadcasts";
+import {
+  createEnemyEntry,
+  deleteEnemyEntry,
+  enemyClassifications,
+  enemyStatuses,
+  enemyThreatLevels,
+  enemyVisibilityLevels,
+  parseEnemyEntryForm,
+  updateEnemyEntry
+} from "../../../../lib/enemies-of-state";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
@@ -39,12 +50,73 @@ export async function POST(request) {
     return redirectTo(request, "/government-access?denied=1");
   }
 
-  const user = await requireGovernmentUser("mssTools");
+  const user = await requireGovernmentUser("enemyRegistryDraft");
   const formData = await request.formData();
   const intent = clean(formData.get("intent"), 80);
 
+  if (intent === "create-enemy-entry" || intent === "update-enemy-entry") {
+    const canApprovePublic = canAccess(user, "enemyRegistryPublic");
+    const fields = parseEnemyEntryForm(formData, { canApprovePublic });
+    const entryId = clean(formData.get("entryId"), 120);
+
+    if (!fields.name || !fields.reasonSummary) {
+      return redirectTo(request, "/government-access/mss-console?error=required&detail=Name%20and%20reason%20summary%20are%20required.");
+    }
+
+    if (
+      !enemyClassifications.includes(fields.classification) ||
+      !enemyThreatLevels.includes(fields.threatLevel) ||
+      !enemyStatuses.includes(fields.status) ||
+      !enemyVisibilityLevels.includes(fields.visibility)
+    ) {
+      return redirectTo(request, "/government-access/mss-console?error=invalid&detail=Invalid%20registry%20classification%20or%20visibility.");
+    }
+
+    try {
+      if (intent === "update-enemy-entry" && entryId) {
+        await updateEnemyEntry(entryId, fields);
+        await addAuditEvent(user.username, "enemy registry edited", `${entryId} / ${fields.name}`, "success");
+      } else {
+        await createEnemyEntry({ ...fields, createdBy: user.username });
+        await addAuditEvent(user.username, "enemy registry drafted", fields.name, "success");
+      }
+
+      return redirectTo(request, "/government-access/mss-console?registrySaved=1");
+    } catch (error) {
+      await addAuditEvent(user.username, "enemy registry save failed", fields.name, "failed").catch(() => {});
+      return redirectTo(
+        request,
+        `/government-access/mss-console?error=storage&detail=${encodeURIComponent(error.message)}`
+      );
+    }
+  }
+
+  if (intent === "archive-enemy-entry") {
+    const entryId = clean(formData.get("entryId"), 120);
+
+    if (!entryId) {
+      return redirectTo(request, "/government-access/mss-console?error=required&detail=Registry%20entry%20ID%20is%20required.");
+    }
+
+    try {
+      await deleteEnemyEntry(entryId);
+      await addAuditEvent(user.username, "enemy registry archived", entryId, "success");
+      return redirectTo(request, "/government-access/mss-console?registrySaved=1");
+    } catch (error) {
+      await addAuditEvent(user.username, "enemy registry archive failed", entryId, "failed").catch(() => {});
+      return redirectTo(
+        request,
+        `/government-access/mss-console?error=storage&detail=${encodeURIComponent(error.message)}`
+      );
+    }
+  }
+
   if (intent !== "create-security-alert") {
     return redirectTo(request, "/government-access/mss-console");
+  }
+
+  if (!canAccess(user, "mssTools")) {
+    return redirectTo(request, "/government-access?denied=1");
   }
 
   const subjectName = clean(formData.get("subjectName"), 180);

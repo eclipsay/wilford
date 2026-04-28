@@ -44,6 +44,7 @@ const adminApiKey = String(process.env.ADMIN_API_KEY || "").trim();
 const broadcastGuildId = String(process.env.DISCORD_GUILD_ID || "").trim();
 const announcementChannelId = String(process.env.DISCORD_ANNOUNCEMENT_CHANNEL_ID || "").trim();
 const mssChannelId = String(process.env.DISCORD_MSS_CHANNEL_ID || "").trim();
+const enemiesOfStateChannelId = String(process.env.ENEMIES_OF_STATE_CHANNEL_ID || "").trim();
 const courtAnnouncementsChannelId = String(process.env.COURT_ANNOUNCEMENTS_CHANNEL_ID || "").trim();
 const activeHearingsChannelId = String(process.env.ACTIVE_HEARINGS_CHANNEL_ID || "").trim();
 const sentencingRecordsChannelId = String(process.env.SENTENCING_RECORDS_CHANNEL_ID || "").trim();
@@ -1152,6 +1153,40 @@ async function markDiscordBroadcast(broadcastId, payload) {
   });
 }
 
+async function getPendingEnemyRegistryEvents() {
+  if (!adminApiKey) {
+    return [];
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/enemies-of-state/discord-events`, {
+    headers: { "x-admin-key": adminApiKey },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Enemy registry events request failed: ${response.status}`);
+  }
+
+  const payload = await response.json().catch(() => null);
+  return Array.isArray(payload?.events) ? payload.events : [];
+}
+
+async function markEnemyRegistryEvent(eventId, payload) {
+  if (!adminApiKey) {
+    return;
+  }
+
+  await fetch(`${apiUrl}/api/admin/enemies-of-state/discord-events/${encodeURIComponent(eventId)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store"
+  });
+}
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1420,6 +1455,136 @@ function buildBroadcastEmbed(broadcast) {
   }
 
   return embed;
+}
+
+function firstRegistryReference(entry) {
+  return entry.relatedCaseUrl || entry.relatedArticleUrl || entry.relatedBulletinUrl || `${websiteUrl}/enemies-of-the-state`;
+}
+
+function buildEnemyRegistryEmbed(entry) {
+  const reference = absoluteWebsiteUrl(firstRegistryReference(entry));
+  const statusPhrase =
+    entry.status === "Cleared" || entry.status === "Pardoned"
+      ? `${entry.name} has been cleared by order of ${entry.issuingAuthority || "the Ministry of State Security"}.`
+      : `${entry.name} is classified as ${entry.classification || "Person of Interest"} and listed by order of ${entry.issuingAuthority || "the Ministry of State Security"}.`;
+  const embed = new EmbedBuilder()
+    .setColor(0x7f1515)
+    .setTitle("MSS ENEMY OF THE STATE NOTICE")
+    .setDescription(statusPhrase)
+    .addFields(
+      { name: "Name", value: cleanBroadcastLine(entry.alias ? `${entry.name} / ${entry.alias}` : entry.name), inline: false },
+      { name: "Classification", value: cleanBroadcastLine(entry.classification || "Person of Interest"), inline: true },
+      { name: "Threat Level", value: cleanBroadcastLine(entry.threatLevel || "Low"), inline: true },
+      { name: "Status", value: cleanBroadcastLine(entry.status || "Under MSS Review"), inline: true },
+      { name: "Reason", value: String(entry.reasonSummary || "Under MSS review.").slice(0, 1024), inline: false },
+      { name: "Issuing Authority", value: cleanBroadcastLine(entry.issuingAuthority || "Ministry of State Security"), inline: true },
+      { name: "Reference", value: reference || `${websiteUrl}/enemies-of-the-state`, inline: false }
+    )
+    .setFooter({ text: "Ministry of State Security • Wilford Panem Union" })
+    .setTimestamp(new Date(entry.updatedAt || entry.createdAt || Date.now()));
+
+  const imageUrl = absoluteWebsiteUrl(entry.imageUrl);
+  if (imageUrl) {
+    embed.setThumbnail(imageUrl);
+  }
+
+  return embed;
+}
+
+function buildEnemyRegistryComponents(entry) {
+  const reference = absoluteWebsiteUrl(firstRegistryReference(entry));
+
+  if (!reference) {
+    return [];
+  }
+
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Open Registry")
+        .setStyle(ButtonStyle.Link)
+        .setURL(reference)
+    )
+  ];
+}
+
+async function processEnemyRegistryEvent(event) {
+  const entry = event.entry;
+  const channelId = enemiesOfStateChannelId || mssChannelId || announcementChannelId;
+
+  if (!channelId) {
+    await markEnemyRegistryEvent(event.id, {
+      status: "failed",
+      error: "ENEMIES_OF_STATE_CHANNEL_ID is not configured."
+    });
+    return;
+  }
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+
+  if (!channel?.isTextBased() || channel.type === ChannelType.DM) {
+    await markEnemyRegistryEvent(event.id, {
+      status: "failed",
+      error: "Configured enemy registry channel is not text-capable."
+    });
+    return;
+  }
+
+  try {
+    const shouldDelete =
+      event.action === "archive" &&
+      (entry.archived || entry.visibility !== "Public Registry" || !entry.approvedPublic);
+    const existingMessage = entry.discordMessageId
+      ? await channel.messages.fetch(entry.discordMessageId).catch(() => null)
+      : null;
+
+    if (shouldDelete && existingMessage) {
+      await existingMessage.delete().catch(() => null);
+      await markEnemyRegistryEvent(event.id, {
+        status: "delivered",
+        discordChannelId: channel.id,
+        discordMessageId: ""
+      });
+      return;
+    }
+
+    if (existingMessage) {
+      await existingMessage.edit({
+        embeds: [buildEnemyRegistryEmbed(entry)],
+        components: buildEnemyRegistryComponents(entry)
+      });
+      await markEnemyRegistryEvent(event.id, {
+        status: "delivered",
+        discordChannelId: channel.id,
+        discordMessageId: existingMessage.id
+      });
+      return;
+    }
+
+    if (shouldDelete) {
+      await markEnemyRegistryEvent(event.id, {
+        status: "delivered",
+        discordChannelId: channel.id,
+        discordMessageId: ""
+      });
+      return;
+    }
+
+    const sent = await channel.send({
+      embeds: [buildEnemyRegistryEmbed(entry)],
+      components: buildEnemyRegistryComponents(entry)
+    });
+    await markEnemyRegistryEvent(event.id, {
+      status: "delivered",
+      discordChannelId: channel.id,
+      discordMessageId: sent.id
+    });
+  } catch (error) {
+    await markEnemyRegistryEvent(event.id, {
+      status: "failed",
+      error: error instanceof Error ? error.message : "Enemy registry mirror failed."
+    });
+  }
 }
 
 function buildCourtBroadcastEmbed(broadcast) {
@@ -1936,6 +2101,7 @@ let isProcessingWebsiteApplications = false;
 let isProcessingApplicationDiscordEvents = false;
 let isProcessingDiscordBroadcasts = false;
 let isProcessingBroadcastApprovals = false;
+let isProcessingEnemyRegistryEvents = false;
 
 async function runCommitLoop() {
   if (isPublishing) {
@@ -2046,6 +2212,30 @@ async function runDiscordBroadcastLoop() {
     );
   } finally {
     isProcessingDiscordBroadcasts = false;
+  }
+}
+
+async function runEnemyRegistryLoop() {
+  if (isProcessingEnemyRegistryEvents) {
+    return;
+  }
+
+  isProcessingEnemyRegistryEvents = true;
+
+  try {
+    const events = await getPendingEnemyRegistryEvents();
+
+    for (const event of events) {
+      await processEnemyRegistryEvent(event);
+    }
+  } catch (error) {
+    console.log(
+      `Enemy registry Discord mirror error: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  } finally {
+    isProcessingEnemyRegistryEvents = false;
   }
 }
 
@@ -2298,6 +2488,8 @@ client.once("ready", () => {
   setInterval(runApplicationDiscordEventsLoop, 15000);
   runDiscordBroadcastLoop();
   setInterval(runDiscordBroadcastLoop, 15000);
+  runEnemyRegistryLoop();
+  setInterval(runEnemyRegistryLoop, 15000);
   runBroadcastApprovalLoop();
   setInterval(runBroadcastApprovalLoop, 15000);
 });

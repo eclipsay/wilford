@@ -11,6 +11,7 @@ const stateNavigation = [
   { label: "The People", href: "/members" },
   { label: "Panem Credit", href: "/panem-credit" },
   { label: "Ministry of State Security", href: "/ministry-of-state-security" },
+  { label: "Enemy Registry", href: "/enemies-of-the-state" },
   { label: "SUPREME COURT", href: "/supreme-court" },
   { label: "Citizen Portal", href: "/citizen-portal" },
   { label: "CITIZENSHIP", href: "/citizenship" },
@@ -82,6 +83,7 @@ export async function SiteLayout({ children }) {
             <Link href="/information">The Union</Link>
             <Link href="/panem-credit">Panem Credit</Link>
             <Link href="/supreme-court">Supreme Court</Link>
+            <Link href="/enemies-of-the-state">Enemy Registry</Link>
             <Link href="/citizenship">Citizenship</Link>
             <Link href="/chairman">The Chairman</Link>
             <Link href="/citizen-portal">Citizen Portal</Link>

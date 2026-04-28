@@ -7,6 +7,7 @@ import {
   createArticle,
   createBulletin,
   createDiscordBroadcast,
+  createEnemyOfStateEntry,
   createAlliance,
   createEnemyNation,
   createExcommunication,
@@ -17,11 +18,14 @@ import {
   deleteArticle,
   deleteBulletin,
   deleteEnemyNation,
+  archiveEnemyOfStateEntry,
   deleteExcommunication,
   deleteMember,
   deletePanelUser,
   getContent,
   getDiscordBroadcasts,
+  getEnemyOfStateEntries,
+  getPendingEnemyOfStateDiscordEvents,
   getPendingApplicationDiscordEvents,
   getPendingPublicApplications,
   getPublicApplications,
@@ -32,6 +36,7 @@ import {
   moveExcommunication,
   moveMember,
   markApplicationDiscordEvent,
+  markEnemyOfStateDiscordEvent,
   reorderAlliances,
   reorderEnemyNations,
   reorderExcommunications,
@@ -43,6 +48,7 @@ import {
   updateArticle,
   updateBulletin,
   updateDiscordBroadcast,
+  updateEnemyOfStateEntry,
   updateGovernmentAccessStore,
   updateMemberPosition,
   updateSupremeCourtStore,
@@ -127,6 +133,28 @@ app.get("/api/content", async (_req, res) => {
       (article) => article.status === "published"
     );
   }
+
+  if (Array.isArray(publicContent.enemyOfStateEntries)) {
+    publicContent.enemyOfStateEntries = publicContent.enemyOfStateEntries
+      .filter(
+        (entry) =>
+          entry.visibility === "Public Registry" &&
+          ["Under MSS Review", "Active", "Pardoned", "Cleared"].includes(entry.status) &&
+          entry.archived !== true
+      )
+      .map(
+        ({
+          evidenceNotes,
+          createdBy,
+          discordChannelId,
+          discordMessageId,
+          lastDiscordSyncedAt,
+          ...entry
+        }) => entry
+      );
+  }
+
+  delete publicContent.enemyOfStateDiscordEvents;
 
   res.json(publicContent);
 });
@@ -560,6 +588,50 @@ app.post("/api/admin/bulletins/:id/move", requireAdmin, async (req, res) => {
 app.delete("/api/admin/bulletins/:id", requireAdmin, async (req, res) => {
   const bulletins = await deleteBulletin(req.params.id);
   res.json({ bulletins });
+});
+
+app.get("/api/admin/enemies-of-state", requireAdmin, async (_req, res) => {
+  const enemyOfStateEntries = await getEnemyOfStateEntries();
+  res.json({ enemyOfStateEntries });
+});
+
+app.post("/api/admin/enemies-of-state", requireAdmin, async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const reasonSummary = String(req.body?.reasonSummary || "").trim();
+
+  if (!name || !reasonSummary) {
+    return res.status(400).json({ error: "Name and reason summary are required." });
+  }
+
+  const enemyOfStateEntries = await createEnemyOfStateEntry(req.body || {});
+  res.status(201).json({ enemyOfStateEntries });
+});
+
+app.post("/api/admin/enemies-of-state/:id", requireAdmin, async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const reasonSummary = String(req.body?.reasonSummary || "").trim();
+
+  if (!name || !reasonSummary) {
+    return res.status(400).json({ error: "Name and reason summary are required." });
+  }
+
+  const enemyOfStateEntries = await updateEnemyOfStateEntry(req.params.id, req.body || {});
+  res.json({ enemyOfStateEntries });
+});
+
+app.delete("/api/admin/enemies-of-state/:id", requireAdmin, async (req, res) => {
+  const enemyOfStateEntries = await archiveEnemyOfStateEntry(req.params.id);
+  res.json({ enemyOfStateEntries });
+});
+
+app.get("/api/admin/enemies-of-state/discord-events", requireAdmin, async (_req, res) => {
+  const events = await getPendingEnemyOfStateDiscordEvents();
+  res.json({ events });
+});
+
+app.post("/api/admin/enemies-of-state/discord-events/:eventId", requireAdmin, async (req, res) => {
+  const result = await markEnemyOfStateDiscordEvent(req.params.eventId, req.body || {});
+  res.json(result);
 });
 
 app.get("/api/admin/users", requireOwner, async (_req, res) => {

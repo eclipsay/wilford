@@ -61,6 +61,9 @@ export default function MinistryOfStateSecurityPage() {
           <Link className="button button--solid-site" href="/government-access">
             Government Access
           </Link>
+          <Link className="button" href="/enemies-of-the-state">
+            Public Enemy Registry
+          </Link>
         </section>
       </main>
     </SiteLayout>

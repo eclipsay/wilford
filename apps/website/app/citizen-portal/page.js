@@ -27,6 +27,11 @@ const citizenServices = [
     title: "News Bulletins",
     text: "Official notices, civic updates, ministry announcements, and public advisories.",
     href: "/information"
+  },
+  {
+    title: "Enemy Registry",
+    text: "Public Enemy of the State listings, cleared records, and MSS registry notices.",
+    href: "/enemies-of-the-state"
   }
 ];
 

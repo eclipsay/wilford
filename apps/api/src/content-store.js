@@ -50,6 +50,8 @@ const defaultContent = {
   governmentUsers: [],
   governmentAuditLog: [],
   discordBroadcasts: [],
+  enemyOfStateEntries: [],
+  enemyOfStateDiscordEvents: [],
   supremeCourtCases: [],
   supremeCourtPetitions: [],
   bulletins: [
@@ -194,6 +196,8 @@ async function readContentFile() {
       governmentUsers: parsed.governmentUsers || [],
       governmentAuditLog: parsed.governmentAuditLog || [],
       discordBroadcasts: parsed.discordBroadcasts || [],
+      enemyOfStateEntries: parsed.enemyOfStateEntries || [],
+      enemyOfStateDiscordEvents: parsed.enemyOfStateDiscordEvents || [],
       supremeCourtCases: parsed.supremeCourtCases || [],
       supremeCourtPetitions: parsed.supremeCourtPetitions || [],
       bulletins: withNormalizedOrder(parsed.bulletins || defaultContent.bulletins)
@@ -425,6 +429,237 @@ export async function updateDiscordBroadcast(id, fields) {
 
   await writeContentFile(content);
   return updatedBroadcast;
+}
+
+const enemyClassifications = [
+  "Person of Interest",
+  "Security Concern",
+  "Hostile Actor",
+  "Enemy of the State",
+  "Pardoned / Cleared"
+];
+const enemyThreatLevels = ["Low", "Moderate", "High", "Critical"];
+const enemyStatuses = ["Under MSS Review", "Active", "Archived", "Pardoned", "Cleared"];
+const enemyVisibilityLevels = ["MSS Only", "Government Only", "Public Registry"];
+
+function cleanEnemyText(value, maxLength = 2000) {
+  return String(value || "")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function cleanEnemyBlock(value, maxLength = 4000) {
+  return String(value || "")
+    .replace(/[<>]/g, "")
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function normalizeEnemyEntry(entry, index = 0) {
+  const now = new Date().toISOString();
+  const classification = cleanEnemyText(entry?.classification || "Person of Interest", 80);
+  const threatLevel = cleanEnemyText(entry?.threatLevel || "Low", 40);
+  const status = cleanEnemyText(entry?.status || "Under MSS Review", 80);
+  const visibility = cleanEnemyText(entry?.visibility || "MSS Only", 80);
+
+  return {
+    id: cleanEnemyText(entry?.id || `enemy-state-${Date.now().toString(36)}-${index}`, 120),
+    name: cleanEnemyText(entry?.name, 180),
+    alias: cleanEnemyText(entry?.alias, 180),
+    discordId: cleanEnemyText(entry?.discordId, 80),
+    discordIdPublic: Boolean(entry?.discordIdPublic),
+    classification: enemyClassifications.includes(classification) ? classification : "Person of Interest",
+    threatLevel: enemyThreatLevels.includes(threatLevel) ? threatLevel : "Low",
+    reasonSummary: cleanEnemyBlock(entry?.reasonSummary || entry?.reason, 1600),
+    evidenceNotes: cleanEnemyBlock(entry?.evidenceNotes, 2400),
+    status: enemyStatuses.includes(status) ? status : "Under MSS Review",
+    visibility: enemyVisibilityLevels.includes(visibility) ? visibility : "MSS Only",
+    issuingAuthority: cleanEnemyText(entry?.issuingAuthority || "Ministry of State Security", 160),
+    dateListed: cleanEnemyText(entry?.dateListed || now.slice(0, 10), 40),
+    relatedCaseUrl: cleanEnemyText(entry?.relatedCaseUrl, 500),
+    relatedArticleUrl: cleanEnemyText(entry?.relatedArticleUrl, 500),
+    relatedBulletinUrl: cleanEnemyText(entry?.relatedBulletinUrl, 500),
+    imageUrl: cleanEnemyText(entry?.imageUrl, 500),
+    approvedPublic: Boolean(entry?.approvedPublic),
+    archived: Boolean(entry?.archived),
+    discordChannelId: cleanEnemyText(entry?.discordChannelId, 80),
+    discordMessageId: cleanEnemyText(entry?.discordMessageId, 80),
+    lastDiscordSyncedAt: entry?.lastDiscordSyncedAt || "",
+    createdBy: cleanEnemyText(entry?.createdBy || "system", 120),
+    createdAt: entry?.createdAt || now,
+    updatedAt: entry?.updatedAt || now
+  };
+}
+
+function isPublicEnemyEntry(entry) {
+  return (
+    entry.visibility === "Public Registry" &&
+    ["Under MSS Review", "Active", "Pardoned", "Cleared"].includes(entry.status) &&
+    entry.archived !== true
+  );
+}
+
+function normalizeEnemyEntries(entries) {
+  return [...(entries || [])]
+    .map(normalizeEnemyEntry)
+    .filter((entry) => entry.name)
+    .sort((a, b) => new Date(b.dateListed) - new Date(a.dateListed));
+}
+
+function createEnemyDiscordEvent(entry, action) {
+  return {
+    id: `enemy-event-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    entryId: entry.id,
+    action,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+    deliveredAt: "",
+    error: ""
+  };
+}
+
+function shouldMirrorEnemyEntry(entry) {
+  return entry.visibility === "Public Registry" && entry.approvedPublic && entry.archived !== true;
+}
+
+export async function getEnemyOfStateEntries({ publicOnly = false } = {}) {
+  const content = await readContentFile();
+  const entries = normalizeEnemyEntries(content.enemyOfStateEntries || []);
+  return publicOnly ? entries.filter(isPublicEnemyEntry) : entries;
+}
+
+export async function createEnemyOfStateEntry(entry) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+  const normalized = normalizeEnemyEntry(
+    {
+      ...entry,
+      id:
+        entry.id ||
+        `enemy-state-${Date.now().toString(36)}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`,
+      createdAt: now,
+      updatedAt: now
+    },
+    0
+  );
+
+  content.enemyOfStateEntries = normalizeEnemyEntries([normalized, ...(content.enemyOfStateEntries || [])]);
+  if (shouldMirrorEnemyEntry(normalized)) {
+    content.enemyOfStateDiscordEvents = [
+      createEnemyDiscordEvent(normalized, "upsert"),
+      ...(content.enemyOfStateDiscordEvents || [])
+    ].slice(0, 500);
+  }
+  await writeContentFile(content);
+  return content.enemyOfStateEntries;
+}
+
+export async function updateEnemyOfStateEntry(id, fields) {
+  const content = await readContentFile();
+  let updated = null;
+  let previous = null;
+
+  content.enemyOfStateEntries = normalizeEnemyEntries(
+    (content.enemyOfStateEntries || []).map((entry, index) => {
+      if (entry.id !== id) {
+        return normalizeEnemyEntry(entry, index);
+      }
+
+      previous = normalizeEnemyEntry(entry, index);
+      updated = normalizeEnemyEntry(
+        {
+          ...entry,
+          ...fields,
+          id: entry.id,
+          discordMessageId: fields.discordMessageId ?? entry.discordMessageId,
+          discordChannelId: fields.discordChannelId ?? entry.discordChannelId,
+          createdAt: entry.createdAt,
+          updatedAt: new Date().toISOString()
+        },
+        index
+      );
+      return updated;
+    })
+  );
+
+  if (updated) {
+    const becamePrivate = shouldMirrorEnemyEntry(previous || {}) && !shouldMirrorEnemyEntry(updated);
+    const action = becamePrivate || updated.status === "Cleared" || updated.status === "Pardoned" ? "archive" : "upsert";
+    if (shouldMirrorEnemyEntry(updated) || becamePrivate) {
+      content.enemyOfStateDiscordEvents = [
+        createEnemyDiscordEvent(updated, action),
+        ...(content.enemyOfStateDiscordEvents || [])
+      ].slice(0, 500);
+    }
+  }
+
+  await writeContentFile(content);
+  return content.enemyOfStateEntries;
+}
+
+export async function archiveEnemyOfStateEntry(id) {
+  return updateEnemyOfStateEntry(id, {
+    archived: true,
+    status: "Archived",
+    visibility: "MSS Only",
+    approvedPublic: false
+  });
+}
+
+export async function getPendingEnemyOfStateDiscordEvents() {
+  const content = await readContentFile();
+  const entries = normalizeEnemyEntries(content.enemyOfStateEntries || []);
+  return (content.enemyOfStateDiscordEvents || [])
+    .filter((event) => event.status === "pending")
+    .map((event) => ({
+      ...event,
+      entry: entries.find((entry) => entry.id === event.entryId) || null
+    }))
+    .filter((event) => event.entry);
+}
+
+export async function markEnemyOfStateDiscordEvent(eventId, fields) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+  const event = (content.enemyOfStateDiscordEvents || []).find((item) => item.id === eventId);
+  let updatedEntry = null;
+
+  content.enemyOfStateDiscordEvents = (content.enemyOfStateDiscordEvents || []).map((item) =>
+    item.id === eventId
+      ? {
+          ...item,
+          status: fields.status || "delivered",
+          deliveredAt: fields.deliveredAt || now,
+          error: cleanEnemyText(fields.error || "", 1000)
+        }
+      : item
+  );
+
+  if (event?.entryId && fields.status !== "failed") {
+    content.enemyOfStateEntries = normalizeEnemyEntries(
+      (content.enemyOfStateEntries || []).map((entry) => {
+        if (entry.id !== event.entryId) {
+          return entry;
+        }
+
+        updatedEntry = normalizeEnemyEntry({
+          ...entry,
+          discordChannelId: Object.hasOwn(fields, "discordChannelId") ? fields.discordChannelId : entry.discordChannelId || "",
+          discordMessageId: Object.hasOwn(fields, "discordMessageId") ? fields.discordMessageId : entry.discordMessageId || "",
+          lastDiscordSyncedAt: now
+        });
+        return updatedEntry;
+      })
+    );
+  }
+
+  await writeContentFile(content);
+  return { eventId, entry: updatedEntry };
 }
 
 export async function updateSupremeCourtStore(fields) {
