@@ -22,6 +22,7 @@ import {
   deletePanelUser,
   getContent,
   getDiscordBroadcasts,
+  getPendingApplicationDiscordEvents,
   getPendingPublicApplications,
   getPublicApplications,
   getPanelUsers,
@@ -30,6 +31,7 @@ import {
   moveEnemyNation,
   moveExcommunication,
   moveMember,
+  markApplicationDiscordEvent,
   reorderAlliances,
   reorderEnemyNations,
   reorderExcommunications,
@@ -243,12 +245,18 @@ app.get("/api/admin/applications", requireAdmin, async (_req, res) => {
 });
 
 app.post("/api/admin/applications/:id", requireAdmin, async (req, res) => {
-  const allowedStatuses = ["pending", "under_review", "approved", "rejected"];
+  const allowedStatuses = ["pending", "under_review", "approved", "rejected", "appealed", "archived"];
   const status = String(req.body?.status || "pending").trim();
   const application = await updatePublicApplication(req.params.id, {
     status: allowedStatuses.includes(status) ? status : "pending",
     internalNotes: String(req.body?.internalNotes || "").trim(),
-    decisionNote: String(req.body?.decisionNote || "").trim()
+    decisionNote: String(req.body?.decisionNote || "").trim(),
+    publicResponse: String(req.body?.publicResponse || "").trim(),
+    requestInfo: Boolean(req.body?.requestInfo),
+    archived: Boolean(req.body?.archived),
+    archivedAt: req.body?.archived ? new Date().toISOString() : req.body?.archivedAt || "",
+    needsAttention: Boolean(req.body?.needsAttention),
+    actor: String(req.body?.actor || "government-access").trim()
   });
 
   if (!application) {
@@ -263,7 +271,52 @@ app.post("/api/admin/applications/:id/review-thread", requireAdmin, async (req, 
     status: req.body?.status || "under_review",
     reviewThreadId: String(req.body?.reviewThreadId || "").trim(),
     reviewMessageId: String(req.body?.reviewMessageId || "").trim(),
-    reviewGuildId: String(req.body?.reviewGuildId || "").trim()
+    reviewGuildId: String(req.body?.reviewGuildId || "").trim(),
+    discordChannelId: String(req.body?.discordChannelId || "").trim(),
+    discordThreadId: String(req.body?.discordThreadId || req.body?.reviewThreadId || "").trim(),
+    discordMessageId: String(req.body?.discordMessageId || req.body?.reviewMessageId || "").trim()
+  });
+
+  if (!application) {
+    return res.status(404).json({ error: "Application not found." });
+  }
+
+  res.json({ application });
+});
+
+app.post("/api/admin/applications/:id/appeal", requireAdmin, async (req, res) => {
+  const reason = String(req.body?.appealReason || "").trim();
+
+  if (!reason) {
+    return res.status(400).json({ error: "Appeal reason is required." });
+  }
+
+  const application = await updatePublicApplication(req.params.id, {
+    status: "appealed",
+    appealStatus: "requested",
+    appealReason: reason,
+    appealedAt: new Date().toISOString(),
+    needsAttention: true,
+    actor: String(req.body?.actor || "applicant").trim()
+  });
+
+  if (!application) {
+    return res.status(404).json({ error: "Application not found." });
+  }
+
+  res.json({ application });
+});
+
+app.get("/api/admin/applications/discord-events", requireAdmin, async (_req, res) => {
+  const applications = await getPendingApplicationDiscordEvents();
+  res.json({ applications });
+});
+
+app.post("/api/admin/applications/:id/discord-events/:eventId", requireAdmin, async (req, res) => {
+  const application = await markApplicationDiscordEvent(req.params.id, req.params.eventId, {
+    deliveryStatus: String(req.body?.deliveryStatus || "delivered").trim(),
+    deliveryError: String(req.body?.deliveryError || "").trim(),
+    deliveredAt: req.body?.deliveredAt || new Date().toISOString()
   });
 
   if (!application) {
@@ -370,6 +423,8 @@ app.post("/api/admin/bulletins", requireAdmin, async (req, res) => {
   const bulletins = await createBulletin({
     headline,
     category: req.body?.category || "General",
+    issuingAuthority: req.body?.issuingAuthority || req.body?.category || "Government",
+    bulletinType: req.body?.bulletinType || "Public Bulletin",
     priority: req.body?.priority || "standard",
     active: Boolean(req.body?.active),
     linkedArticleId: req.body?.linkedArticleId || "",
@@ -389,6 +444,8 @@ app.post("/api/admin/bulletins/:id", requireAdmin, async (req, res) => {
   const bulletins = await updateBulletin(req.params.id, {
     headline,
     category: req.body?.category || "General",
+    issuingAuthority: req.body?.issuingAuthority || req.body?.category || "Government",
+    bulletinType: req.body?.bulletinType || "Public Bulletin",
     priority: req.body?.priority || "standard",
     active: Boolean(req.body?.active),
     linkedArticleId: req.body?.linkedArticleId || "",

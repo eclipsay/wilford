@@ -28,10 +28,61 @@ function formatDate(value) {
   }).format(date);
 }
 
+const filters = ["pending", "under_review", "appealed", "approved", "rejected", "archived", "all"];
+
+function applicationMatchesFilter(application, filter) {
+  if (!filter || filter === "all") {
+    return true;
+  }
+
+  if (filter === "archived") {
+    return application.archived || application.status === "archived";
+  }
+
+  return application.status === filter && !application.archived;
+}
+
+function sortApplications(applications, sort) {
+  return [...applications].sort((a, b) => {
+    if (sort === "oldest") {
+      return new Date(a.submittedAt) - new Date(b.submittedAt);
+    }
+
+    if (sort === "status") {
+      return String(a.status).localeCompare(String(b.status));
+    }
+
+    return new Date(b.submittedAt) - new Date(a.submittedAt);
+  });
+}
+
 export default async function CitizenshipReviewPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("citizenshipReview");
   const applications = await getCitizenApplications();
+  const activeFilter = String(params?.filter || "pending").trim();
+  const search = String(params?.q || "").trim().toLowerCase();
+  const sort = String(params?.sort || "newest").trim();
+  const visibleApplications = sortApplications(
+    applications.filter((application) => {
+      const haystack = [
+        application.applicantName,
+        application.discordHandle,
+        application.discordUserId,
+        application.id
+      ]
+        .join(" ")
+        .toLowerCase();
+      return applicationMatchesFilter(application, activeFilter) && (!search || haystack.includes(search));
+    }),
+    sort
+  );
+  const counts = Object.fromEntries(
+    filters.map((filter) => [
+      filter,
+      applications.filter((application) => applicationMatchesFilter(application, filter)).length
+    ])
+  );
 
   return (
     <SiteLayout>
@@ -72,13 +123,47 @@ export default async function CitizenshipReviewPage({ searchParams }) {
               <h2>Review Queue</h2>
               <p className="public-application-help">Authenticated as {user.username} / {user.role}</p>
             </div>
-            <strong className="citizen-review-count">{applications.length} records</strong>
+            <strong className="citizen-review-count">{visibleApplications.length} / {applications.length} records</strong>
           </div>
+          <form className="citizen-application-toolbar" method="get">
+            <label className="public-application-field">
+              <span>Search</span>
+              <input defaultValue={search} name="q" placeholder="Name, Discord ID, application ID" type="search" />
+            </label>
+            <label className="public-application-field">
+              <span>Sort</span>
+              <select defaultValue={sort} name="sort">
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="status">Status</option>
+              </select>
+            </label>
+            <button className="button button--solid-site" type="submit">Apply</button>
+          </form>
+          <nav className="citizen-application-tabs" aria-label="Application status filters">
+            {filters.map((filter) => (
+              <Link
+                className={`citizen-application-tab${activeFilter === filter ? " citizen-application-tab--active" : ""}`}
+                href={`/government-access/citizenship?filter=${filter}${search ? `&q=${encodeURIComponent(search)}` : ""}&sort=${sort}`}
+                key={filter}
+              >
+                {filter === "all" ? "All" : formatApplicationStatus(filter)}
+                <span>{counts[filter] || 0}</span>
+              </Link>
+            ))}
+          </nav>
+          <form action="/government-access/citizenship/action" method="post">
+            <input name="id" type="hidden" value="__bulk__" />
+            <input name="intent" type="hidden" value="bulk_archive" />
+            <button className="button" type="submit">
+              Bulk Archive Approved/Rejected
+            </button>
+          </form>
         </section>
 
         <section className="citizen-application-list" aria-label="Citizen application records">
-          {applications.length ? (
-            applications.map((application) => (
+          {visibleApplications.length ? (
+            visibleApplications.map((application) => (
               <article className={`panel citizen-application-card citizen-application-card--${application.status}`} key={application.id}>
                 <div className="panel__header">
                   <div>
@@ -92,6 +177,11 @@ export default async function CitizenshipReviewPage({ searchParams }) {
                     <span>Application Status</span>
                     <strong>{formatApplicationStatus(application.status)}</strong>
                   </div>
+                </div>
+                <div className="citizen-application-badges">
+                  {application.needsAttention ? <span>Needs Attention</span> : null}
+                  {application.status === "appealed" || application.appealReason ? <span>Appeal Requested</span> : null}
+                  {application.archived ? <span>Archived</span> : null}
                 </div>
 
                 <dl className="citizen-application-details">
@@ -117,7 +207,8 @@ export default async function CitizenshipReviewPage({ searchParams }) {
                   </div>
                 </dl>
 
-                <div className="citizen-application-answers">
+                <details className="citizen-application-answers" open={!["approved", "rejected", "archived"].includes(application.status)}>
+                  <summary>Application answers</summary>
                   <section>
                     <p className="eyebrow">Motivation</p>
                     <p>{application.motivation}</p>
@@ -126,7 +217,7 @@ export default async function CitizenshipReviewPage({ searchParams }) {
                     <p className="eyebrow">Skills / Service</p>
                     <p>{application.experience}</p>
                   </section>
-                </div>
+                </details>
 
                 <form action="/government-access/citizenship/action" className="public-application-form" method="post">
                   <input name="id" type="hidden" value={application.id} />
@@ -153,6 +244,9 @@ export default async function CitizenshipReviewPage({ searchParams }) {
                   <button className="button button--solid-site" type="submit">
                     Save Review
                   </button>
+                  <Link className="button" href={`/government-access/citizenship/${application.id}`}>
+                    Open Detail
+                  </Link>
                 </form>
               </article>
             ))

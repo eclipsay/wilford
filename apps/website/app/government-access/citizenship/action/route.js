@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  archiveResolvedCitizenApplications,
   parseApplicationReviewForm,
   updateCitizenApplication
 } from "../../../../lib/citizen-applications";
@@ -27,9 +28,51 @@ export async function POST(request) {
   }
 
   try {
-    const fields = parseApplicationReviewForm(formData);
+    const intent = String(formData.get("intent") || "save").trim();
+
+    if (intent === "bulk_archive") {
+      const count = await archiveResolvedCitizenApplications(user.username);
+      await addAuditEvent(user.username, "citizenship applications bulk archived", `${count} records`, "success");
+      return redirectTo(request, "/government-access/citizenship?filter=archived&saved=1");
+    }
+
+    const fields = {
+      ...parseApplicationReviewForm(formData),
+      actor: user.username
+    };
+
+    if (intent === "approve") {
+      fields.status = "approved";
+    }
+
+    if (intent === "reject") {
+      fields.status = "rejected";
+    }
+
+    if (intent === "under_review") {
+      fields.status = "under_review";
+    }
+
+    if (intent === "accept_appeal") {
+      fields.status = "under_review";
+      fields.needsAttention = true;
+      fields.publicResponse =
+        fields.publicResponse || "Your appeal has been accepted for further review.";
+    }
+
+    if (intent === "reject_appeal") {
+      fields.status = "rejected";
+      fields.needsAttention = false;
+      fields.publicResponse = fields.publicResponse || "Your appeal has been rejected.";
+    }
+
     await updateCitizenApplication(id, fields);
-    await addAuditEvent(user.username, "citizenship application reviewed", id, "success");
+    await addAuditEvent(
+      user.username,
+      "citizenship application reviewed",
+      `${id} / ${fields.status}`,
+      "success"
+    );
     return redirectTo(request, "/government-access/citizenship?saved=1");
   } catch (error) {
     return redirectTo(

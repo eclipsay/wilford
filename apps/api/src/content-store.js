@@ -56,6 +56,8 @@ const defaultContent = {
       id: "bulletin-default-1",
       headline: "Chairman Lemmie announces new prosperity initiative",
       category: "Chairman",
+      issuingAuthority: "Chairman",
+      bulletinType: "Directive",
       priority: "standard",
       active: true,
       order: 0,
@@ -67,6 +69,8 @@ const defaultContent = {
       id: "bulletin-default-2",
       headline: "Supreme Court opens hearings at The Capitol Parliament",
       category: "Supreme Court",
+      issuingAuthority: "Supreme Court",
+      bulletinType: "Judicial Notice",
       priority: "standard",
       active: true,
       order: 1,
@@ -78,6 +82,8 @@ const defaultContent = {
       id: "bulletin-default-3",
       headline: "Eternal Engine departs for District 6 inspection route",
       category: "Eternal Engine",
+      issuingAuthority: "Government",
+      bulletinType: "Public Bulletin",
       priority: "standard",
       active: true,
       order: 2,
@@ -89,6 +95,8 @@ const defaultContent = {
       id: "bulletin-default-4",
       headline: "Ministry of Production reports record district output",
       category: "Districts",
+      issuingAuthority: "Ministries",
+      bulletinType: "Ministerial Order",
       priority: "standard",
       active: true,
       order: 3,
@@ -100,6 +108,8 @@ const defaultContent = {
       id: "bulletin-default-5",
       headline: "Panem Credit adoption reaches record levels",
       category: "Panem Credit",
+      issuingAuthority: "Government",
+      bulletinType: "Notice",
       priority: "standard",
       active: true,
       order: 4,
@@ -111,6 +121,8 @@ const defaultContent = {
       id: "bulletin-default-6",
       headline: "Ministry of State Security issues internal advisory",
       category: "MSS",
+      issuingAuthority: "MSS",
+      bulletinType: "Security Advisory",
       priority: "standard",
       active: true,
       order: 5,
@@ -505,6 +517,8 @@ export async function createBulletin(entry) {
     id: entry.id || `bulletin-${Date.now().toString(36)}`,
     headline: String(entry.headline || "").replace(/\s+/g, " ").trim(),
     category: String(entry.category || "General").trim(),
+    issuingAuthority: String(entry.issuingAuthority || entry.category || "Government").trim(),
+    bulletinType: String(entry.bulletinType || "Public Bulletin").trim(),
     priority: String(entry.priority || "standard").trim().toLowerCase(),
     active: Boolean(entry.active),
     linkedArticleId: String(entry.linkedArticleId || "").trim(),
@@ -529,6 +543,8 @@ export async function updateBulletin(id, fields) {
             ...bulletin,
             headline: String(fields.headline || bulletin.headline || "").replace(/\s+/g, " ").trim(),
             category: String(fields.category || bulletin.category || "General").trim(),
+            issuingAuthority: String(fields.issuingAuthority || fields.category || bulletin.issuingAuthority || "Government").trim(),
+            bulletinType: String(fields.bulletinType || bulletin.bulletinType || "Public Bulletin").trim(),
             priority: String(fields.priority || bulletin.priority || "standard").trim().toLowerCase(),
             active: Boolean(fields.active),
             linkedArticleId: String(fields.linkedArticleId || "").trim(),
@@ -734,6 +750,7 @@ export async function appendCryptoLog(entry) {
 
 export async function createPublicApplication(entry) {
   const content = await readContentFile();
+  const now = new Date().toISOString();
   const application = {
     id:
       entry.id ||
@@ -742,8 +759,8 @@ export async function createPublicApplication(entry) {
         .slice(2, 8)}`,
     source: entry.source || "website",
     status: entry.status || "pending",
-    submittedAt: entry.submittedAt || new Date().toISOString(),
-    updatedAt: entry.updatedAt || new Date().toISOString(),
+    submittedAt: entry.submittedAt || now,
+    updatedAt: entry.updatedAt || now,
     applicantName: String(entry.applicantName || "").trim(),
     age: String(entry.age || "").trim(),
     timezone: String(entry.timezone || "").trim(),
@@ -751,10 +768,23 @@ export async function createPublicApplication(entry) {
     experience: String(entry.experience || "").trim(),
     discordHandle: String(entry.discordHandle || "").trim(),
     discordUserId: String(entry.discordUserId || "").trim(),
+    discordChannelId: String(entry.discordChannelId || entry.reviewChannelId || "").trim(),
+    discordThreadId: String(entry.discordThreadId || entry.reviewThreadId || "").trim(),
+    discordMessageId: String(entry.discordMessageId || entry.reviewMessageId || "").trim(),
     email: String(entry.email || "").trim(),
     reviewThreadId: String(entry.reviewThreadId || "").trim(),
     reviewMessageId: String(entry.reviewMessageId || "").trim(),
     reviewGuildId: String(entry.reviewGuildId || "").trim(),
+    appealThreadId: String(entry.appealThreadId || "").trim(),
+    appealReason: String(entry.appealReason || "").trim(),
+    appealStatus: String(entry.appealStatus || "").trim(),
+    appealedAt: entry.appealedAt || "",
+    archived: Boolean(entry.archived),
+    archivedAt: entry.archivedAt || "",
+    needsAttention: Boolean(entry.needsAttention),
+    publicReplies: Array.isArray(entry.publicReplies) ? entry.publicReplies : [],
+    applicationAuditLog: Array.isArray(entry.applicationAuditLog) ? entry.applicationAuditLog : [],
+    pendingDiscordEvents: Array.isArray(entry.pendingDiscordEvents) ? entry.pendingDiscordEvents : [],
     decisionNote: String(entry.decisionNote || "").trim(),
     internalNotes: String(entry.internalNotes || "").trim()
   };
@@ -778,6 +808,42 @@ export async function getPublicApplications() {
   return content.publicApplications || [];
 }
 
+function createApplicationEvent(type, message, fields = {}) {
+  return {
+    id: `app-event-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`,
+    type,
+    message: String(message || "").trim(),
+    createdAt: new Date().toISOString(),
+    deliveredAt: "",
+    deliveryStatus: "pending",
+    deliveryError: "",
+    ...fields
+  };
+}
+
+function normalizeApplicationForUpdate(application) {
+  return {
+    ...application,
+    discordChannelId: String(application.discordChannelId || application.reviewChannelId || "").trim(),
+    discordThreadId: String(application.discordThreadId || application.reviewThreadId || "").trim(),
+    discordMessageId: String(application.discordMessageId || application.reviewMessageId || "").trim(),
+    appealThreadId: String(application.appealThreadId || "").trim(),
+    appealReason: String(application.appealReason || "").trim(),
+    appealStatus: String(application.appealStatus || "").trim(),
+    appealedAt: application.appealedAt || "",
+    archived: Boolean(application.archived),
+    archivedAt: application.archivedAt || "",
+    needsAttention: Boolean(application.needsAttention),
+    publicReplies: Array.isArray(application.publicReplies) ? application.publicReplies : [],
+    applicationAuditLog: Array.isArray(application.applicationAuditLog) ? application.applicationAuditLog : [],
+    pendingDiscordEvents: Array.isArray(application.pendingDiscordEvents)
+      ? application.pendingDiscordEvents
+      : []
+  };
+}
+
 export async function updatePublicApplication(id, nextFields) {
   const content = await readContentFile();
   let updatedApplication = null;
@@ -787,9 +853,174 @@ export async function updatePublicApplication(id, nextFields) {
       return application;
     }
 
+    const normalized = normalizeApplicationForUpdate(application);
+    const now = new Date().toISOString();
+    const previousStatus = normalized.status || "pending";
+    const requestedStatus = nextFields.status || previousStatus;
+    const events = [];
+    const auditEntries = [];
+
+    if (requestedStatus !== previousStatus) {
+      const statusMessages = {
+        approved: "Ministry of Credit and Records: Your citizenship application has been approved.",
+        rejected: "Ministry of Credit and Records: Your citizenship application has been rejected.",
+        under_review: "Ministry of Credit and Records: Your application status has changed to Under Review.",
+        appealed: "Ministry of Credit and Records: Your appeal has been received and forwarded for review.",
+        archived: "Ministry of Credit and Records: Your application case has been archived.",
+        pending: "Ministry of Credit and Records: Your application status has changed to Pending."
+      };
+      events.push(
+        createApplicationEvent(
+          "status_changed",
+          statusMessages[requestedStatus] ||
+            `Ministry of Credit and Records: Your application status has changed to ${requestedStatus.replace(/_/g, " ")}.`,
+          {
+            oldStatus: previousStatus,
+            newStatus: requestedStatus
+          }
+        )
+      );
+      auditEntries.push({
+        id: `app-audit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        at: now,
+        actor: String(nextFields.actor || "system").trim(),
+        action: "status changed",
+        detail: `${previousStatus} -> ${requestedStatus}`,
+        status: "success"
+      });
+    }
+
+    if (String(nextFields.publicResponse || "").trim()) {
+      const publicReply = {
+        id: `reply-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        at: now,
+        actor: String(nextFields.actor || "system").trim(),
+        message: String(nextFields.publicResponse || "").trim(),
+        deliveryStatus: "pending",
+        deliveryError: ""
+      };
+      nextFields.publicReplies = [publicReply, ...(normalized.publicReplies || [])].slice(0, 100);
+      events.push(
+        createApplicationEvent("public_reply", `Ministry of Credit and Records: ${publicReply.message}`, {
+          replyId: publicReply.id
+        })
+      );
+      auditEntries.push({
+        id: `app-audit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        at: now,
+        actor: publicReply.actor,
+        action: "public reply added",
+        detail: publicReply.message.slice(0, 200),
+        status: "success"
+      });
+    }
+
+    if (nextFields.requestInfo) {
+      events.push(
+        createApplicationEvent(
+          "request_info",
+          "Ministry of Credit and Records: Additional information is required."
+        )
+      );
+      nextFields.needsAttention = true;
+    }
+
+    if (nextFields.appealReason) {
+      events.push(
+        createApplicationEvent(
+          "appealed",
+          "Ministry of Credit and Records: Your appeal has been received and forwarded for review."
+        )
+      );
+      auditEntries.push({
+        id: `app-audit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        at: now,
+        actor: String(nextFields.actor || "applicant").trim(),
+        action: "appeal submitted",
+        detail: String(nextFields.appealReason).slice(0, 200),
+        status: "success"
+      });
+    }
+
     updatedApplication = {
-      ...application,
+      ...normalized,
       ...nextFields,
+      updatedAt: now,
+      pendingDiscordEvents: [
+        ...(normalized.pendingDiscordEvents || []),
+        ...events,
+        ...(Array.isArray(nextFields.pendingDiscordEvents) ? nextFields.pendingDiscordEvents : [])
+      ].slice(-100),
+      applicationAuditLog: [
+        ...auditEntries,
+        ...(normalized.applicationAuditLog || [])
+      ].slice(0, 200)
+    };
+    return updatedApplication;
+  });
+
+  await writeContentFile(content);
+  return updatedApplication;
+}
+
+export async function getPendingApplicationDiscordEvents() {
+  const content = await readContentFile();
+  const applications = (content.publicApplications || [])
+    .map(normalizeApplicationForUpdate)
+    .map((application) => ({
+      ...application,
+      pendingDiscordEvents: (application.pendingDiscordEvents || []).filter(
+        (event) => event.deliveryStatus === "pending"
+      )
+    }))
+    .filter((application) => application.pendingDiscordEvents.length);
+
+  return applications;
+}
+
+export async function markApplicationDiscordEvent(applicationId, eventId, fields) {
+  const content = await readContentFile();
+  let updatedApplication = null;
+
+  content.publicApplications = (content.publicApplications || []).map((application) => {
+    if (application.id !== applicationId) {
+      return application;
+    }
+
+    const normalized = normalizeApplicationForUpdate(application);
+    const eventForReply = (normalized.pendingDiscordEvents || []).find((event) => event.id === eventId);
+    updatedApplication = {
+      ...normalized,
+      pendingDiscordEvents: (normalized.pendingDiscordEvents || []).map((event) =>
+        event.id === eventId
+          ? {
+              ...event,
+              deliveryStatus: fields.deliveryStatus || "delivered",
+              deliveryError: String(fields.deliveryError || "").trim(),
+              deliveredAt: fields.deliveredAt || new Date().toISOString()
+            }
+          : event
+      ),
+      publicReplies: (normalized.publicReplies || []).map((reply) =>
+        eventForReply?.replyId && eventForReply.replyId === reply.id
+          ? {
+              ...reply,
+              deliveryStatus: fields.deliveryStatus || "delivered",
+              deliveryError: String(fields.deliveryError || "").trim()
+            }
+          : reply
+      ),
+      applicationAuditLog: [
+        {
+          id: `app-audit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          at: new Date().toISOString(),
+          actor: "discord-bot",
+          action: "discord update sent",
+          detail: `${eventId}: ${fields.deliveryStatus || "delivered"}`,
+          status: fields.deliveryStatus === "failed" ? "failed" : "success"
+        },
+        ...(normalized.applicationAuditLog || [])
+      ].slice(0, 200),
       updatedAt: new Date().toISOString()
     };
     return updatedApplication;

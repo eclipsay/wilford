@@ -11,7 +11,7 @@ const baseUrl = (
     : "http://localhost:4000")
 ).replace(/\/+$/, "");
 
-export const applicationStatuses = ["pending", "under_review", "approved", "rejected"];
+export const applicationStatuses = ["pending", "under_review", "approved", "rejected", "appealed", "archived"];
 
 function resolveContentFile() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -54,10 +54,22 @@ function normalizeApplication(entry, index) {
     experience: String(entry?.experience || "").trim(),
     discordHandle: String(entry?.discordHandle || "").trim(),
     discordUserId: String(entry?.discordUserId || "").trim(),
+    discordChannelId: String(entry?.discordChannelId || entry?.reviewChannelId || "").trim(),
+    discordThreadId: String(entry?.discordThreadId || entry?.reviewThreadId || "").trim(),
+    discordMessageId: String(entry?.discordMessageId || entry?.reviewMessageId || "").trim(),
     email: String(entry?.email || "").trim(),
     reviewThreadId: String(entry?.reviewThreadId || "").trim(),
     reviewMessageId: String(entry?.reviewMessageId || "").trim(),
     reviewGuildId: String(entry?.reviewGuildId || "").trim(),
+    appealThreadId: String(entry?.appealThreadId || "").trim(),
+    appealReason: String(entry?.appealReason || "").trim(),
+    appealStatus: String(entry?.appealStatus || "").trim(),
+    appealedAt: entry?.appealedAt || "",
+    archived: Boolean(entry?.archived || entry?.status === "archived"),
+    archivedAt: entry?.archivedAt || "",
+    needsAttention: Boolean(entry?.needsAttention),
+    publicReplies: Array.isArray(entry?.publicReplies) ? entry.publicReplies : [],
+    applicationAuditLog: Array.isArray(entry?.applicationAuditLog) ? entry.applicationAuditLog : [],
     decisionNote: String(entry?.decisionNote || "").trim(),
     internalNotes: String(entry?.internalNotes || "").trim()
   };
@@ -205,11 +217,39 @@ export async function updateCitizenApplication(id, fields) {
   return true;
 }
 
+export async function archiveResolvedCitizenApplications(actor = "system") {
+  const applications = await getCitizenApplications();
+  const targets = applications.filter(
+    (application) =>
+      !application.archived &&
+      ["approved", "rejected"].includes(application.status)
+  );
+
+  for (const application of targets) {
+    await updateCitizenApplication(application.id, {
+      status: application.status,
+      archived: true,
+      actor
+    });
+  }
+
+  return targets.length;
+}
+
+export async function getCitizenApplicationById(id) {
+  const applications = await getCitizenApplications();
+  return applications.find((application) => application.id === id) || null;
+}
+
 export function parseApplicationReviewForm(formData) {
   return {
     status: normalizeStatus(formData.get("status")),
     internalNotes: String(formData.get("internalNotes") || "").trim(),
-    decisionNote: String(formData.get("decisionNote") || "").trim()
+    decisionNote: String(formData.get("decisionNote") || "").trim(),
+    publicResponse: String(formData.get("publicResponse") || "").trim(),
+    requestInfo: formData.get("intent") === "request_info",
+    archived: formData.get("intent") === "archive" || normalizeStatus(formData.get("status")) === "archived",
+    needsAttention: formData.get("needsAttention") === "on"
   };
 }
 
@@ -218,7 +258,9 @@ export function formatApplicationStatus(status) {
     pending: "Pending",
     under_review: "Under Review",
     approved: "Approved",
-    rejected: "Rejected"
+    rejected: "Rejected",
+    appealed: "Appealed",
+    archived: "Archived"
   };
 
   return labels[normalizeStatus(status)];

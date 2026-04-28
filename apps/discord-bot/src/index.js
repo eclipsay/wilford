@@ -25,7 +25,7 @@ dotenv.config();
 const token = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const stateFile = resolve(currentDir, "../data/state.json");
-const apiUrl = process.env.API_URL || "http://127.0.0.1:4000";
+const apiUrl = (process.env.API_URL || "http://127.0.0.1:4000").replace(/\/+$/, "");
 const commandPrefix = "-";
 const botOwnerId = "140478632165507073";
 const applicationsChannelId = String(
@@ -203,6 +203,17 @@ async function findLatestPendingApplicationByApplicant(applicantId) {
   );
 }
 
+async function findLatestApplicationByApplicant(applicantId) {
+  const state = await readState();
+  return (
+    state.applications.find(
+      (application) =>
+        application.applicantId === applicantId &&
+        application.reviewThreadId
+    ) || null
+  );
+}
+
 async function setApplicationStatus(applicationId, nextFields) {
   let updatedApplication = null;
 
@@ -224,6 +235,28 @@ async function setApplicationStatus(applicationId, nextFields) {
   });
 
   return updatedApplication;
+}
+
+async function updateRemoteApplication(applicationId, fields) {
+  if (!adminApiKey) {
+    return null;
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/applications/${encodeURIComponent(applicationId)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify(fields),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.json().catch(() => null);
 }
 
 async function getActiveApplicationSession(userId) {
@@ -382,7 +415,7 @@ async function continueApplicationSession(message, session) {
     });
 
     await message.channel.send(
-      "Your application has been submitted to Wilford staff for review. You will receive any follow-up questions or a decision here in DMs."
+      "Your application has been submitted to the Ministry of Credit and Records for review. You will receive any follow-up questions or a decision here in DMs."
     );
     return;
   }
@@ -559,7 +592,7 @@ async function handleReviewThreadCommand(message, commandName, args) {
     if (hasLinkedDiscordUser) {
       await sendApplicantDirectMessage(
         application.applicantId,
-        `Wilford staff: ${replyText}`
+        `Ministry of Credit and Records: ${replyText}`
       );
     }
 
@@ -609,10 +642,15 @@ async function handleReviewThreadCommand(message, commandName, args) {
       await sendApplicantDirectMessage(
         updated.applicantId,
         note
-          ? `Your Wilford application has been accepted.\n\n${note}`
-          : "Your Wilford application has been accepted."
+          ? `Ministry of Credit and Records: Your citizenship application has been approved.\n\n${note}`
+          : "Ministry of Credit and Records: Your citizenship application has been approved."
       );
     }
+    await updateRemoteApplication(application.id, {
+      status: "approved",
+      decisionNote: note,
+      actor: `discord:${message.author.id}`
+    }).catch(() => null);
 
     await message.reply(
       hasLinkedDiscordUser
@@ -638,10 +676,15 @@ async function handleReviewThreadCommand(message, commandName, args) {
       await sendApplicantDirectMessage(
         updated.applicantId,
         note
-          ? `Your Wilford application has been denied.\n\n${note}`
-          : "Your Wilford application has been denied."
+          ? `Ministry of Credit and Records: Your citizenship application has been rejected.\n\n${note}`
+          : "Ministry of Credit and Records: Your citizenship application has been rejected."
       );
     }
+    await updateRemoteApplication(application.id, {
+      status: "rejected",
+      decisionNote: note,
+      actor: `discord:${message.author.id}`
+    }).catch(() => null);
 
     await message.reply(
       hasLinkedDiscordUser
@@ -702,6 +745,118 @@ async function markWebsiteApplicationThread(applicationId, payload) {
     body: JSON.stringify(payload),
     cache: "no-store"
   });
+}
+
+async function getPendingApplicationDiscordEvents() {
+  if (!adminApiKey) {
+    return [];
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/applications/discord-events`, {
+    headers: {
+      "x-admin-key": adminApiKey
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Application Discord events request failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload?.applications) ? payload.applications : [];
+}
+
+async function markApplicationDiscordEvent(applicationId, eventId, fields) {
+  if (!adminApiKey) {
+    return;
+  }
+
+  await fetch(
+    `${apiUrl}/api/admin/applications/${encodeURIComponent(applicationId)}/discord-events/${encodeURIComponent(eventId)}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-key": adminApiKey
+      },
+      body: JSON.stringify(fields),
+      cache: "no-store"
+    }
+  );
+}
+
+async function deliverApplicationDiscordEvent(application, event) {
+  const threadId = application.discordThreadId || application.reviewThreadId;
+  const applicantId = String(application.discordUserId || "").trim();
+  const message = event.message || "Ministry of Credit and Records: Application updated.";
+
+  if (!threadId) {
+    throw new Error("Application has no Discord review thread.");
+  }
+
+  const thread = await client.channels.fetch(threadId).catch(() => null);
+
+  if (!thread || !thread.isTextBased()) {
+    throw new Error("Application review thread could not be fetched.");
+  }
+
+  await thread.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(event.type === "appealed" ? 0x63b3ed : 0xd7a85f)
+        .setTitle("Citizenship Application Update")
+        .setDescription(message)
+        .addFields(
+          {
+            name: "Application",
+            value: application.id,
+            inline: true
+          },
+          {
+            name: "Event",
+            value: String(event.type || "update").replace(/_/g, " "),
+            inline: true
+          }
+        )
+        .setTimestamp(new Date())
+    ]
+  });
+
+  if (applicantId && ["public_reply", "request_info", "status_changed", "appealed"].includes(event.type)) {
+    try {
+      await sendApplicantDirectMessage(applicantId, message);
+    } catch (error) {
+      await thread.send(
+        `Ministry of Credit and Records delivery note: applicant DM failed (${error instanceof Error ? error.message : "unknown error"}).`
+      );
+    }
+  }
+}
+
+async function submitApplicationAppeal(applicationId, reason) {
+  if (!adminApiKey) {
+    return null;
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/applications/${encodeURIComponent(applicationId)}/appeal`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify({
+      appealReason: reason,
+      actor: "applicant"
+    }),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Appeal request failed: ${response.status}`);
+  }
+
+  return response.json();
 }
 
 async function getPendingDiscordBroadcasts() {
@@ -1075,13 +1230,16 @@ async function postWebsiteApplicationToReview(application) {
     status: "under_review",
     reviewThreadId: thread.id,
     reviewMessageId: intro.id,
-    reviewGuildId: guildId
+    reviewGuildId: guildId,
+    discordChannelId: channel.id,
+    discordThreadId: thread.id,
+    discordMessageId: intro.id
   });
 
   await thread.send(
     application.discordUserId
       ? "Website application imported into review.\nUse `-r <message>`, `-accept [message]`, or `-deny [message]`."
-      : "Website application imported into review.\nNo Discord user ID was supplied, so `-r`, `-accept`, and `-deny` cannot send DMs unless staff handle that manually."
+      : "Website application imported into review.\nNo Discord user ID was supplied, so `-r`, `-accept`, and `-deny` cannot send DMs unless the Ministry of Credit and Records handles contact manually."
   );
 }
 
@@ -1206,6 +1364,7 @@ async function publishCommitUpdates() {
 
 let isPublishing = false;
 let isProcessingWebsiteApplications = false;
+let isProcessingApplicationDiscordEvents = false;
 let isProcessingDiscordBroadcasts = false;
 let isProcessingBroadcastApprovals = false;
 
@@ -1250,6 +1409,50 @@ async function runWebsiteApplicationsLoop() {
     );
   } finally {
     isProcessingWebsiteApplications = false;
+  }
+}
+
+async function runApplicationDiscordEventsLoop() {
+  if (isProcessingApplicationDiscordEvents) {
+    return;
+  }
+
+  isProcessingApplicationDiscordEvents = true;
+
+  try {
+    const applications = await getPendingApplicationDiscordEvents();
+
+    for (const application of applications) {
+      for (const event of application.pendingDiscordEvents || []) {
+        try {
+          await deliverApplicationDiscordEvent(application, event);
+          if (event.newStatus) {
+            await setApplicationStatus(application.id, {
+              status: event.newStatus,
+              updatedAt: new Date().toISOString()
+            });
+          }
+          await markApplicationDiscordEvent(application.id, event.id, {
+            deliveryStatus: "delivered",
+            deliveredAt: new Date().toISOString()
+          });
+        } catch (error) {
+          await markApplicationDiscordEvent(application.id, event.id, {
+            deliveryStatus: "failed",
+            deliveryError: error instanceof Error ? error.message : "Unknown delivery error",
+            deliveredAt: new Date().toISOString()
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.log(
+      `Application Discord event error: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  } finally {
+    isProcessingApplicationDiscordEvents = false;
   }
 }
 
@@ -1447,6 +1650,8 @@ client.once("ready", () => {
   setInterval(runCommitLoop, pollIntervalMs);
   runWebsiteApplicationsLoop();
   setInterval(runWebsiteApplicationsLoop, 20000);
+  runApplicationDiscordEventsLoop();
+  setInterval(runApplicationDiscordEventsLoop, 15000);
   runDiscordBroadcastLoop();
   setInterval(runDiscordBroadcastLoop, 15000);
   runBroadcastApprovalLoop();
@@ -1473,21 +1678,64 @@ client.on("messageCreate", async (message) => {
     }
 
     if (!message.content.startsWith(commandPrefix)) {
-      const application = await findLatestPendingApplicationByApplicant(
+      const application = await findLatestApplicationByApplicant(
         message.author.id
       );
 
       if (application) {
+        const status = String(application.status || "pending").toLowerCase();
+        const appealMatch = String(message.content || "").match(/^appeal\s*:?\s+([\s\S]+)/i);
+
+        if (["denied", "rejected"].includes(status)) {
+          if (appealMatch?.[1]?.trim()) {
+            const reason = appealMatch[1].trim();
+
+            try {
+              await submitApplicationAppeal(application.id, reason);
+              await setApplicationStatus(application.id, {
+                status: "appealed",
+                appealReason: reason
+              });
+              await forwardApplicantMessageToReviewThread(message, {
+                ...application,
+                status: "appealed"
+              });
+              await message.channel.send(
+                "Ministry of Credit and Records: Your appeal has been received and forwarded for review."
+              );
+            } catch (error) {
+              await message.channel.send(
+                error instanceof Error
+                  ? error.message
+                  : "Ministry of Credit and Records: Your appeal could not be filed right now."
+              );
+            }
+            return;
+          }
+
+          await message.channel.send(
+            "Ministry of Credit and Records: Your application has already been denied. If you wish to appeal this decision, reply with APPEAL followed by your reason."
+          );
+          return;
+        }
+
+        if (status !== "pending" && status !== "appealed") {
+          await message.channel.send(
+            `Ministry of Credit and Records: Your application is currently marked ${status.replace(/_/g, " ")}. Further messages have not been forwarded as a standard follow-up.`
+          );
+          return;
+        }
+
         try {
           await forwardApplicantMessageToReviewThread(message, application);
           await message.channel.send(
-            "Your follow-up message has been forwarded to the Wilford review thread."
+            "Ministry of Credit and Records: Your follow-up message has been forwarded to the citizenship review thread."
           );
         } catch (error) {
           await message.channel.send(
             error instanceof Error
               ? error.message
-              : "Unable to forward your message to Wilford staff right now."
+              : "Ministry of Credit and Records: Unable to forward your message right now."
           );
         }
         return;

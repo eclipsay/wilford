@@ -66,7 +66,7 @@ export default async function PetitionPage({ searchParams }) {
             <strong>Petition Submitted</strong>
             <p>
               Your petition has been recorded and will be forwarded into the 
-              Union review thread workflow for staff review.
+              Ministry of Credit and Records review workflow.
             </p>
             <Link className="button" href="/citizenship">
               Return to Citizenship
@@ -128,7 +128,7 @@ export default async function PetitionPage({ searchParams }) {
                     type="text"
                   />
                   <small className="public-application-help">
-                    This is required so Union staff know who you are in Discord.
+                    This is required so the Ministry of Credit and Records can identify you in Discord.
                   </small>
                 </label>
 

@@ -76,12 +76,12 @@ export default function CommandsPage() {
                 <h3>Step 2</h3>
                 <p>
                   The applicant answers the official Union questions one at a time.
-                  When finished, the bot creates a staff review thread and posts the full record.
+                  When finished, the bot creates a Ministry of Credit and Records review thread and posts the full record.
                 </p>
               </div>
               <div className="public-record-meta">
                 <strong>Staff Thread</strong>
-                <span>Review staff are pinged for follow-up and final decisions.</span>
+                <span>Review officials are pinged for follow-up and final decisions.</span>
               </div>
             </article>
 
