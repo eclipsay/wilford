@@ -149,6 +149,11 @@ export async function getCitizenApplications() {
     return normalizeApplications(data.applications || []);
   } catch {}
 
+  try {
+    const data = await requestAdminApplications("/api/admin/government-access-store");
+    return normalizeApplications(data.publicApplications || []);
+  } catch {}
+
   const content = await readContentFile();
   return normalizeApplications(content.publicApplications);
 }

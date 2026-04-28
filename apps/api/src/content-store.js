@@ -282,10 +282,15 @@ export async function updateGovernmentAccessStore(fields) {
     content.governmentAuditLog = fields.governmentAuditLog;
   }
 
+  if (Array.isArray(fields.publicApplications)) {
+    content.publicApplications = fields.publicApplications;
+  }
+
   await writeContentFile(content);
   return {
     governmentUsers: content.governmentUsers,
-    governmentAuditLog: content.governmentAuditLog
+    governmentAuditLog: content.governmentAuditLog,
+    publicApplications: content.publicApplications || []
   };
 }
 

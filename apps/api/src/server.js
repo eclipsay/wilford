@@ -334,7 +334,8 @@ app.get("/api/admin/government-access-store", requireAdmin, async (_req, res) =>
   const content = await getContent();
   res.json({
     governmentUsers: content.governmentUsers || [],
-    governmentAuditLog: content.governmentAuditLog || []
+    governmentAuditLog: content.governmentAuditLog || [],
+    publicApplications: content.publicApplications || []
   });
 });
 
