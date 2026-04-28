@@ -7,6 +7,7 @@ const stateNavigation = [
   { label: "The Chairman", href: "/chairman" },
   { label: "The Government", href: "/government" },
   { label: "The Union", href: "/information" },
+  { label: "News", href: "/news" },
   { label: "The People", href: "/members" },
   { label: "Panem Credit", href: "/panem-credit" },
   { label: "Ministry of State Security", href: "/ministry-of-state-security" },
@@ -77,6 +78,7 @@ export async function SiteLayout({ children }) {
           <span>One Union. One Future.</span>
           <nav className="site-footer__links" aria-label="Footer navigation">
             <Link href="/government">Government</Link>
+            <Link href="/news">News</Link>
             <Link href="/information">The Union</Link>
             <Link href="/panem-credit">Panem Credit</Link>
             <Link href="/supreme-court">Supreme Court</Link>

@@ -4,6 +4,7 @@ import {
   getAllBulletins,
   getBulletinSourceMeta,
 } from "../../../lib/bulletins";
+import { getAllArticles } from "../../../lib/articles";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import { requireGovernmentUser } from "../../../lib/government-auth";
@@ -33,6 +34,7 @@ export default async function BulletinControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("bulletinControl");
   const bulletins = await getAllBulletins();
+  const articles = await getAllArticles();
 
   return (
     <SiteLayout>
@@ -121,6 +123,17 @@ export default async function BulletinControlPage({ searchParams }) {
                   <input defaultChecked name="active" type="checkbox" />
                   <span>Active bulletin</span>
                 </label>
+                <label className="public-application-field">
+                  <span>Linked Article Optional</span>
+                  <select defaultValue="" name="linkedArticleId">
+                    <option value="">No linked article</option>
+                    {articles.map((article) => (
+                      <option key={article.id} value={article.id}>
+                        {article.title} ({article.status})
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button className="button button--solid-site" type="submit">
                   Add Bulletin
                 </button>
@@ -207,6 +220,18 @@ export default async function BulletinControlPage({ searchParams }) {
                       <label className="public-application-toggle">
                         <input defaultChecked={bulletin.active} name="active" type="checkbox" />
                         <span>Active bulletin</span>
+                      </label>
+
+                      <label className="public-application-field">
+                        <span>Linked Article Optional</span>
+                        <select defaultValue={bulletin.linkedArticleId || ""} name="linkedArticleId">
+                          <option value="">No linked article</option>
+                          {articles.map((article) => (
+                            <option key={article.id} value={article.id}>
+                              {article.title} ({article.status})
+                            </option>
+                          ))}
+                        </select>
                       </label>
 
                       <div className="bulletin-editor-card__actions">

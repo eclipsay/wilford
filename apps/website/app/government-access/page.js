@@ -22,6 +22,12 @@ const systems = [
     permission: "bulletinControl"
   },
   {
+    title: "Article Control",
+    text: "Create, edit, publish, and withdraw official WPU News articles.",
+    href: "/government-access/articles",
+    permission: "articleControl"
+  },
+  {
     title: "Supreme Court Control",
     text: "Manage cases, rulings, evidence, access keys, and formal statements.",
     href: "/government-access/supreme-court",
@@ -34,7 +40,7 @@ const systems = [
     permission: "mssTools"
   },
   {
-    title: "Citizenship Review",
+    title: "Citizen Applications",
     text: "Review citizenship applications and clerk intake material.",
     href: "/government-access/citizenship",
     permission: "citizenshipReview"

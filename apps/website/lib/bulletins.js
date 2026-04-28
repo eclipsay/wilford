@@ -188,6 +188,7 @@ const defaultBulletins = [
   category: order === 0 ? "Chairman" : order === 1 ? "Supreme Court" : "General",
   priority: "standard",
   active: true,
+  linkedArticleId: "",
   order,
   expiresAt: "",
   createdAt: "2026-04-27T00:00:00.000Z",
@@ -225,6 +226,7 @@ function normalizeBulletin(entry, index) {
     category: categories.includes(category) ? category : "General",
     priority: priorities.includes(priority) ? priority : "standard",
     active: Boolean(entry?.active),
+    linkedArticleId: String(entry?.linkedArticleId || "").trim(),
     order: Number(entry?.order ?? index),
     expiresAt: String(entry?.expiresAt || "").trim(),
     createdAt: entry?.createdAt || now,
@@ -377,6 +379,7 @@ export async function createBulletin(fields) {
         .slice(2, 8)}`,
       ...fields,
       active: fields.active,
+      linkedArticleId: fields.linkedArticleId,
       order: bulletins.length,
       createdAt: now,
       updatedAt: now
@@ -483,6 +486,7 @@ export function parseBulletinForm(formData) {
     category: String(formData.get("category") || "General").trim(),
     priority: String(formData.get("priority") || "standard").trim(),
     active: formData.get("active") === "on",
+    linkedArticleId: String(formData.get("linkedArticleId") || "").trim(),
     expiresAt: String(formData.get("expiresAt") || "").trim()
   };
 }

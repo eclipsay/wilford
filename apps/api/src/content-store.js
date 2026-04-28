@@ -30,6 +30,23 @@ const defaultContent = {
   panelUsers: [],
   cryptoLogs: [],
   publicApplications: [],
+  articles: [
+    {
+      id: "article-union-continuity",
+      title: "Union Continuity Programme Announced",
+      subtitle: "The Government confirms coordinated measures for order, production, and civic service.",
+      body:
+        "The Wilford Panem Union has opened a new continuity programme across ministries, district offices, and civic registries. The programme aligns public service, production readiness, and citizen support under one central standard of national duty.\n\nOfficials confirmed that additional directives will be published as ministries complete their operating reviews.",
+      heroImage: "/hero.png",
+      category: "Government",
+      source: "Wilford Panem Union",
+      publishDate: "2026-04-27T00:00:00.000Z",
+      status: "published",
+      featured: true,
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z"
+    }
+  ],
   governmentUsers: [],
   governmentAuditLog: [],
   supremeCourtCases: [],
@@ -159,6 +176,7 @@ async function readContentFile() {
       panelUsers: parsed.panelUsers || [],
       cryptoLogs: parsed.cryptoLogs || [],
       publicApplications: parsed.publicApplications || [],
+      articles: parsed.articles || defaultContent.articles,
       governmentUsers: parsed.governmentUsers || [],
       governmentAuditLog: parsed.governmentAuditLog || [],
       supremeCourtCases: parsed.supremeCourtCases || [],
@@ -303,6 +321,66 @@ export async function updateSettings(nextSettings) {
   return content;
 }
 
+export async function createArticle(entry) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+  const article = {
+    id:
+      entry.id ||
+      `article-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+    title: String(entry.title || "").replace(/\s+/g, " ").trim(),
+    subtitle: String(entry.subtitle || "").replace(/\s+/g, " ").trim(),
+    body: String(entry.body || "").trim(),
+    heroImage: String(entry.heroImage || "").trim(),
+    category: String(entry.category || "General").trim(),
+    source: String(entry.source || "Wilford Panem Union").trim(),
+    publishDate: String(entry.publishDate || now).trim(),
+    status: entry.status === "published" ? "published" : "draft",
+    featured: Boolean(entry.featured),
+    createdAt: now,
+    updatedAt: now
+  };
+
+  content.articles = [article, ...(content.articles || [])];
+  await writeContentFile(content);
+  return content.articles;
+}
+
+export async function updateArticle(id, fields) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+
+  content.articles = (content.articles || []).map((article) =>
+    article.id === id
+      ? {
+          ...article,
+          title: String(fields.title || "").replace(/\s+/g, " ").trim(),
+          subtitle: String(fields.subtitle || "").replace(/\s+/g, " ").trim(),
+          body: String(fields.body || "").trim(),
+          heroImage: String(fields.heroImage || "").trim(),
+          category: String(fields.category || "General").trim(),
+          source: String(fields.source || "Wilford Panem Union").trim(),
+          publishDate: String(fields.publishDate || article.publishDate || now).trim(),
+          status: fields.status === "published" ? "published" : "draft",
+          featured: Boolean(fields.featured),
+          updatedAt: now
+        }
+      : article
+  );
+
+  await writeContentFile(content);
+  return content.articles;
+}
+
+export async function deleteArticle(id) {
+  const content = await readContentFile();
+  content.articles = (content.articles || []).filter((article) => article.id !== id);
+  await writeContentFile(content);
+  return content.articles;
+}
+
 export async function createBulletin(entry) {
   const content = await readContentFile();
   const now = new Date().toISOString();
@@ -312,6 +390,7 @@ export async function createBulletin(entry) {
     category: String(entry.category || "General").trim(),
     priority: String(entry.priority || "standard").trim().toLowerCase(),
     active: Boolean(entry.active),
+    linkedArticleId: String(entry.linkedArticleId || "").trim(),
     order: Number(entry.order ?? content.bulletins.length),
     expiresAt: String(entry.expiresAt || "").trim(),
     createdAt: now,
@@ -335,6 +414,7 @@ export async function updateBulletin(id, fields) {
             category: String(fields.category || bulletin.category || "General").trim(),
             priority: String(fields.priority || bulletin.priority || "standard").trim().toLowerCase(),
             active: Boolean(fields.active),
+            linkedArticleId: String(fields.linkedArticleId || "").trim(),
             expiresAt: String(fields.expiresAt || "").trim(),
             updatedAt: now
           }
@@ -558,7 +638,8 @@ export async function createPublicApplication(entry) {
     reviewThreadId: String(entry.reviewThreadId || "").trim(),
     reviewMessageId: String(entry.reviewMessageId || "").trim(),
     reviewGuildId: String(entry.reviewGuildId || "").trim(),
-    decisionNote: String(entry.decisionNote || "").trim()
+    decisionNote: String(entry.decisionNote || "").trim(),
+    internalNotes: String(entry.internalNotes || "").trim()
   };
 
   content.publicApplications = [application, ...(content.publicApplications || [])].slice(0, 500);
@@ -573,6 +654,11 @@ export async function getPendingPublicApplications() {
       application.status === "pending" &&
       !String(application.reviewThreadId || "").trim()
   );
+}
+
+export async function getPublicApplications() {
+  const content = await readContentFile();
+  return content.publicApplications || [];
 }
 
 export async function updatePublicApplication(id, nextFields) {

@@ -32,6 +32,7 @@ export const accessRoles = [
 export const permissions = {
   dashboard: accessRoles,
   bulletinControl: ["Supreme Chairman", "Executive Director", "Minister", "Government Official"],
+  articleControl: ["Supreme Chairman", "Executive Director", "Minister", "Government Official"],
   supremeCourtControl: ["Supreme Chairman", "Executive Director", "Judicial Officer"],
   mssTools: ["Supreme Chairman", "Executive Director", "Security Command"],
   citizenshipReview: [

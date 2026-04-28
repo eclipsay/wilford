@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import {
   appendCryptoLog,
   authenticatePanelUser,
+  createArticle,
   createBulletin,
   createAlliance,
   createEnemyNation,
@@ -12,6 +13,7 @@ import {
   createPanelUser,
   createPublicApplication,
   deleteAlliance,
+  deleteArticle,
   deleteBulletin,
   deleteEnemyNation,
   deleteExcommunication,
@@ -19,6 +21,7 @@ import {
   deletePanelUser,
   getContent,
   getPendingPublicApplications,
+  getPublicApplications,
   getPanelUsers,
   moveAlliance,
   moveBulletin,
@@ -33,6 +36,7 @@ import {
   replaceMembers,
   updatePublicApplication,
   updateAlliancePosition,
+  updateArticle,
   updateBulletin,
   updateGovernmentAccessStore,
   updateMemberPosition,
@@ -98,6 +102,7 @@ app.get("/api/content", async (_req, res) => {
     panelUsers,
     governmentUsers,
     governmentAuditLog,
+    publicApplications,
     ...publicContent
   } = content;
 
@@ -107,6 +112,12 @@ app.get("/api/content", async (_req, res) => {
         ...courtCase,
         statementCount: Array.isArray(statements) ? statements.length : 0
       })
+    );
+  }
+
+  if (Array.isArray(publicContent.articles)) {
+    publicContent.articles = publicContent.articles.filter(
+      (article) => article.status === "published"
     );
   }
 
@@ -222,6 +233,27 @@ app.get("/api/admin/applications/pending", requireAdmin, async (_req, res) => {
   res.json({ applications });
 });
 
+app.get("/api/admin/applications", requireAdmin, async (_req, res) => {
+  const applications = await getPublicApplications();
+  res.json({ applications });
+});
+
+app.post("/api/admin/applications/:id", requireAdmin, async (req, res) => {
+  const allowedStatuses = ["pending", "under_review", "approved", "rejected"];
+  const status = String(req.body?.status || "pending").trim();
+  const application = await updatePublicApplication(req.params.id, {
+    status: allowedStatuses.includes(status) ? status : "pending",
+    internalNotes: String(req.body?.internalNotes || "").trim(),
+    decisionNote: String(req.body?.decisionNote || "").trim()
+  });
+
+  if (!application) {
+    return res.status(404).json({ error: "Application not found." });
+  }
+
+  res.json({ application });
+});
+
 app.post("/api/admin/applications/:id/review-thread", requireAdmin, async (req, res) => {
   const application = await updatePublicApplication(req.params.id, {
     status: req.body?.status || "under_review",
@@ -240,6 +272,62 @@ app.post("/api/admin/applications/:id/review-thread", requireAdmin, async (req, 
 app.post("/api/admin/settings", requireAdmin, async (req, res) => {
   const content = await updateSettings(req.body || {});
   res.json({ settings: content.settings });
+});
+
+app.get("/api/admin/articles", requireAdmin, async (_req, res) => {
+  const content = await getContent();
+  res.json({ articles: content.articles || [] });
+});
+
+app.post("/api/admin/articles", requireAdmin, async (req, res) => {
+  const title = String(req.body?.title || "").trim();
+  const body = String(req.body?.body || "").trim();
+
+  if (!title || !body) {
+    return res.status(400).json({ error: "Title and article body are required." });
+  }
+
+  const articles = await createArticle({
+    title,
+    subtitle: req.body?.subtitle || "",
+    body,
+    heroImage: req.body?.heroImage || "",
+    category: req.body?.category || "General",
+    source: req.body?.source || "Wilford Panem Union",
+    publishDate: req.body?.publishDate || new Date().toISOString(),
+    status: req.body?.status || "draft",
+    featured: Boolean(req.body?.featured)
+  });
+
+  res.status(201).json({ articles });
+});
+
+app.post("/api/admin/articles/:id", requireAdmin, async (req, res) => {
+  const title = String(req.body?.title || "").trim();
+  const body = String(req.body?.body || "").trim();
+
+  if (!title || !body) {
+    return res.status(400).json({ error: "Title and article body are required." });
+  }
+
+  const articles = await updateArticle(req.params.id, {
+    title,
+    subtitle: req.body?.subtitle || "",
+    body,
+    heroImage: req.body?.heroImage || "",
+    category: req.body?.category || "General",
+    source: req.body?.source || "Wilford Panem Union",
+    publishDate: req.body?.publishDate || new Date().toISOString(),
+    status: req.body?.status || "draft",
+    featured: Boolean(req.body?.featured)
+  });
+
+  res.json({ articles });
+});
+
+app.delete("/api/admin/articles/:id", requireAdmin, async (req, res) => {
+  const articles = await deleteArticle(req.params.id);
+  res.json({ articles });
 });
 
 app.get("/api/admin/government-access-store", requireAdmin, async (_req, res) => {
@@ -279,6 +367,7 @@ app.post("/api/admin/bulletins", requireAdmin, async (req, res) => {
     category: req.body?.category || "General",
     priority: req.body?.priority || "standard",
     active: Boolean(req.body?.active),
+    linkedArticleId: req.body?.linkedArticleId || "",
     expiresAt: req.body?.expiresAt || ""
   });
 
@@ -297,6 +386,7 @@ app.post("/api/admin/bulletins/:id", requireAdmin, async (req, res) => {
     category: req.body?.category || "General",
     priority: req.body?.priority || "standard",
     active: Boolean(req.body?.active),
+    linkedArticleId: req.body?.linkedArticleId || "",
     expiresAt: req.body?.expiresAt || ""
   });
 

@@ -1,6 +1,7 @@
 import { getActiveBulletins, hasEmergencyBulletin } from "../lib/bulletins";
+import { articleUrl, getPublishedArticles } from "../lib/articles";
 
-function TickerItem({ bulletin, fallback = false }) {
+function TickerItem({ bulletin, linkedArticle, fallback = false }) {
   if (fallback) {
     return (
       <span className="news-item news-item--standard">
@@ -18,18 +19,27 @@ function TickerItem({ bulletin, fallback = false }) {
         <span className="news-badge news-badge--priority">Priority</span>
       ) : null}
       <span className="news-item__headline">{bulletin.headline}</span>
+      {linkedArticle ? (
+        <a className="news-item__article-link" href={articleUrl(linkedArticle)}>
+          Read Full Article
+        </a>
+      ) : null}
     </span>
   );
 }
 
-function TickerSequence({ bulletins }) {
+function TickerSequence({ bulletins, articlesById }) {
   const items = bulletins.length ? bulletins : [null];
 
   return (
     <span className="news-ticker__sequence">
       {items.map((bulletin, index) => (
         <span className="news-ticker__unit" key={bulletin?.id || "fallback"}>
-          <TickerItem bulletin={bulletin} fallback={!bulletin} />
+          <TickerItem
+            bulletin={bulletin}
+            linkedArticle={bulletin?.linkedArticleId ? articlesById.get(bulletin.linkedArticleId) : null}
+            fallback={!bulletin}
+          />
           <span className="news-separator" aria-hidden="true">
             ◆
           </span>
@@ -41,6 +51,8 @@ function TickerSequence({ bulletins }) {
 
 export async function NewsTicker() {
   const bulletins = await getActiveBulletins();
+  const articles = await getPublishedArticles();
+  const articlesById = new Map(articles.map((article) => [article.id, article]));
   const emergency = hasEmergencyBulletin(bulletins);
 
   return (
@@ -51,8 +63,8 @@ export async function NewsTicker() {
       <div className="news-ticker__label">WPU BULLETIN</div>
       <div className="news-ticker__viewport">
         <div className="news-ticker__track">
-          <TickerSequence bulletins={bulletins} />
-          <TickerSequence bulletins={bulletins} />
+          <TickerSequence bulletins={bulletins} articlesById={articlesById} />
+          <TickerSequence bulletins={bulletins} articlesById={articlesById} />
         </div>
       </div>
     </aside>
