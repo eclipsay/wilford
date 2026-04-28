@@ -24,8 +24,8 @@ export default function CommandsPage() {
               <h2>Compact Command List</h2>
             </div>
             <div className="sort-row">
-              <Link className="button" href="/apply">
-                Apply Online
+              <Link className="button" href="/citizenship">
+                Citizenship
               </Link>
               <Link className="button" href="/information">
                 Return To Records

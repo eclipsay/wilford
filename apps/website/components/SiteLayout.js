@@ -66,13 +66,12 @@ export async function SiteLayout({ children }) {
       {children}
 
       <footer className="site-footer" aria-label="Official state portal">
-        <Image
+        <span
           className="grand-seal-small"
-          src="/wpu-grand-seal.png"
-          alt="Grand Seal of the Wilford Panem Union"
-          width={128}
-          height={128}
-        />
+          aria-label="Grand Seal of the Wilford Panem Union"
+        >
+          WPU
+        </span>
         <div className="site-footer__copy">
           <strong>Official State Portal of the Wilford Panem Union</strong>
           <span>One Union. One Future.</span>

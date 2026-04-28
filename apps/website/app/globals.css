@@ -378,10 +378,22 @@ h3 {
 }
 
 .grand-seal-small {
+  display: grid;
+  place-items: center;
   width: 64px;
-  height: auto;
+  height: 64px;
+  flex: 0 0 64px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.08), transparent 42%),
+    linear-gradient(180deg, rgba(95, 20, 16, 0.65), rgba(17, 9, 8, 0.96));
+  color: var(--gold-bright);
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   opacity: 0.92;
-  filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.18));
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.36), 0 0 10px rgba(212, 175, 55, 0.18);
 }
 
 .portrait-frame {
@@ -5433,44 +5445,146 @@ h3 {
 }
 
 .anthem-showcase__screen {
-  min-height: 360px;
+  position: relative;
   display: grid;
-  align-content: end;
-  gap: 10px;
-  padding: clamp(24px, 4vw, 42px);
+  gap: 12px;
+  padding: clamp(14px, 2.2vw, 22px);
   border: 1px solid rgba(243, 204, 138, 0.42);
   border-radius: 8px;
   background:
     radial-gradient(circle at 50% 28%, rgba(243, 204, 138, 0.16), transparent 34%),
     linear-gradient(180deg, rgba(94, 12, 14, 0.42), rgba(5, 3, 3, 0.96)),
-    url("/wpu-grand-seal.png") center 24% / 220px auto no-repeat,
     #060303;
   box-shadow: 0 0 44px rgba(211, 161, 73, 0.12), var(--shadow);
+  overflow: hidden;
 }
 
-.anthem-showcase__screen span {
-  color: rgba(243, 204, 138, 0.22);
-  font-size: clamp(4rem, 12vw, 9rem);
-  line-height: 0.82;
+.anthem-showcase__screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 236, 182, 0.08);
+}
+
+.anthem-showcase__broadcast-label {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: var(--gold-bright);
+  font-size: 0.78rem;
   font-weight: 800;
+  letter-spacing: 0.18em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.anthem-showcase__video {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(243, 204, 138, 0.34);
+  border-radius: 6px;
+  background: rgba(5, 3, 3, 0.72);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+  object-fit: contain;
+}
+
+.anthem-showcase__poster {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(243, 204, 138, 0.34);
+  border-radius: 6px;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(243, 204, 138, 0.2), transparent 31%),
+    linear-gradient(180deg, rgba(94, 12, 14, 0.34), rgba(5, 3, 3, 0.88));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+  color: var(--gold-bright);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.anthem-showcase__poster::before {
+  content: "WPU";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(243, 204, 138, 0.13);
+  font-size: clamp(4rem, 11vw, 8.5rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  opacity: 0.72;
+}
+
+.anthem-showcase__poster-mark {
+  position: absolute;
+  left: 6%;
+  bottom: 7%;
+  color: rgba(243, 204, 138, 0.2);
+  font-size: clamp(3.8rem, 10vw, 8rem);
+  font-weight: 800;
+  line-height: 0.8;
   letter-spacing: 0.04em;
 }
 
-.anthem-showcase__screen strong,
+.anthem-showcase__poster-title {
+  position: absolute;
+  right: 6%;
+  bottom: 8%;
+  max-width: min(320px, 52%);
+  color: var(--gold-bright);
+  font-size: clamp(0.88rem, 1.6vw, 1.18rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.35;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.anthem-showcase__play {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(68px, 9vw, 92px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(243, 204, 138, 0.62);
+  border-radius: 999px;
+  background: rgba(5, 3, 3, 0.68);
+  box-shadow: 0 0 36px rgba(211, 161, 73, 0.22);
+}
+
+.anthem-showcase__play::before {
+  content: "";
+  width: 0;
+  height: 0;
+  margin-left: 6px;
+  border-top: 14px solid transparent;
+  border-bottom: 14px solid transparent;
+  border-left: 22px solid var(--gold-bright);
+}
+
+.anthem-showcase__poster:hover .anthem-showcase__play,
+.anthem-showcase__poster:focus-visible .anthem-showcase__play {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 44px rgba(243, 204, 138, 0.28);
+}
+
 .anthem-showcase__copy h2 {
   color: var(--gold-bright);
   text-transform: uppercase;
 }
 
-.anthem-showcase__screen p,
 .anthem-showcase__copy p {
   color: var(--text-soft);
   line-height: 1.7;
-}
-
-.anthem-showcase__audio {
-  width: 100%;
-  accent-color: var(--gold);
 }
 
 .anthem-showcase__copy {

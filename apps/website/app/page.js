@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { AnthemVideo } from "../components/AnthemVideo";
 import { SiteLayout } from "../components/SiteLayout";
 
 const creed = [
@@ -93,13 +94,11 @@ export default function HomePage() {
         <section className="anthem-showcase scroll-fade" aria-labelledby="anthem-title">
           <div className="anthem-showcase__media" aria-label="Anthem media showcase">
             <div className="anthem-showcase__screen">
-              <span>WPU</span>
-              <strong>National Anthem Broadcast</strong>
-              <p>Video embed support enabled for official ceremony footage.</p>
+              <p className="anthem-showcase__broadcast-label">
+                Official Ceremonial Broadcast
+              </p>
+              <AnthemVideo />
             </div>
-            <audio className="anthem-showcase__audio" controls preload="none">
-              <source src="/anthem.mp3" type="audio/mpeg" />
-            </audio>
           </div>
           <div className="anthem-showcase__copy">
             <p className="eyebrow">State Ceremony</p>

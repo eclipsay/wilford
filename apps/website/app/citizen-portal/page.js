@@ -9,9 +9,9 @@ const citizenServices = [
     href: "/government"
   },
   {
-    title: "Applications",
-    text: "Recruitment intake and citizen service applications for approved Union roles.",
-    href: "/apply"
+    title: "Citizenship",
+    text: "Citizenship petitions, eligibility review, civic intake, and Union oath processing.",
+    href: "/citizenship"
   },
   {
     title: "Panem Credit Access",
