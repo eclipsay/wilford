@@ -6549,6 +6549,105 @@ body {
   box-shadow: 0 0 18px rgba(243, 204, 138, 0.2);
 }
 
+.panem-credit-page,
+.panem-control-page {
+  --panem-panel: rgba(18, 5, 5, 0.84);
+}
+
+.panem-wallet-card {
+  border: 1px solid rgba(215, 168, 95, 0.32);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.42);
+}
+
+.panem-inline-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.panem-inline-form .public-application-field {
+  flex: 1 1 180px;
+}
+
+.panem-inline-form input {
+  max-width: 120px;
+}
+
+.panem-action-grid,
+.panem-ledger-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.panem-ledger-layout {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.panem-market-grid,
+.panem-district-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.panem-market-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  background:
+    linear-gradient(135deg, rgba(111, 23, 17, 0.42), transparent 58%),
+    rgba(5, 5, 5, 0.58);
+}
+
+.panem-market-card h3,
+.panem-district-card h3,
+.panem-ledger-layout h3 {
+  margin: 0;
+  color: var(--gold-bright);
+}
+
+.panem-market-card p,
+.panem-district-card p {
+  margin: 0;
+}
+
+.panem-ledger {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.panem-ledger div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(215, 168, 95, 0.13);
+}
+
+.panem-ledger dt {
+  color: rgba(255, 244, 222, 0.72);
+}
+
+.panem-ledger dd {
+  margin: 0;
+  color: var(--gold-bright);
+  font-weight: 800;
+  text-align: right;
+}
+
+.panem-district-card {
+  min-height: 100%;
+}
+
+.panem-admin-wallet {
+  background:
+    linear-gradient(135deg, rgba(127, 21, 21, 0.28), transparent 52%),
+    rgba(4, 4, 4, 0.72);
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6656,6 +6755,13 @@ body {
   }
 
   .finance-portal {
+    grid-template-columns: 1fr;
+  }
+
+  .panem-action-grid,
+  .panem-market-grid,
+  .panem-district-grid,
+  .panem-ledger-layout {
     grid-template-columns: 1fr;
   }
 

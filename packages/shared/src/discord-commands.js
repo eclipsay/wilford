@@ -42,6 +42,24 @@ export const publicBotCommands = [
     usage: "-userinfo @user"
   },
   {
+    name: "/balance, /pay, /transactions, /daily",
+    access: "Citizens",
+    description: "Use the Panem Credit wallet for balances, payments, ledger history, and daily civic stipends.",
+    usage: "/pay @user 50"
+  },
+  {
+    name: "/tax, /market, /buy, /sell, /district, /leaderboard",
+    access: "Citizens",
+    description: "Review taxes, trade district goods, check production, and view Panem Credit rankings.",
+    usage: "/buy grain-sack 2"
+  },
+  {
+    name: "/grant, /fine, /freeze-wallet, /unfreeze-wallet, /set-tax, /run-tax, /economy-report",
+    access: "Economy admins",
+    description: "Ministry of Credit & Records command set for grants, fines, freezes, rates, taxation, and reports.",
+    usage: "/economy-report"
+  },
+  {
     name: "-purge / /purge",
     access: "Manage Messages",
     description: "Bulk-delete recent messages in the current channel.",

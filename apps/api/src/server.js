@@ -24,6 +24,7 @@ import {
   deletePanelUser,
   getContent,
   getDiscordBroadcasts,
+  getEconomyStore,
   getEnemyOfStateEntries,
   getPendingEnemyOfStateDiscordEvents,
   getPendingApplicationDiscordEvents,
@@ -48,6 +49,7 @@ import {
   updateArticle,
   updateBulletin,
   updateDiscordBroadcast,
+  updateEconomyStore,
   updateEnemyOfStateEntry,
   updateGovernmentAccessStore,
   updateMemberPosition,
@@ -157,6 +159,18 @@ app.get("/api/content", async (_req, res) => {
   delete publicContent.enemyOfStateDiscordEvents;
 
   res.json(publicContent);
+});
+
+app.get("/api/economy", async (_req, res) => {
+  const economy = await getEconomyStore();
+  res.json({
+    wallets: economy.wallets.map(({ transactionHistory, ...wallet }) => wallet),
+    marketItems: economy.marketItems,
+    listings: economy.listings.filter((listing) => listing.status === "active"),
+    taxRates: economy.taxRates,
+    districts: economy.districts,
+    events: economy.events
+  });
 });
 
 app.get("/api/settings", async (_req, res) => {
@@ -429,6 +443,16 @@ app.get("/api/admin/government-access-store", requireAdmin, async (_req, res) =>
 app.post("/api/admin/government-access-store", requireAdmin, async (req, res) => {
   const store = await updateGovernmentAccessStore(req.body || {});
   res.json(store);
+});
+
+app.get("/api/admin/economy-store", requireAdmin, async (_req, res) => {
+  const economy = await getEconomyStore();
+  res.json({ economy });
+});
+
+app.post("/api/admin/economy-store", requireAdmin, async (req, res) => {
+  const economy = await updateEconomyStore(req.body?.economy || req.body || {});
+  res.json({ economy });
 });
 
 app.get("/api/admin/supreme-court-store", requireAdmin, async (_req, res) => {

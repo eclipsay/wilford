@@ -52,6 +52,12 @@ const systems = [
     permission: "citizenshipReview"
   },
   {
+    title: "Panem Credit Control",
+    text: "Manage wallets, taxes, marketplace stock, district production, and MSS financial alerts.",
+    href: "/government-access/panem-credit",
+    permission: "economyView"
+  },
+  {
     title: "Audit Log",
     text: "View login attempts, access denials, user actions, and restricted edits.",
     href: "/government-access/audit",

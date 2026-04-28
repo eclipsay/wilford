@@ -18,9 +18,12 @@ import {
 import {
   applicationQuestions,
   brand,
+  formatCredits,
   formatShortSha,
   publicBotCommands,
-  staffApplicationCommands
+  staffApplicationCommands,
+  taxLabel,
+  titleForBalance
 } from "@wilford/shared";
 
 dotenv.config();
@@ -126,6 +129,369 @@ async function updateState(mutator) {
 
 function createId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function readEconomyStore() {
+  if (!adminApiKey) {
+    throw new Error("ADMIN_API_KEY is required for Panem Credit commands.");
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/economy-store`, {
+    headers: { "x-admin-key": adminApiKey },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Panem Credit ledger unavailable (${response.status}).`);
+  }
+
+  const parsed = await response.json();
+  return parsed.economy || parsed;
+}
+
+async function writeEconomyStore(economy) {
+  if (!adminApiKey) {
+    throw new Error("ADMIN_API_KEY is required for Panem Credit commands.");
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/economy-store`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify({ economy }),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Panem Credit ledger write failed (${response.status}).`);
+  }
+
+  const parsed = await response.json();
+  return parsed.economy || parsed;
+}
+
+function getEconomyWallet(economy, id) {
+  return (economy.wallets || []).find(
+    (wallet) => wallet.id === id || wallet.userId === id || wallet.discordId === id
+  );
+}
+
+function ensureDiscordWallet(economy, user) {
+  let wallet = getEconomyWallet(economy, user.id);
+  if (wallet) {
+    return wallet;
+  }
+
+  wallet = {
+    id: createId("wallet"),
+    userId: `discord-${user.id}`,
+    discordId: user.id,
+    displayName: user.tag || user.username,
+    balance: 500,
+    district: "",
+    status: "active",
+    taxStatus: "compliant",
+    exempt: false,
+    underReview: false,
+    linkedEnemyRecordId: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  economy.wallets = [wallet, ...(economy.wallets || [])];
+  return wallet;
+}
+
+function pushEconomyTransaction(economy, transaction) {
+  economy.transactions = [
+    {
+      id: createId("txn"),
+      taxAmount: 0,
+      createdAt: new Date().toISOString(),
+      createdBy: "discord-bot",
+      ...transaction
+    },
+    ...(economy.transactions || [])
+  ].slice(0, 1000);
+}
+
+function ministryEmbed(title, description) {
+  return new EmbedBuilder()
+    .setColor(0xd7a85f)
+    .setAuthor({ name: "Ministry of Credit & Records" })
+    .setTitle(title)
+    .setDescription(description)
+    .setFooter({ text: "Taxation sustains the Union." })
+    .setTimestamp(new Date());
+}
+
+function requireEconomyAdmin(interaction) {
+  return hasSlashCommandAccess(interaction, PermissionsBitField.Flags.ManageGuild);
+}
+
+async function replyEconomy(interaction, embed, ephemeral = true) {
+  await interaction.reply({ embeds: [embed], ephemeral });
+}
+
+async function handleEconomySlashCommand(interaction) {
+  const name = interaction.commandName;
+  const economyCommands = new Set([
+    "balance",
+    "pay",
+    "transactions",
+    "daily",
+    "tax",
+    "market",
+    "buy",
+    "sell",
+    "district",
+    "leaderboard",
+    "grant",
+    "fine",
+    "freeze-wallet",
+    "unfreeze-wallet",
+    "set-tax",
+    "run-tax",
+    "economy-report"
+  ]);
+
+  if (!economyCommands.has(name)) {
+    return false;
+  }
+
+  const economy = await readEconomyStore();
+  const wallet = ensureDiscordWallet(economy, interaction.user);
+
+  if (name === "balance") {
+    await writeEconomyStore(economy);
+    await replyEconomy(
+      interaction,
+      ministryEmbed("Panem Credit Balance", `${wallet.displayName}\n${formatCredits(wallet.balance)}\n${titleForBalance(wallet.balance)} / ${wallet.status}`)
+    );
+    return true;
+  }
+
+  if (name === "pay") {
+    const target = interaction.options.getUser("user", true);
+    const amount = interaction.options.getNumber("amount", true);
+    const recipient = ensureDiscordWallet(economy, target);
+    if (wallet.status !== "active" || recipient.status === "frozen" || amount <= 0 || wallet.balance < amount) {
+      await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "The wallet status or balance cannot support this payment."));
+      return true;
+    }
+    const rate = Number(economy.taxRates?.trade_tax || 0.05);
+    const taxAmount = Math.round(amount * rate * 100) / 100;
+    const total = amount + taxAmount;
+    if (wallet.balance < total) {
+      await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "Insufficient balance after trade tax."));
+      return true;
+    }
+    wallet.balance -= total;
+    recipient.balance += amount;
+    pushEconomyTransaction(economy, {
+      fromWalletId: wallet.id,
+      toWalletId: recipient.id,
+      amount,
+      type: "discord_pay",
+      reason: `Discord payment to ${target.tag}`,
+      taxAmount,
+      createdBy: interaction.user.id
+    });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Payment Recorded", `${formatCredits(amount)} sent to ${target.tag}.\nTrade tax: ${formatCredits(taxAmount)}.`));
+    return true;
+  }
+
+  if (name === "transactions") {
+    const rows = (economy.transactions || [])
+      .filter((transaction) => transaction.fromWalletId === wallet.id || transaction.toWalletId === wallet.id)
+      .slice(0, 8)
+      .map((transaction) => `${transaction.type}: ${formatCredits(transaction.amount)} - ${transaction.reason}`)
+      .join("\n") || "No transactions recorded.";
+    await replyEconomy(interaction, ministryEmbed("Recent Transactions", rows));
+    return true;
+  }
+
+  if (name === "daily") {
+    const today = new Date().toISOString().slice(0, 10);
+    const alreadyClaimed = (economy.transactions || []).some(
+      (transaction) =>
+        transaction.toWalletId === wallet.id &&
+        transaction.type === "daily_stipend" &&
+        String(transaction.createdAt || "").startsWith(today)
+    );
+    if (alreadyClaimed) {
+      await replyEconomy(interaction, ministryEmbed("Daily Stipend", "Your civic stipend has already been claimed today."));
+      return true;
+    }
+    wallet.balance += 125;
+    pushEconomyTransaction(economy, {
+      fromWalletId: "treasury",
+      toWalletId: wallet.id,
+      amount: 125,
+      type: "daily_stipend",
+      reason: "Daily civic stipend",
+      createdBy: interaction.user.id
+    });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Daily Civic Stipend", `${formatCredits(125)} has been issued to your wallet.`));
+    return true;
+  }
+
+  if (name === "tax") {
+    const records = (economy.taxRecords || []).filter((record) => record.walletId === wallet.id).slice(0, 8);
+    const paid = records.filter((record) => record.status === "paid").reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    const lines = records.map((record) => `${taxLabel(record.taxType)}: ${formatCredits(record.amount)} (${record.status})`).join("\n") || "No tax records.";
+    await replyEconomy(interaction, ministryEmbed("Tax Status", `Status: ${wallet.taxStatus}\nPaid in recent records: ${formatCredits(paid)}\n\n${lines}`));
+    return true;
+  }
+
+  if (name === "market") {
+    const rows = (economy.marketItems || []).slice(0, 12).map((item) => `${item.name} (${item.district}) - ${formatCredits(item.currentPrice || item.basePrice)} / stock ${item.stock}`).join("\n");
+    await replyEconomy(interaction, ministryEmbed("Marketplace Listings", rows || "No goods listed."));
+    return true;
+  }
+
+  if (name === "buy") {
+    const itemId = interaction.options.getString("item", true);
+    const quantity = interaction.options.getInteger("quantity", true);
+    const item = (economy.marketItems || []).find((entry) => entry.id === itemId || entry.name.toLowerCase() === itemId.toLowerCase());
+    if (!item || item.stock < quantity || wallet.status !== "active") {
+      await replyEconomy(interaction, ministryEmbed("Purchase Rejected", "The requested good is unavailable or your wallet is restricted."));
+      return true;
+    }
+    const subtotal = Number(item.currentPrice || item.basePrice || 0) * quantity;
+    const taxType = item.category === "Luxury Goods" ? "luxury_goods_tax" : "trade_tax";
+    const taxAmount = Math.round(subtotal * Number(economy.taxRates?.[taxType] || 0) * 100) / 100;
+    if (wallet.balance < subtotal + taxAmount) {
+      await replyEconomy(interaction, ministryEmbed("Purchase Rejected", "Insufficient Panem Credit balance."));
+      return true;
+    }
+    wallet.balance -= subtotal + taxAmount;
+    item.stock -= quantity;
+    pushEconomyTransaction(economy, {
+      fromWalletId: wallet.id,
+      toWalletId: "market",
+      amount: subtotal,
+      type: "market_buy",
+      reason: `${quantity} x ${item.name}`,
+      taxAmount,
+      createdBy: interaction.user.id
+    });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Purchase Approved", `${quantity} x ${item.name}\nTotal: ${formatCredits(subtotal + taxAmount)}.`));
+    return true;
+  }
+
+  if (name === "sell") {
+    const itemId = interaction.options.getString("item", true);
+    const quantity = interaction.options.getInteger("quantity", true);
+    const price = interaction.options.getNumber("price", true);
+    const item = (economy.marketItems || []).find((entry) => entry.id === itemId || entry.name.toLowerCase() === itemId.toLowerCase());
+    if (!item || wallet.status !== "active") {
+      await replyEconomy(interaction, ministryEmbed("Listing Rejected", "That item cannot be listed from this wallet."));
+      return true;
+    }
+    economy.listings = [
+      {
+        id: createId("listing"),
+        sellerWalletId: wallet.id,
+        itemId: item.id,
+        quantity,
+        price,
+        status: "active",
+        createdAt: new Date().toISOString()
+      },
+      ...(economy.listings || [])
+    ];
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Listing Created", `${quantity} x ${item.name} listed at ${formatCredits(price)} each.`));
+    return true;
+  }
+
+  if (name === "district") {
+    const district = (economy.districts || []).find((entry) => entry.name === wallet.district) || economy.districts?.[0];
+    await replyEconomy(interaction, ministryEmbed("District Economy", `${district?.name || "Unassigned"}\n${district?.goodsProduced || "No assignment"}\nSupply ${district?.supplyLevel || 0} / Demand ${district?.demandLevel || 0} / Prosperity ${district?.prosperityRating || 0}`));
+    return true;
+  }
+
+  if (name === "leaderboard") {
+    const rows = [...(economy.wallets || [])]
+      .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))
+      .slice(0, 10)
+      .map((entry, index) => `${index + 1}. ${entry.displayName} - ${formatCredits(entry.balance)}`)
+      .join("\n");
+    await replyEconomy(interaction, ministryEmbed("Panem Credit Leaderboard", rows));
+    return true;
+  }
+
+  if (!requireEconomyAdmin(interaction)) {
+    await replyEconomy(interaction, ministryEmbed("Access Denied", "This treasury command requires administrative authority."));
+    return true;
+  }
+
+  const target = interaction.options.getUser("user");
+  const targetWallet = target ? ensureDiscordWallet(economy, target) : null;
+  const amount = interaction.options.getNumber("amount") || 0;
+  const reason = interaction.options.getString("reason") || "Treasury action";
+
+  if (name === "grant" && targetWallet) {
+    targetWallet.balance += amount;
+    pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: targetWallet.id, amount, type: "grant", reason, createdBy: interaction.user.id });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Grant Issued", `${formatCredits(amount)} issued to ${target.tag}.`));
+    return true;
+  }
+
+  if (name === "fine" && targetWallet) {
+    targetWallet.balance = Math.max(0, targetWallet.balance - amount);
+    targetWallet.taxStatus = "penalty issued";
+    pushEconomyTransaction(economy, { fromWalletId: targetWallet.id, toWalletId: "treasury", amount, type: "fine", reason, createdBy: interaction.user.id });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Fine Issued", `${formatCredits(amount)} fined from ${target.tag}.`));
+    return true;
+  }
+
+  if ((name === "freeze-wallet" || name === "unfreeze-wallet") && targetWallet) {
+    targetWallet.status = name === "freeze-wallet" ? "frozen" : "active";
+    pushEconomyTransaction(economy, { fromWalletId: targetWallet.id, toWalletId: targetWallet.id, amount: 0, type: name, reason, createdBy: interaction.user.id });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Wallet Status Updated", `${target.tag} is now ${targetWallet.status}.`));
+    return true;
+  }
+
+  if (name === "set-tax") {
+    const type = interaction.options.getString("type", true);
+    const rate = interaction.options.getNumber("rate", true);
+    economy.taxRates = { ...(economy.taxRates || {}), [type]: rate };
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Tax Rate Set", `${taxLabel(type)} set to ${(rate * 100).toFixed(1)}%.`));
+    return true;
+  }
+
+  if (name === "run-tax") {
+    const rate = Number(economy.taxRates?.income_tax || 0.08);
+    for (const entry of economy.wallets || []) {
+      if (entry.exempt || entry.status === "frozen") continue;
+      const taxAmount = Math.max(1, Math.round(Number(entry.balance || 0) * rate * 100) / 100);
+      entry.balance = Math.max(0, Number(entry.balance || 0) - taxAmount);
+      (economy.taxRecords ||= []).unshift({ id: createId("tax"), walletId: entry.id, taxType: "income_tax", amount: taxAmount, rate, status: "paid", createdAt: new Date().toISOString() });
+      pushEconomyTransaction(economy, { fromWalletId: entry.id, toWalletId: "treasury", amount: taxAmount, type: "income_tax", reason: "Taxation sustains the Union.", taxAmount, createdBy: interaction.user.id });
+    }
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Automatic Taxation Complete", "Income tax has been applied to eligible wallets."));
+    return true;
+  }
+
+  if (name === "economy-report") {
+    const total = (economy.wallets || []).reduce((sum, entry) => sum + Number(entry.balance || 0), 0);
+    const frozen = (economy.wallets || []).filter((entry) => entry.status === "frozen").length;
+    await replyEconomy(interaction, ministryEmbed("Economy Report", `Wallets: ${(economy.wallets || []).length}\nTotal supply: ${formatCredits(total)}\nFrozen wallets: ${frozen}\nAlerts: ${(economy.alerts || []).length}`));
+    return true;
+  }
+
+  return true;
 }
 
 function isBotOwner(userId) {
@@ -2324,6 +2690,81 @@ function buildSlashCommands() {
       .addUserOption((option) =>
         option.setName("user").setDescription("Member to inspect.").setRequired(true)
       ),
+    new SlashCommandBuilder().setName("balance").setDescription("Show your Panem Credit balance."),
+    new SlashCommandBuilder()
+      .setName("pay")
+      .setDescription("Send Panem Credits to another citizen.")
+      .addUserOption((option) => option.setName("user").setDescription("Recipient.").setRequired(true))
+      .addNumberOption((option) => option.setName("amount").setDescription("Amount of Panem Credits.").setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder().setName("transactions").setDescription("Show recent Panem Credit transactions."),
+    new SlashCommandBuilder().setName("daily").setDescription("Claim the daily civic stipend."),
+    new SlashCommandBuilder().setName("tax").setDescription("Show your tax status."),
+    new SlashCommandBuilder().setName("market").setDescription("Show marketplace listings."),
+    new SlashCommandBuilder()
+      .setName("buy")
+      .setDescription("Buy district goods.")
+      .addStringOption((option) => option.setName("item").setDescription("Item ID or name.").setRequired(true))
+      .addIntegerOption((option) => option.setName("quantity").setDescription("Quantity.").setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder()
+      .setName("sell")
+      .setDescription("List goods for sale.")
+      .addStringOption((option) => option.setName("item").setDescription("Item ID or name.").setRequired(true))
+      .addIntegerOption((option) => option.setName("quantity").setDescription("Quantity.").setRequired(true).setMinValue(1))
+      .addNumberOption((option) => option.setName("price").setDescription("Unit price.").setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder().setName("district").setDescription("Show your district economy status."),
+    new SlashCommandBuilder().setName("leaderboard").setDescription("Show the Panem Credit leaderboard."),
+    new SlashCommandBuilder()
+      .setName("grant")
+      .setDescription("Issue Panem Credits to a user.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Recipient.").setRequired(true))
+      .addNumberOption((option) => option.setName("amount").setDescription("Amount.").setRequired(true).setMinValue(1))
+      .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
+    new SlashCommandBuilder()
+      .setName("fine")
+      .setDescription("Fine a user in Panem Credits.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
+      .addNumberOption((option) => option.setName("amount").setDescription("Amount.").setRequired(true).setMinValue(1))
+      .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
+    new SlashCommandBuilder()
+      .setName("freeze-wallet")
+      .setDescription("Freeze a user's Panem Credit wallet.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
+      .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
+    new SlashCommandBuilder()
+      .setName("unfreeze-wallet")
+      .setDescription("Unfreeze a user's Panem Credit wallet.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
+      .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
+    new SlashCommandBuilder()
+      .setName("set-tax")
+      .setDescription("Set a Panem Credit tax rate.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addStringOption((option) =>
+        option
+          .setName("type")
+          .setDescription("Tax type.")
+          .setRequired(true)
+          .addChoices(
+            { name: "Income Tax", value: "income_tax" },
+            { name: "Trade Tax", value: "trade_tax" },
+            { name: "District Levy", value: "district_levy" },
+            { name: "Emergency State Levy", value: "emergency_state_levy" },
+            { name: "Luxury Goods Tax", value: "luxury_goods_tax" }
+          )
+      )
+      .addNumberOption((option) => option.setName("rate").setDescription("Decimal rate, e.g. 0.05.").setRequired(true).setMinValue(0).setMaxValue(1)),
+    new SlashCommandBuilder()
+      .setName("run-tax")
+      .setDescription("Run automatic income taxation.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    new SlashCommandBuilder()
+      .setName("economy-report")
+      .setDescription("Show a Ministry economy report.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder()
       .setName("purge")
       .setDescription("Delete recent messages in the current channel.")
@@ -2880,6 +3321,10 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   try {
+    if (await handleEconomySlashCommand(interaction)) {
+      return;
+    }
+
     if (interaction.commandName === "help") {
       await interaction.reply({
         content: buildHelpText(),

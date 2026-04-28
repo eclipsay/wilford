@@ -4,6 +4,7 @@ export const mainNavigation = [
   { label: "Members List", href: "/members" },
   { label: "Excommunication List", href: "/excommunication" },
   { label: "Commits", href: "/commits" },
+  { label: "Panem Credit", href: "/panem-credit" },
   { label: "Decrypter", href: "/decrypter" }
 ];
 

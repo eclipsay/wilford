@@ -20,6 +20,8 @@ const baseUrl = (
 export const accessRoles = [
   "Supreme Chairman",
   "Executive Director",
+  "Executive Command",
+  "Ministry of Credit & Records",
   "MSS Command",
   "Minister of State Security",
   "MSS Agent",
@@ -59,6 +61,27 @@ export const permissions = {
     "Executive Director",
     "Citizen Clerk",
     "Government Official"
+  ],
+  economyControl: [
+    "Supreme Chairman",
+    "Executive Director",
+    "Executive Command",
+    "Ministry of Credit & Records"
+  ],
+  economySecurity: [
+    "Supreme Chairman",
+    "Executive Director",
+    "Executive Command",
+    "Ministry of Credit & Records",
+    "MSS Command"
+  ],
+  economyView: [
+    "Supreme Chairman",
+    "Executive Director",
+    "Executive Command",
+    "Ministry of Credit & Records",
+    "MSS Command",
+    "Citizen Clerk"
   ],
   userControl: ["Supreme Chairman", "Executive Director"],
   auditLog: ["Supreme Chairman", "Executive Director"]

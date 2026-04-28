@@ -1,6 +1,11 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import {
+  districtEconomyDefaults,
+  marketItemDefaults,
+  taxTypes
+} from "@wilford/shared";
 import { config } from "./config.js";
 
 const defaultContent = {
@@ -54,6 +59,37 @@ const defaultContent = {
   enemyOfStateDiscordEvents: [],
   supremeCourtCases: [],
   supremeCourtPetitions: [],
+  economy: {
+    wallets: [],
+    transactions: [],
+    marketItems: marketItemDefaults,
+    listings: [],
+    taxRecords: [],
+    taxRates: Object.fromEntries(taxTypes.map((tax) => [tax.id, tax.defaultRate])),
+    districts: districtEconomyDefaults,
+    alerts: [],
+    categories: [
+      "Luxury Goods",
+      "Security Equipment",
+      "Technology",
+      "Food",
+      "Energy",
+      "Transport",
+      "Raw Materials",
+      "Textiles",
+      "Agriculture",
+      "Industrial Fuel",
+      "Restricted Technology"
+    ],
+    events: [
+      {
+        id: "market-event-civic-stipend",
+        title: "Daily civic stipend active",
+        description: "Citizens may claim one Ministry stipend each day.",
+        status: "active"
+      }
+    ]
+  },
   bulletins: [
     {
       id: "bulletin-default-1",
@@ -152,6 +188,35 @@ function withReindexedOrder(items) {
   }));
 }
 
+function normalizeEconomyStore(economy = {}) {
+  const taxRates = {
+    ...Object.fromEntries(taxTypes.map((tax) => [tax.id, tax.defaultRate])),
+    ...(economy.taxRates || {})
+  };
+
+  return {
+    wallets: Array.isArray(economy.wallets) ? economy.wallets : [],
+    transactions: Array.isArray(economy.transactions) ? economy.transactions : [],
+    marketItems:
+      Array.isArray(economy.marketItems) && economy.marketItems.length
+        ? economy.marketItems
+        : marketItemDefaults,
+    listings: Array.isArray(economy.listings) ? economy.listings : [],
+    taxRecords: Array.isArray(economy.taxRecords) ? economy.taxRecords : [],
+    taxRates,
+    districts:
+      Array.isArray(economy.districts) && economy.districts.length
+        ? economy.districts
+        : districtEconomyDefaults,
+    alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
+    categories:
+      Array.isArray(economy.categories) && economy.categories.length
+        ? economy.categories
+        : defaultContent.economy.categories,
+    events: Array.isArray(economy.events) ? economy.events : defaultContent.economy.events
+  };
+}
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
   const hash = scryptSync(password, salt, 64).toString("hex");
@@ -200,6 +265,7 @@ async function readContentFile() {
       enemyOfStateDiscordEvents: parsed.enemyOfStateDiscordEvents || [],
       supremeCourtCases: parsed.supremeCourtCases || [],
       supremeCourtPetitions: parsed.supremeCourtPetitions || [],
+      economy: normalizeEconomyStore(parsed.economy || defaultContent.economy),
       bulletins: withNormalizedOrder(parsed.bulletins || defaultContent.bulletins)
     };
   } catch {
@@ -312,6 +378,21 @@ export async function updateGovernmentAccessStore(fields) {
     governmentAuditLog: content.governmentAuditLog,
     publicApplications: content.publicApplications || []
   };
+}
+
+export async function getEconomyStore() {
+  const content = await readContentFile();
+  return normalizeEconomyStore(content.economy || defaultContent.economy);
+}
+
+export async function updateEconomyStore(fields) {
+  const content = await readContentFile();
+  content.economy = normalizeEconomyStore({
+    ...(content.economy || defaultContent.economy),
+    ...(fields || {})
+  });
+  await writeContentFile(content);
+  return content.economy;
 }
 
 function cleanBroadcastText(value, maxLength = 4000) {
