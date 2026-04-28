@@ -52,6 +52,18 @@ const systems = [
     permission: "citizenshipReview"
   },
   {
+    title: "Citizen Requests Control",
+    text: "Review support requests, petitions, district transfers, ministry assignments, and official responses.",
+    href: "/government-access/citizen-requests",
+    permission: "citizenRequestControl"
+  },
+  {
+    title: "Union Security Registry",
+    text: "Manage citizen IDs, passport records, district affiliations, wallet links, and MSS classifications.",
+    href: "/government-access/union-security-registry",
+    permission: "identitySecurity"
+  },
+  {
     title: "Panem Credit Control",
     text: "Manage wallets, taxes, marketplace stock, district production, and MSS financial alerts.",
     href: "/government-access/panem-credit",

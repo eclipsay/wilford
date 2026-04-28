@@ -115,6 +115,8 @@ app.get("/api/content", async (_req, res) => {
     panelUsers,
     governmentUsers,
     governmentAuditLog,
+    citizenRecords,
+    citizenRequests,
     discordBroadcasts,
     publicApplications,
     supremeCourtPetitions,
@@ -436,7 +438,10 @@ app.get("/api/admin/government-access-store", requireAdmin, async (_req, res) =>
   res.json({
     governmentUsers: content.governmentUsers || [],
     governmentAuditLog: content.governmentAuditLog || [],
-    publicApplications: content.publicApplications || []
+    publicApplications: content.publicApplications || [],
+    citizenRecords: content.citizenRecords || [],
+    citizenRequests: content.citizenRequests || [],
+    districtProfiles: content.districtProfiles || []
   });
 });
 

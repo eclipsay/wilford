@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { SiteLayout } from "../../components/SiteLayout";
+import { getCitizenState } from "../../lib/citizen-state";
 
 const ministries = [
   {
@@ -77,7 +78,13 @@ export const metadata = {
   title: "Government of the Wilford Panem Union"
 };
 
-export default function GovernmentPage() {
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export default async function GovernmentPage() {
+  const state = await getCitizenState();
+  const governorPreview = state.districtProfiles.slice(0, 6);
+
   return (
     <SiteLayout>
       <main className="government-page">
@@ -181,6 +188,23 @@ export default function GovernmentPage() {
                 <span aria-hidden="true">{principle[0]}</span>
                 <strong>{principle}</strong>
                 <p>Preserves The Union</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="government-principles scroll-fade" aria-labelledby="district-admin-title">
+          <div className="government-section-heading">
+            <p className="government-hero__eyebrow">District Administration</p>
+            <h2 id="district-admin-title">Governor Council</h2>
+          </div>
+
+          <div className="government-principles__grid">
+            {governorPreview.map((district) => (
+              <article className="government-principle" key={district.id}>
+                <span aria-hidden="true">{district.name === "Capitol" ? "C" : district.name.replace(/\D/g, "")}</span>
+                <strong>{district.governorName}</strong>
+                <p>{district.name}</p>
               </article>
             ))}
           </div>

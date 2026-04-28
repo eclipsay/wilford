@@ -62,6 +62,35 @@ export const permissions = {
     "Citizen Clerk",
     "Government Official"
   ],
+  citizenRequestControl: [
+    "Supreme Chairman",
+    "Executive Director",
+    "Executive Command",
+    "Government Official",
+    "Citizen Clerk",
+    "Minister",
+    "District Governor",
+    "Ministry of Credit & Records",
+    "MSS Command",
+    "Minister of State Security",
+    "MSS Agent",
+    "Judicial Officer"
+  ],
+  identityRegistry: [
+    "Supreme Chairman",
+    "Executive Director",
+    "Executive Command",
+    "Ministry of Credit & Records"
+  ],
+  identitySecurity: [
+    "Supreme Chairman",
+    "Executive Director",
+    "Executive Command",
+    "Ministry of Credit & Records",
+    "MSS Command",
+    "Minister of State Security",
+    "MSS Agent"
+  ],
   economyControl: [
     "Supreme Chairman",
     "Executive Director",

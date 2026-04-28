@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
+import { getCitizenState } from "../../lib/citizen-state";
 
 const directory = [
   {
@@ -65,22 +66,27 @@ const directory = [
       motto
     }))
   },
-  {
-    section: "District Governors",
-    people: [
-      ["Capitol Governor", "Maintains ceremonial administration and central civic order.", "The Capitol reflects the Union."],
-      ["District Governor Council", "Coordinates production, housing, transport, and citizen records.", "Every district has purpose."]
-    ].map(([name, bio, motto]) => ({
-      name,
-      title: "District Authority",
-      portrait: "/wpu-grand-seal.png",
-      bio,
-      motto
-    }))
-  }
 ];
 
-export default function MembersPage() {
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export default async function MembersPage() {
+  const state = await getCitizenState();
+  const directoryWithGovernors = [
+    ...directory,
+    {
+      section: "District Governors",
+      people: state.districtProfiles.map((district) => ({
+        name: district.governorName,
+        title: district.governorTitle,
+        portrait: district.governorPortrait || "/wpu-grand-seal.png",
+        bio: district.governorBiography,
+        motto: district.loyaltyStatement
+      }))
+    }
+  ];
+
   return (
     <SiteLayout>
       <PageHero
@@ -90,7 +96,7 @@ export default function MembersPage() {
       />
 
       <main className="content content--wide people-directory">
-        {directory.map((group) => (
+        {directoryWithGovernors.map((group) => (
           <section className="state-section scroll-fade" key={group.section}>
             <p className="eyebrow">Official Register</p>
             <h2>{group.section}</h2>

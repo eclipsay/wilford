@@ -1,0 +1,486 @@
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+import { districtEconomyDefaults } from "@wilford/shared";
+import { getEconomyStore, getWallet } from "./panem-credit";
+
+const baseUrl = (
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === "production"
+    ? "https://api.wilfordindustries.org"
+    : "http://localhost:4000")
+).replace(/\/+$/, "");
+
+export const requestCategories = [
+  "General Help Request",
+  "Ministry Support Request",
+  "Housing Request",
+  "District Transfer Request",
+  "Financial Assistance Request",
+  "Citizenship Issue",
+  "Legal Petition",
+  "MSS Security Concern",
+  "Technical Website Issue",
+  "Other"
+];
+
+export const requestStatuses = ["Submitted", "Under Review", "Approved", "Rejected", "Completed"];
+export const requestPriorities = ["Low", "Normal", "High", "Urgent"];
+export const assignedMinistries = [
+  "Citizen Services",
+  "Ministry of Credit & Records",
+  "Ministry of Public Works",
+  "Ministry of State Security",
+  "Supreme Court",
+  "District Administration",
+  "Technical Office"
+];
+export const citizenStatuses = ["Active Citizen", "Provisional Citizen", "Resident", "Suspended", "Revoked"];
+export const securityClassifications = ["Clear", "Under Review", "Watchlisted", "Restricted", "Revoked", "Enemy of the State"];
+export const identityStatuses = ["Verified", "Pending Verification", "Suspended", "Revoked", "Lost/Stolen"];
+
+function cleanText(value, maxLength = 800) {
+  return String(value || "")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function createId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
+}
+
+function createVerificationCode() {
+  return `WPU-${randomBytes(2).toString("hex").toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+function createSecurityId(districtName = "Capitol") {
+  const districtCode = districtName === "The Capitol" || districtName === "Capitol"
+    ? "CR"
+    : String(districtName).replace(/\D/g, "").padStart(2, "0").slice(-2) || "00";
+  return `WPU-${districtCode}-${new Date().getFullYear()}-${randomBytes(2).toString("hex").toUpperCase()}`;
+}
+
+function contentFile() {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  return [
+    process.env.API_DATA_FILE,
+    process.env.REPO_ROOT ? resolve(process.env.REPO_ROOT, "apps/api/data/content.json") : null,
+    resolve(currentDir, "../../api/data/content.json"),
+    resolve(process.cwd(), "../api/data/content.json"),
+    resolve(process.cwd(), "../../apps/api/data/content.json"),
+    resolve(process.cwd(), "apps/api/data/content.json")
+  ].filter(Boolean)[0];
+}
+
+function fallbackFile() {
+  return resolve(tmpdir(), "wilford-citizen-state.json");
+}
+
+function adminApiKey() {
+  return process.env.GOVERNMENT_STORE_API_KEY || process.env.BULLETIN_API_KEY || process.env.ADMIN_API_KEY;
+}
+
+function districtNumber(name) {
+  if (name === "The Capitol" || name === "Capitol") return 0;
+  return Number(String(name).replace(/\D/g, "")) || 0;
+}
+
+const governorNames = {
+  "The Capitol": "Governor Aurelia Venn",
+  "District 1": "Governor Cassian Vale",
+  "District 2": "Governor Marcellus Stone",
+  "District 3": "Governor Iona Circuit",
+  "District 4": "Governor Nerida Quay",
+  "District 5": "Governor Solen Grid",
+  "District 6": "Governor Thaddeus Rail",
+  "District 7": "Governor Rowan Timber",
+  "District 8": "Governor Selene Loom",
+  "District 9": "Governor Ceres Mill",
+  "District 10": "Governor Darius Stock",
+  "District 11": "Governor Amara Orchard",
+  "District 12": "Governor Cole Ashford",
+  "District 13": "Governor Severin Locke"
+};
+
+export function defaultDistrictProfiles(economyDistricts = districtEconomyDefaults) {
+  return economyDistricts.map((district) => {
+    const number = districtNumber(district.name);
+    const governorName = governorNames[district.name] || `Governor of ${district.name}`;
+    return {
+      id: district.id,
+      name: district.name === "The Capitol" ? "Capitol" : district.name,
+      canonicalName: district.name,
+      industry: district.productionType,
+      governorName,
+      governorTitle: number === 0 ? "Capitol Governor" : `${district.name} Governor`,
+      governorPortrait: "/wpu-grand-seal.png",
+      governorBiography: `${governorName} administers ${district.name === "The Capitol" ? "central command, civic culture, and finance" : `${district.name} production, census order, and civic welfare`} under the Grand Seal.`,
+      loyaltyStatement: number === 13 ? "Restricted service remains loyal through silence and precision." : "The district serves the Union through ordered production.",
+      appointmentDate: "2026-04-28",
+      loreDescription: number === 0
+        ? "The Capitol is the command center of government, culture, finance, and executive continuity."
+        : `${district.name} is bound to the Union as a production district with protected wages, census records, and state-directed development.`,
+      economicOutput: district.goodsProduced,
+      loyaltyRating: district.loyaltyScore,
+      productionGoods: district.goodsProduced,
+      tradeRelevance: `${district.name === "The Capitol" ? "Treasury command" : district.productionType} anchors Panem Credit pricing, district levy policy, and marketplace supply.`,
+      developmentStatus: district.developmentStatus,
+      keyLandmarks: number === 0
+        ? ["Grand Seal Plaza", "Ministry Row", "Credit & Records Hall"]
+        : [`${district.name} Civic Registry`, "Union Rail Station", "Production Exchange"],
+      recentBulletins: []
+    };
+  });
+}
+
+function seedCitizenRecords(store) {
+  return [
+    ["citizen-chairman", "Chairman Lemmie", "chairman", "The Capitol", "Supreme Chairman", "Clear", "wallet-chairman"],
+    ["citizen-eclip", "Executive Director Eclip", "eclip", "District 3", "Executive Command", "Clear", "wallet-eclip"],
+    ["citizen-flukkston", "Sir Flukkston", "flukkston", "District 2", "Executive Command", "Clear", "wallet-flukkston"],
+    ["citizen-public", "Registered Citizen", "citizen", "District 8", "Active Citizen", "Clear", "wallet-citizen"]
+  ].map(([id, name, userId, district, status, securityClassification, walletId], index) => {
+    const wallet = getWallet(store, walletId);
+    return normalizeCitizenRecord({
+      id,
+      name,
+      userId,
+      discordUsername: "",
+      discordId: wallet?.discordId || "",
+      district,
+      citizenStatus: status,
+      securityClassification,
+      walletId,
+      unionSecurityId: createSecurityId(district),
+      verificationCode: createVerificationCode(),
+      issueDate: "2026-04-28",
+      expiryDate: "",
+      verificationStatus: "Verified",
+      internalNotes: index === 0 ? "Executive record." : "",
+      warnings: [],
+      createdAt: "2026-04-28T00:00:00.000Z",
+      updatedAt: "2026-04-28T00:00:00.000Z"
+    });
+  });
+}
+
+function normalizeCitizenRecord(record = {}) {
+  const district = cleanText(record.district || "Capitol", 80);
+  return {
+    id: cleanText(record.id || createId("citizen"), 120),
+    name: cleanText(record.name || "Registered Citizen", 160),
+    userId: cleanText(record.userId || "", 120),
+    discordUsername: cleanText(record.discordUsername || "", 120),
+    discordId: cleanText(record.discordId || "", 80),
+    district,
+    citizenStatus: citizenStatuses.includes(record.citizenStatus) || ["Supreme Chairman", "Executive Command"].includes(record.citizenStatus)
+      ? record.citizenStatus
+      : "Active Citizen",
+    securityClassification: securityClassifications.includes(record.securityClassification) ? record.securityClassification : "Clear",
+    walletId: cleanText(record.walletId || "", 120),
+    unionSecurityId: cleanText(record.unionSecurityId || createSecurityId(district), 80),
+    verificationCode: cleanText(record.verificationCode || createVerificationCode(), 80),
+    issueDate: cleanText(record.issueDate || new Date().toISOString().slice(0, 10), 40),
+    expiryDate: cleanText(record.expiryDate || "", 40),
+    verificationStatus: identityStatuses.includes(record.verificationStatus) ? record.verificationStatus : "Verified",
+    internalNotes: cleanText(record.internalNotes || "", 1600),
+    warnings: Array.isArray(record.warnings) ? record.warnings.map((item) => cleanText(item, 220)).filter(Boolean).slice(0, 10) : [],
+    lostOrStolen: Boolean(record.lostOrStolen),
+    createdAt: record.createdAt || new Date().toISOString(),
+    updatedAt: record.updatedAt || new Date().toISOString()
+  };
+}
+
+function normalizeCitizenRequest(entry = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: cleanText(entry.id || createId("request"), 120),
+    citizenName: cleanText(entry.citizenName || "Registered Citizen", 160),
+    citizenId: cleanText(entry.citizenId || "", 120),
+    district: cleanText(entry.district || "Unassigned", 80),
+    category: requestCategories.includes(entry.category) ? entry.category : "Other",
+    priority: requestPriorities.includes(entry.priority) ? entry.priority : "Normal",
+    message: cleanText(entry.message || "", 2400),
+    attachments: cleanText(entry.attachments || "", 1000),
+    status: requestStatuses.includes(entry.status) ? entry.status : "Submitted",
+    assignedMinistry: cleanText(entry.assignedMinistry || "Citizen Services", 120),
+    governmentNotes: cleanText(entry.governmentNotes || "", 2400),
+    citizenResponse: cleanText(entry.citizenResponse || "", 1600),
+    escalation: cleanText(entry.escalation || "", 120),
+    closedAt: entry.closedAt || "",
+    createdAt: entry.createdAt || now,
+    updatedAt: entry.updatedAt || now
+  };
+}
+
+function normalizeDistrictProfile(profile = {}, economyDistricts = districtEconomyDefaults) {
+  const defaults = defaultDistrictProfiles(economyDistricts);
+  const fallback = defaults.find((district) => district.id === profile.id || district.canonicalName === profile.canonicalName) || defaults[0];
+  return {
+    ...fallback,
+    ...profile,
+    name: cleanText(profile.name || fallback.name, 80),
+    canonicalName: cleanText(profile.canonicalName || fallback.canonicalName, 80),
+    industry: cleanText(profile.industry || fallback.industry, 180),
+    governorName: cleanText(profile.governorName || fallback.governorName, 160),
+    governorTitle: cleanText(profile.governorTitle || fallback.governorTitle, 160),
+    governorPortrait: cleanText(profile.governorPortrait || fallback.governorPortrait, 500),
+    governorBiography: cleanText(profile.governorBiography || fallback.governorBiography, 1200),
+    loyaltyStatement: cleanText(profile.loyaltyStatement || fallback.loyaltyStatement, 500),
+    appointmentDate: cleanText(profile.appointmentDate || fallback.appointmentDate, 40),
+    loreDescription: cleanText(profile.loreDescription || fallback.loreDescription, 1200),
+    economicOutput: cleanText(profile.economicOutput || fallback.economicOutput, 500),
+    productionGoods: cleanText(profile.productionGoods || fallback.productionGoods, 500),
+    tradeRelevance: cleanText(profile.tradeRelevance || fallback.tradeRelevance, 800),
+    developmentStatus: cleanText(profile.developmentStatus || fallback.developmentStatus, 160),
+    keyLandmarks: Array.isArray(profile.keyLandmarks) ? profile.keyLandmarks.map((item) => cleanText(item, 120)).filter(Boolean).slice(0, 6) : fallback.keyLandmarks,
+    recentBulletins: Array.isArray(profile.recentBulletins) ? profile.recentBulletins.map((item) => cleanText(item, 180)).filter(Boolean).slice(0, 5) : []
+  };
+}
+
+function normalizeCitizenState(content = {}, economyStore) {
+  const economyDistricts = economyStore?.districts?.length ? economyStore.districts : districtEconomyDefaults;
+  const storedDistricts = Array.isArray(content.districtProfiles) && content.districtProfiles.length ? content.districtProfiles : defaultDistrictProfiles(economyDistricts);
+  const districtIds = new Set(storedDistricts.map((district) => district.id || district.canonicalName));
+  const districtProfiles = [
+    ...storedDistricts,
+    ...defaultDistrictProfiles(economyDistricts).filter((district) => !districtIds.has(district.id) && !districtIds.has(district.canonicalName))
+  ].map((district) => normalizeDistrictProfile(district, economyDistricts));
+
+  return {
+    citizenRecords: (Array.isArray(content.citizenRecords) && content.citizenRecords.length
+      ? content.citizenRecords
+      : seedCitizenRecords(economyStore)
+    ).map(normalizeCitizenRecord),
+    citizenRequests: (Array.isArray(content.citizenRequests) ? content.citizenRequests : []).map(normalizeCitizenRequest),
+    districtProfiles
+  };
+}
+
+async function readRemoteStore() {
+  const key = adminApiKey();
+  if (!key) throw new Error("Missing admin API key.");
+  const response = await fetch(`${baseUrl}/api/admin/government-access-store`, {
+    headers: { "x-admin-key": key },
+    cache: "no-store",
+    signal: AbortSignal.timeout(4000)
+  });
+  if (!response.ok) throw new Error(`Citizen state read failed with ${response.status}.`);
+  return response.json();
+}
+
+async function writeRemoteStore(content) {
+  const key = adminApiKey();
+  if (!key) throw new Error("Missing admin API key.");
+  const response = await fetch(`${baseUrl}/api/admin/government-access-store`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-admin-key": key },
+    body: JSON.stringify(content),
+    cache: "no-store",
+    signal: AbortSignal.timeout(5000)
+  });
+  if (!response.ok) throw new Error(`Citizen state write failed with ${response.status}.`);
+  return response.json();
+}
+
+async function readLocalContent() {
+  try {
+    return JSON.parse(await readFile(contentFile(), "utf8"));
+  } catch {}
+  try {
+    return JSON.parse(await readFile(fallbackFile(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+async function writeLocalContent(nextFields) {
+  const file = contentFile();
+  try {
+    const current = await readLocalContent();
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify({ ...current, ...nextFields }, null, 2));
+    return true;
+  } catch {}
+
+  const fallback = fallbackFile();
+  const current = await readLocalContent();
+  await mkdir(dirname(fallback), { recursive: true });
+  await writeFile(fallback, JSON.stringify({ ...current, ...nextFields }, null, 2));
+  return true;
+}
+
+export async function getCitizenState() {
+  const economyStore = await getEconomyStore();
+  try {
+    return normalizeCitizenState(await readRemoteStore(), economyStore);
+  } catch {}
+  return normalizeCitizenState(await readLocalContent(), economyStore);
+}
+
+export async function saveCitizenState(nextState) {
+  const currentLocal = await readLocalContent();
+  const payload = {
+    ...currentLocal,
+    citizenRecords: nextState.citizenRecords || [],
+    citizenRequests: nextState.citizenRequests || [],
+    districtProfiles: nextState.districtProfiles || []
+  };
+
+  try {
+    await writeRemoteStore(payload);
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") throw error;
+  }
+
+  await writeLocalContent(payload);
+  return getCitizenState();
+}
+
+export async function createCitizenRequest(fields) {
+  const state = await getCitizenState();
+  const request = normalizeCitizenRequest({
+    citizenName: fields.citizenName,
+    citizenId: fields.citizenId,
+    district: fields.district,
+    category: fields.category,
+    priority: fields.priority,
+    message: fields.message,
+    attachments: fields.attachments,
+    assignedMinistry: ministryForCategory(fields.category)
+  });
+  state.citizenRequests = [request, ...state.citizenRequests].slice(0, 500);
+  await saveCitizenState(state);
+  return request;
+}
+
+export async function updateCitizenRequest(id, fields) {
+  const state = await getCitizenState();
+  state.citizenRequests = state.citizenRequests.map((request) =>
+    request.id === id
+      ? normalizeCitizenRequest({
+          ...request,
+          status: fields.status || request.status,
+          assignedMinistry: fields.assignedMinistry || request.assignedMinistry,
+          governmentNotes: fields.governmentNotes ?? request.governmentNotes,
+          citizenResponse: fields.citizenResponse ?? request.citizenResponse,
+          escalation: fields.escalation ?? request.escalation,
+          closedAt: fields.close ? new Date().toISOString() : request.closedAt,
+          updatedAt: new Date().toISOString()
+        })
+      : request
+  );
+  return saveCitizenState(state);
+}
+
+export async function createCitizenRecord(fields) {
+  const state = await getCitizenState();
+  const record = normalizeCitizenRecord({
+    name: fields.name,
+    userId: fields.userId,
+    discordUsername: fields.discordUsername,
+    discordId: fields.discordId,
+    district: fields.district,
+    citizenStatus: fields.citizenStatus,
+    securityClassification: fields.securityClassification,
+    walletId: fields.walletId,
+    issueDate: fields.issueDate,
+    expiryDate: fields.expiryDate,
+    verificationStatus: fields.verificationStatus
+  });
+  state.citizenRecords = [record, ...state.citizenRecords].slice(0, 500);
+  await saveCitizenState(state);
+  return record;
+}
+
+export async function updateCitizenRecord(id, fields) {
+  const state = await getCitizenState();
+  state.citizenRecords = state.citizenRecords.map((record) => {
+    if (record.id !== id) return record;
+    const regenerate = fields.regenerateVerificationCode;
+    const district = fields.district || record.district;
+    return normalizeCitizenRecord({
+      ...record,
+      name: fields.name ?? record.name,
+      userId: fields.userId ?? record.userId,
+      discordUsername: fields.discordUsername ?? record.discordUsername,
+      discordId: fields.discordId ?? record.discordId,
+      district,
+      citizenStatus: fields.citizenStatus ?? record.citizenStatus,
+      securityClassification: fields.securityClassification ?? record.securityClassification,
+      walletId: fields.walletId ?? record.walletId,
+      expiryDate: fields.expiryDate ?? record.expiryDate,
+      verificationStatus: fields.verificationStatus ?? record.verificationStatus,
+      lostOrStolen: Boolean(fields.lostOrStolen),
+      internalNotes: fields.internalNotes ?? record.internalNotes,
+      verificationCode: regenerate ? createVerificationCode() : record.verificationCode,
+      unionSecurityId: fields.regenerateSecurityId ? createSecurityId(district) : record.unionSecurityId,
+      updatedAt: new Date().toISOString()
+    });
+  });
+  return saveCitizenState(state);
+}
+
+export async function updateDistrictProfile(id, fields) {
+  const state = await getCitizenState();
+  state.districtProfiles = state.districtProfiles.map((district) =>
+    district.id === id
+      ? normalizeDistrictProfile({
+          ...district,
+          governorName: fields.governorName,
+          governorTitle: fields.governorTitle,
+          governorPortrait: fields.governorPortrait,
+          governorBiography: fields.governorBiography,
+          loyaltyStatement: fields.loyaltyStatement,
+          appointmentDate: fields.appointmentDate,
+          loreDescription: fields.loreDescription,
+          keyLandmarks: String(fields.keyLandmarks || "")
+            .split("\n")
+            .map((item) => cleanText(item, 120))
+            .filter(Boolean),
+          recentBulletins: String(fields.recentBulletins || "")
+            .split("\n")
+            .map((item) => cleanText(item, 180))
+            .filter(Boolean)
+        })
+      : district
+  );
+  return saveCitizenState(state);
+}
+
+export function ministryForCategory(category) {
+  return {
+    "Ministry Support Request": "Citizen Services",
+    "Housing Request": "Ministry of Public Works",
+    "District Transfer Request": "District Administration",
+    "Financial Assistance Request": "Ministry of Credit & Records",
+    "Citizenship Issue": "Ministry of Credit & Records",
+    "Legal Petition": "Supreme Court",
+    "MSS Security Concern": "Ministry of State Security",
+    "Technical Website Issue": "Technical Office"
+  }[category] || "Citizen Services";
+}
+
+export function findCitizenBySelector(state, selector) {
+  const value = cleanText(selector, 160).toLowerCase();
+  if (!value) return state.citizenRecords[0];
+  return state.citizenRecords.find((record) =>
+    [record.id, record.userId, record.discordId, record.unionSecurityId, record.verificationCode]
+      .filter(Boolean)
+      .some((item) => String(item).toLowerCase() === value)
+  ) || state.citizenRecords[0];
+}
+
+export async function hydrateCitizenProfile(record) {
+  const economy = await getEconomyStore();
+  const wallet = getWallet(economy, record.walletId || record.userId || record.discordId);
+  const requests = (await getCitizenState()).citizenRequests.filter((request) => request.citizenId === record.id);
+  const taxes = wallet ? economy.taxRecords.filter((tax) => tax.walletId === wallet.id) : [];
+  const district = economy.districts.find((item) => item.name === record.district || item.name === `The ${record.district}`);
+  return { record, wallet, requests, taxes, district };
+}

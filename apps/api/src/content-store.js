@@ -54,6 +54,9 @@ const defaultContent = {
   ],
   governmentUsers: [],
   governmentAuditLog: [],
+  citizenRecords: [],
+  citizenRequests: [],
+  districtProfiles: [],
   discordBroadcasts: [],
   enemyOfStateEntries: [],
   enemyOfStateDiscordEvents: [],
@@ -266,6 +269,9 @@ async function readContentFile() {
       articles: parsed.articles || defaultContent.articles,
       governmentUsers: parsed.governmentUsers || [],
       governmentAuditLog: parsed.governmentAuditLog || [],
+      citizenRecords: parsed.citizenRecords || [],
+      citizenRequests: parsed.citizenRequests || [],
+      districtProfiles: parsed.districtProfiles || [],
       discordBroadcasts: parsed.discordBroadcasts || [],
       enemyOfStateEntries: parsed.enemyOfStateEntries || [],
       enemyOfStateDiscordEvents: parsed.enemyOfStateDiscordEvents || [],
@@ -378,11 +384,26 @@ export async function updateGovernmentAccessStore(fields) {
     content.publicApplications = fields.publicApplications;
   }
 
+  if (Array.isArray(fields.citizenRecords)) {
+    content.citizenRecords = fields.citizenRecords;
+  }
+
+  if (Array.isArray(fields.citizenRequests)) {
+    content.citizenRequests = fields.citizenRequests;
+  }
+
+  if (Array.isArray(fields.districtProfiles)) {
+    content.districtProfiles = fields.districtProfiles;
+  }
+
   await writeContentFile(content);
   return {
     governmentUsers: content.governmentUsers,
     governmentAuditLog: content.governmentAuditLog,
-    publicApplications: content.publicApplications || []
+    publicApplications: content.publicApplications || [],
+    citizenRecords: content.citizenRecords || [],
+    citizenRequests: content.citizenRequests || [],
+    districtProfiles: content.districtProfiles || []
   };
 }
 
