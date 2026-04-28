@@ -109,6 +109,7 @@ app.get("/api/content", async (_req, res) => {
     governmentAuditLog,
     discordBroadcasts,
     publicApplications,
+    supremeCourtPetitions,
     ...publicContent
   } = content;
 
@@ -405,7 +406,8 @@ app.post("/api/admin/government-access-store", requireAdmin, async (req, res) =>
 app.get("/api/admin/supreme-court-store", requireAdmin, async (_req, res) => {
   const content = await getContent();
   res.json({
-    supremeCourtCases: content.supremeCourtCases || []
+    supremeCourtCases: content.supremeCourtCases || [],
+    supremeCourtPetitions: content.supremeCourtPetitions || []
   });
 });
 
@@ -491,6 +493,13 @@ app.post("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
     targetDiscordId: req.body?.targetDiscordId || "",
     linkedType: req.body?.linkedType || "",
     linkedId: req.body?.linkedId || "",
+    headline: req.body?.headline || "",
+    excerpt: req.body?.excerpt || "",
+    issuer: req.body?.issuer || "",
+    classification: req.body?.classification || "",
+    imageUrl: req.body?.imageUrl || "",
+    articleUrl: req.body?.articleUrl || "",
+    metadata: req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {},
     requiresApproval: dangerousBroadcast || Boolean(req.body?.requiresApproval),
     confirmed: !dangerousBroadcast && Boolean(req.body?.confirmed),
     requestedBy: req.body?.requestedBy || "system",

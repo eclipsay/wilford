@@ -18,6 +18,18 @@ export const publicBotCommands = [
     usage: "-apply"
   },
   {
+    name: "-petition / /petition",
+    access: "Public",
+    description: "File an appeal, pardon request, complaint, dispute, or legal question with the Supreme Court.",
+    usage: "-petition appeal Case-001 I request review because..."
+  },
+  {
+    name: "-court / /court",
+    access: "Court staff",
+    description: "Post start, end, statement, summon, evidence, or recess notices to active hearings.",
+    usage: "-court start Hearing is now in session."
+  },
+  {
     name: "-commands / /commands",
     access: "Public",
     description: "Get the public command reference page for Wilford bot operations.",

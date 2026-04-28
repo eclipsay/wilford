@@ -76,6 +76,11 @@ npm run build
   `DISCORD_MSS_CHANNEL_ID`, `DISCORD_LEMMIE_USER_ID`, `WEBSITE_URL`, and matching
   `ADMIN_API_KEY` values for the website, API, and bot. DM-all and
   Enemy-of-the-State broadcasts require Supreme Chairman approval before delivery.
+- Supreme Court Discord integration uses the website as the case system and the bot as the public notice system. Configure:
+  `COURT_ANNOUNCEMENTS_CHANNEL_ID`, `ACTIVE_HEARINGS_CHANNEL_ID`,
+  `SENTENCING_RECORDS_CHANNEL_ID`, `PETITIONS_TO_COURT_CHANNEL_ID`,
+  `LEGAL_ARCHIVES_CHANNEL_ID`, and `PARDONS_CLEMENCY_CHANNEL_ID`.
+  Citizens can file court petitions with `/petition`; court staff can post active-hearing notices with `/court`.
 
 ## PM2
 

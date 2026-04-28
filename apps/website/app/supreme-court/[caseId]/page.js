@@ -79,6 +79,18 @@ export default async function SupremeCourtCasePage({ params }) {
               <dd>{courtCase.presidingOfficial}</dd>
             </div>
             <div>
+              <dt>Hearing Date</dt>
+              <dd>{courtCase.hearingDate || "Pending"}</dd>
+            </div>
+            <div>
+              <dt>Classification</dt>
+              <dd>{courtCase.classification}</dd>
+            </div>
+            <div>
+              <dt>Defendant / Respondent</dt>
+              <dd>{courtCase.defendant || "Not entered"}</dd>
+            </div>
+            <div>
               <dt>Parties</dt>
               <dd>{courtCase.parties.join(" / ") || "Parties pending entry"}</dd>
             </div>
@@ -113,6 +125,26 @@ export default async function SupremeCourtCasePage({ params }) {
                 </div>
               </div>
               <RecordList items={courtCase.evidence} empty="No public evidence has been listed." />
+            </section>
+
+            <section className="panel court-record-panel scroll-fade">
+              <div className="panel__header">
+                <div>
+                  <p className="eyebrow">Charges and Judgment</p>
+                  <h2>Sentencing Record</h2>
+                </div>
+              </div>
+              <RecordList items={courtCase.charges} empty="No charges have been entered." />
+              <dl className="court-docket-grid court-docket-grid--compact">
+                <div>
+                  <dt>Verdict</dt>
+                  <dd>{courtCase.verdict || "Pending"}</dd>
+                </div>
+                <div>
+                  <dt>Sentence</dt>
+                  <dd>{courtCase.sentence || "Pending"}</dd>
+                </div>
+              </dl>
             </section>
 
             <section className="panel court-record-panel scroll-fade">

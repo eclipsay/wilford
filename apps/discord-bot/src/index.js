@@ -44,6 +44,12 @@ const adminApiKey = String(process.env.ADMIN_API_KEY || "").trim();
 const broadcastGuildId = String(process.env.DISCORD_GUILD_ID || "").trim();
 const announcementChannelId = String(process.env.DISCORD_ANNOUNCEMENT_CHANNEL_ID || "").trim();
 const mssChannelId = String(process.env.DISCORD_MSS_CHANNEL_ID || "").trim();
+const courtAnnouncementsChannelId = String(process.env.COURT_ANNOUNCEMENTS_CHANNEL_ID || "").trim();
+const activeHearingsChannelId = String(process.env.ACTIVE_HEARINGS_CHANNEL_ID || "").trim();
+const sentencingRecordsChannelId = String(process.env.SENTENCING_RECORDS_CHANNEL_ID || "").trim();
+const petitionsToCourtChannelId = String(process.env.PETITIONS_TO_COURT_CHANNEL_ID || "").trim();
+const legalArchivesChannelId = String(process.env.LEGAL_ARCHIVES_CHANNEL_ID || "").trim();
+const pardonsClemencyChannelId = String(process.env.PARDONS_CLEMENCY_CHANNEL_ID || "").trim();
 const lemmieDiscordUserId = String(process.env.DISCORD_LEMMIE_USER_ID || botOwnerId).trim();
 const applicationGuildId = String(
   process.env.DISCORD_APPLICATION_GUILD_ID || process.env.DISCORD_GUILD_ID || ""
@@ -300,6 +306,92 @@ async function updateRemoteApplication(applicationId, fields) {
   }
 
   return response.json().catch(() => null);
+}
+
+async function readSupremeCourtStore() {
+  if (!adminApiKey) {
+    throw new Error("ADMIN_API_KEY is not configured for court petitions.");
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/supreme-court-store`, {
+    headers: { "x-admin-key": adminApiKey },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supreme Court store request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function writeSupremeCourtStore(store) {
+  if (!adminApiKey) {
+    throw new Error("ADMIN_API_KEY is not configured for court petitions.");
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/supreme-court-store`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify(store),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supreme Court store write failed: ${response.status}`);
+  }
+
+  return response.json().catch(() => null);
+}
+
+async function submitCourtPetitionFromDiscord(user, fields) {
+  const store = await readSupremeCourtStore();
+  const petition = {
+    id: createId("court-petition"),
+    petitionerDiscordId: user.id,
+    petitionerName: user.tag,
+    subject: cleanBroadcastLine(fields.subject).slice(0, 160),
+    requestType: cleanBroadcastLine(fields.requestType).toLowerCase(),
+    statement: String(fields.statement || "").trim().slice(0, 3000),
+    status: "pending",
+    internalNotes: "",
+    discordMessageId: "",
+    submittedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  const nextPetitions = [petition, ...(store.supremeCourtPetitions || [])].slice(0, 500);
+  await writeSupremeCourtStore({
+    supremeCourtCases: store.supremeCourtCases || [],
+    supremeCourtPetitions: nextPetitions
+  });
+
+  if (petitionsToCourtChannelId) {
+    const channel = await client.channels.fetch(petitionsToCourtChannelId).catch(() => null);
+    if (channel?.isTextBased() && channel.type !== ChannelType.DM) {
+      const sent = await channel.send({
+        embeds: [
+          buildCourtBroadcastEmbed({
+            type: "court_petition",
+            title: `Court Petition: ${petition.subject}`,
+            body: petition.statement,
+            metadata: { petition },
+            imageUrl: "/wpu-grand-seal.png",
+            createdAt: petition.submittedAt
+          })
+        ]
+      });
+      petition.discordMessageId = sent.id;
+      await writeSupremeCourtStore({
+        supremeCourtCases: store.supremeCourtCases || [],
+        supremeCourtPetitions: [petition, ...(store.supremeCourtPetitions || [])].slice(0, 500)
+      });
+    }
+  }
+
+  return petition;
 }
 
 async function setApplicationReviewStatus(application, status, options = {}) {
@@ -1065,11 +1157,53 @@ function wait(ms) {
 }
 
 function channelIdForBroadcast(broadcast) {
+  const courtTargets = {
+    court_announcement: courtAnnouncementsChannelId,
+    court_notice: courtAnnouncementsChannelId,
+    active_hearing: activeHearingsChannelId,
+    court_hearing: activeHearingsChannelId,
+    sentencing_record: sentencingRecordsChannelId,
+    court_sentencing: sentencingRecordsChannelId,
+    court_petition: petitionsToCourtChannelId,
+    legal_archive: legalArchivesChannelId,
+    court_archive: legalArchivesChannelId,
+    clemency_notice: pardonsClemencyChannelId,
+    court_clemency: pardonsClemencyChannelId
+  };
+
+  if (courtTargets[broadcast.distribution] || courtTargets[broadcast.type]) {
+    return courtTargets[broadcast.distribution] || courtTargets[broadcast.type];
+  }
+
   if (broadcast.distribution === "mss_only" || broadcast.distribution === "government_officials") {
     return mssChannelId || announcementChannelId;
   }
 
   return announcementChannelId;
+}
+
+function channelIdsForBroadcast(broadcast) {
+  const primary = channelIdForBroadcast(broadcast);
+  const ids = primary ? [primary] : [];
+  const courtCase = broadcast.metadata?.courtCase || {};
+
+  if (
+    isCourtBroadcast(broadcast) &&
+    (broadcast.distribution === "active_hearing" ||
+      broadcast.type === "court_hearing" ||
+      courtCase.status === "Hearing Scheduled") &&
+    courtAnnouncementsChannelId
+  ) {
+    ids.unshift(courtAnnouncementsChannelId);
+  }
+
+  return [...new Set(ids)];
+}
+
+function isCourtBroadcast(broadcast) {
+  return String(broadcast.type || "").startsWith("court_") ||
+    String(broadcast.distribution || "").startsWith("court_") ||
+    ["active_hearing", "sentencing_record", "legal_archive", "clemency_notice"].includes(broadcast.distribution);
 }
 
 function cleanBroadcastLine(value) {
@@ -1230,6 +1364,10 @@ async function enrichArticleBroadcast(broadcast) {
 }
 
 function buildBroadcastEmbed(broadcast) {
+  if (isCourtBroadcast(broadcast)) {
+    return buildCourtBroadcastEmbed(broadcast);
+  }
+
   const parsed = parseLegacyBroadcastBody(broadcast.body);
   const headline = cleanBroadcastLine(
     broadcast.headline ||
@@ -1284,6 +1422,85 @@ function buildBroadcastEmbed(broadcast) {
   return embed;
 }
 
+function buildCourtBroadcastEmbed(broadcast) {
+  const courtCase = broadcast.metadata?.courtCase || {};
+  const petition = broadcast.metadata?.petition || {};
+  const clemency = broadcast.metadata?.clemency || {};
+  const linkedUrl = absoluteWebsiteUrl(courtCase.publicCaseUrl || broadcast.articleUrl);
+  const description = String(
+    broadcast.excerpt ||
+      broadcast.body ||
+      petition.statement ||
+      clemency.statement ||
+      "Official Supreme Court notice entered for public record."
+  ).trim().slice(0, 1400);
+  const embed = new EmbedBuilder()
+    .setColor(broadcast.type === "court_clemency" ? 0xd7a85f : 0xc0c0c0)
+    .setTitle("Supreme Court Notice")
+    .setDescription(description)
+    .setFooter({ text: "Supreme Court of the Wilford Panem Union" })
+    .setTimestamp(new Date(broadcast.createdAt || Date.now()));
+
+  const sealUrl = absoluteWebsiteUrl(broadcast.imageUrl || "/wpu-grand-seal.png");
+  if (sealUrl) {
+    embed.setThumbnail(sealUrl);
+  }
+
+  if (broadcast.type === "court_petition") {
+    embed.addFields(
+      { name: "Petitioner", value: petition.petitionerName || "Unknown", inline: true },
+      { name: "Discord ID", value: petition.petitionerDiscordId || "Not provided", inline: true },
+      { name: "Request Type", value: petition.requestType || "legal question", inline: true },
+      { name: "Status", value: petition.status || "pending", inline: true },
+      { name: "Subject", value: petition.subject || broadcast.title || "Court petition", inline: false }
+    );
+    return embed;
+  }
+
+  if (broadcast.type === "court_sentencing") {
+    embed.addFields(
+      { name: "Defendant", value: courtCase.defendant || "Not entered", inline: true },
+      { name: "Charge", value: Array.isArray(courtCase.charges) && courtCase.charges.length ? courtCase.charges.join("\n").slice(0, 1024) : "Not entered", inline: false },
+      { name: "Verdict", value: courtCase.verdict || "Pending", inline: true },
+      { name: "Sentence", value: courtCase.sentence || "Pending", inline: true },
+      { name: "Judge", value: courtCase.judge || "Presiding Official", inline: true },
+      { name: "Date", value: courtCase.hearingDate || new Date().toISOString().slice(0, 10), inline: true },
+      { name: "Link to Judgment", value: linkedUrl || "Not available", inline: false }
+    );
+    return embed;
+  }
+
+  if (broadcast.type === "court_clemency") {
+    embed.addFields(
+      { name: "Person Receiving Clemency", value: clemency.person || courtCase.defendant || "Not entered", inline: true },
+      { name: "Original Case", value: courtCase.caseId || courtCase.title || "Not entered", inline: true },
+      { name: "Clemency Type", value: clemency.type || "pardon", inline: true },
+      { name: "Issued By", value: clemency.issuedBy || broadcast.requestedBy || "Court authority", inline: true },
+      { name: "Statement", value: (clemency.statement || description).slice(0, 1024), inline: false }
+    );
+    return embed;
+  }
+
+  embed.addFields(
+    { name: "Case Name", value: courtCase.title || broadcast.title || "Supreme Court Matter", inline: true },
+    { name: "Case ID", value: courtCase.caseId || broadcast.linkedId || "Not entered", inline: true },
+    { name: "Status", value: courtCase.status || "Filed", inline: true },
+    { name: "Presiding Judge", value: courtCase.judge || "Presiding Official", inline: true },
+    { name: "Hearing Date", value: courtCase.hearingDate || "Pending", inline: true },
+    { name: "Classification", value: courtCase.classification || broadcast.classification || "Judicial Notice", inline: true }
+  );
+
+  if (broadcast.metadata?.hearingAction) {
+    embed.addFields({ name: "Hearing Action", value: broadcast.metadata.hearingAction, inline: true });
+  }
+
+  if (linkedUrl) {
+    embed.addFields({ name: "Linked Case Page", value: linkedUrl, inline: false });
+  }
+
+  return embed;
+}
+
 function buildBroadcastComponents(broadcast) {
   const parsed = parseLegacyBroadcastBody(broadcast.body);
   const articleUrl = absoluteWebsiteUrl(broadcast.articleUrl || parsed.reference);
@@ -1296,7 +1513,7 @@ function buildBroadcastComponents(broadcast) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setStyle(ButtonStyle.Link)
-        .setLabel("Read Full Article")
+      .setLabel(isCourtBroadcast(broadcast) ? "Open Court Record" : "Read Full Article")
         .setURL(articleUrl)
     )
   ];
@@ -1352,28 +1569,30 @@ async function notifyLemmieForBroadcastApproval(broadcast) {
 
 async function sendBroadcastToChannel(broadcast, results) {
   const enrichedBroadcast = await enrichArticleBroadcast(broadcast);
-  const channelId = channelIdForBroadcast(broadcast);
+  const channelIds = channelIdsForBroadcast(broadcast);
 
-  if (!channelId) {
+  if (!channelIds.length) {
     results.failures.push({ target: "channel", error: "No channel configured." });
     results.failureCount += 1;
     return;
   }
 
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  for (const channelId of channelIds) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
 
-  if (!channel?.isTextBased() || channel.type === ChannelType.DM) {
-    results.failures.push({ target: channelId, error: "Configured channel is not text-capable." });
-    results.failureCount += 1;
-    return;
+    if (!channel?.isTextBased() || channel.type === ChannelType.DM) {
+      results.failures.push({ target: channelId, error: "Configured channel is not text-capable." });
+      results.failureCount += 1;
+      continue;
+    }
+
+    const sent = await channel.send({
+      embeds: [buildBroadcastEmbed(enrichedBroadcast)],
+      components: buildBroadcastComponents(enrichedBroadcast)
+    });
+    results.recipients.push({ target: channelId, method: "channel", messageId: sent.id });
+    results.successCount += 1;
   }
-
-  await channel.send({
-    embeds: [buildBroadcastEmbed(enrichedBroadcast)],
-    components: buildBroadcastComponents(enrichedBroadcast)
-  });
-  results.recipients.push({ target: channelId, method: "channel" });
-  results.successCount += 1;
 }
 
 async function sendBroadcastDm(userId, broadcast, results) {
@@ -1450,7 +1669,8 @@ async function processDiscordBroadcast(broadcast) {
     if (
       ["announcement", "announcement_and_dm_all", "mss_only", "government_officials"].includes(
         broadcast.distribution
-      )
+      ) ||
+      isCourtBroadcast(broadcast)
     ) {
       await sendBroadcastToChannel(broadcast, results);
     }
@@ -1866,6 +2086,49 @@ function buildSlashCommands() {
       .setName("apply")
       .setDescription("Start a Wilford application in DMs."),
     new SlashCommandBuilder()
+      .setName("petition")
+      .setDescription("Submit a petition or appeal to the Supreme Court.")
+      .addStringOption((option) =>
+        option
+          .setName("type")
+          .setDescription("Type of petition.")
+          .setRequired(true)
+          .addChoices(
+            { name: "Appeal", value: "appeal" },
+            { name: "Pardon", value: "pardon" },
+            { name: "Complaint", value: "complaint" },
+            { name: "Dispute", value: "dispute" },
+            { name: "Legal Question", value: "legal question" }
+          )
+      )
+      .addStringOption((option) =>
+        option.setName("subject").setDescription("Petition subject.").setRequired(true).setMaxLength(160)
+      )
+      .addStringOption((option) =>
+        option.setName("statement").setDescription("Full petition statement.").setRequired(true).setMaxLength(3000)
+      ),
+    new SlashCommandBuilder()
+      .setName("court")
+      .setDescription("Post an active Supreme Court hearing notice.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+      .addStringOption((option) =>
+        option
+          .setName("action")
+          .setDescription("Hearing action.")
+          .setRequired(true)
+          .addChoices(
+            { name: "Start Hearing", value: "Start Hearing" },
+            { name: "End Hearing", value: "End Hearing" },
+            { name: "Post Court Statement", value: "Post Court Statement" },
+            { name: "Summon Participant", value: "Summon Participant" },
+            { name: "Record Evidence", value: "Record Evidence" },
+            { name: "Announce Recess", value: "Announce Recess" }
+          )
+      )
+      .addStringOption((option) =>
+        option.setName("statement").setDescription("Notice text.").setRequired(true).setMaxLength(1500)
+      ),
+    new SlashCommandBuilder()
       .setName("userinfo")
       .setDescription("Inspect a member profile.")
       .addUserOption((option) =>
@@ -1976,6 +2239,38 @@ async function runUserInfoReply(message, user) {
       `Roles: ${roles}`
     ].join("\n")
   );
+}
+
+async function postActiveHearingCommand(message, action, text) {
+  if (!activeHearingsChannelId) {
+    await message.reply("ACTIVE_HEARINGS_CHANNEL_ID is not configured.");
+    return;
+  }
+
+  const channel = await client.channels.fetch(activeHearingsChannelId).catch(() => null);
+
+  if (!channel?.isTextBased() || channel.type === ChannelType.DM) {
+    await message.reply("The active hearings channel is missing or not text-capable.");
+    return;
+  }
+
+  await channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xc0c0c0)
+        .setTitle("Supreme Court Notice")
+        .setDescription(text || "Court proceeding update entered for the public record.")
+        .addFields(
+          { name: "Hearing Action", value: action, inline: true },
+          { name: "Issued By", value: `<@${message.author.id}>`, inline: true }
+        )
+        .setThumbnail(absoluteWebsiteUrl("/wpu-grand-seal.png"))
+        .setFooter({ text: "Supreme Court of the Wilford Panem Union" })
+        .setTimestamp(new Date())
+    ]
+  });
+
+  await message.reply("Court hearing notice posted.");
 }
 
 client.once("ready", () => {
@@ -2126,6 +2421,65 @@ client.on("messageCreate", async (message) => {
       if (message.channel.type !== ChannelType.DM) {
         await message.reply("I sent you a DM to begin the Wilford application.");
       }
+      return;
+    }
+
+    if (commandName === "petition") {
+      const requestType = (parts.shift() || "legal question").toLowerCase();
+      const subject = (parts.shift() || "Supreme Court Petition").replace(/_/g, " ");
+      const statement = parts.join(" ").trim();
+
+      if (!statement) {
+        await message.reply("Use `-petition <appeal|pardon|complaint|dispute|legal_question> <subject> <statement>`.");
+        return;
+      }
+
+      const petition = await submitCourtPetitionFromDiscord(message.author, {
+        requestType: requestType.replace(/_/g, " "),
+        subject,
+        statement
+      });
+      await message.reply(`Supreme Court petition filed: ${petition.id}.`);
+      return;
+    }
+
+    if (commandName === "court") {
+      if (!hasCommandAccess(message, PermissionsBitField.Flags.ManageMessages)) {
+        await message.reply("You need court staff access to post hearing notices.");
+        return;
+      }
+
+      const action = (parts.shift() || "").replace(/_/g, " ");
+      const statement = parts.join(" ").trim();
+      const allowedActions = new Set([
+        "start",
+        "end",
+        "statement",
+        "summon",
+        "evidence",
+        "recess",
+        "Start Hearing",
+        "End Hearing",
+        "Post Court Statement",
+        "Summon Participant",
+        "Record Evidence",
+        "Announce Recess"
+      ]);
+
+      if (!allowedActions.has(action) || !statement) {
+        await message.reply("Use `-court <start|end|statement|summon|evidence|recess> <notice>`.");
+        return;
+      }
+
+      const labels = {
+        start: "Start Hearing",
+        end: "End Hearing",
+        statement: "Post Court Statement",
+        summon: "Summon Participant",
+        evidence: "Record Evidence",
+        recess: "Announce Recess"
+      };
+      await postActiveHearingCommand(message, labels[action] || action, statement);
       return;
     }
 
@@ -2364,6 +2718,38 @@ client.on("interactionCreate", async (interaction) => {
         content: "I sent you a DM to begin the Wilford application.",
         ephemeral: true
       });
+      return;
+    }
+
+    if (interaction.commandName === "petition") {
+      await interaction.deferReply({ ephemeral: true });
+      const petition = await submitCourtPetitionFromDiscord(interaction.user, {
+        requestType: interaction.options.getString("type", true),
+        subject: interaction.options.getString("subject", true),
+        statement: interaction.options.getString("statement", true)
+      });
+      await interaction.editReply(`Supreme Court petition filed: ${petition.id}.`);
+      return;
+    }
+
+    if (interaction.commandName === "court") {
+      if (!hasSlashCommandAccess(interaction, PermissionsBitField.Flags.ManageMessages)) {
+        await interaction.reply({
+          content: "You need court staff access to post hearing notices.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      const action = interaction.options.getString("action", true);
+      const statement = interaction.options.getString("statement", true);
+      const fakeMessage = {
+        author: interaction.user,
+        reply: (content) => interaction.editReply(content),
+        channel: interaction.channel
+      };
+      await interaction.deferReply({ ephemeral: true });
+      await postActiveHearingCommand(fakeMessage, action, statement);
       return;
     }
 

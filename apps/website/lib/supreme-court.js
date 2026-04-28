@@ -25,6 +25,40 @@ export const courtStatuses = [
 
 export const courtKeyRoles = ["Defendant", "Witness", "Counsel", "Court Official"];
 
+export const courtPetitionTypes = [
+  "appeal",
+  "pardon",
+  "complaint",
+  "dispute",
+  "legal question"
+];
+
+export const courtPetitionStatuses = [
+  "pending",
+  "under review",
+  "accepted",
+  "denied",
+  "escalated"
+];
+
+export const courtDiscordActions = [
+  { value: "none", label: "Do not post to Discord" },
+  { value: "court_announcement", label: "Post to Court Announcements" },
+  { value: "active_hearing", label: "Post to Active Hearings" },
+  { value: "sentencing_record", label: "Post Verdict to Sentencing Records" },
+  { value: "legal_archive", label: "Archive to Legal Archives" },
+  { value: "clemency_notice", label: "Issue Pardon/Clemency" }
+];
+
+export const hearingActionTypes = [
+  "Start Hearing",
+  "End Hearing",
+  "Post Court Statement",
+  "Summon Participant",
+  "Record Evidence",
+  "Announce Recess"
+];
+
 const defaultCases = [
   {
     id: "wpu-v-district-six-rail-authority",
@@ -204,7 +238,8 @@ async function writeRemoteStore(content) {
       "x-admin-key": key
     },
     body: JSON.stringify({
-      supremeCourtCases: content.supremeCourtCases || []
+      supremeCourtCases: content.supremeCourtCases || [],
+      supremeCourtPetitions: content.supremeCourtPetitions || []
     }),
     cache: "no-store",
     signal: AbortSignal.timeout(5000)
@@ -270,6 +305,25 @@ function normalizeStatements(items) {
   })).filter((item) => item.text);
 }
 
+function normalizePetition(entry, index = 0) {
+  const requestedType = String(entry?.requestType || "legal question").trim().toLowerCase();
+  const requestedStatus = String(entry?.status || "pending").trim().toLowerCase();
+
+  return {
+    id: String(entry?.id || `court-petition-${Date.now().toString(36)}-${index}`),
+    petitionerDiscordId: String(entry?.petitionerDiscordId || "").trim(),
+    petitionerName: String(entry?.petitionerName || "").trim(),
+    subject: String(entry?.subject || "Supreme Court Petition").trim(),
+    requestType: courtPetitionTypes.includes(requestedType) ? requestedType : "legal question",
+    statement: String(entry?.statement || "").trim(),
+    status: courtPetitionStatuses.includes(requestedStatus) ? requestedStatus : "pending",
+    internalNotes: String(entry?.internalNotes || "").trim(),
+    discordMessageId: String(entry?.discordMessageId || "").trim(),
+    submittedAt: entry?.submittedAt || new Date().toISOString(),
+    updatedAt: entry?.updatedAt || new Date().toISOString()
+  };
+}
+
 function normalizeCase(entry, index) {
   const slug = String(entry?.id || entry?.caseNumber || `case-${index + 1}`)
     .toLowerCase()
@@ -284,10 +338,37 @@ function normalizeCase(entry, index) {
     caseNumber: String(entry?.caseNumber || `WPU-SC-${String(index + 1).padStart(3, "0")}`).trim(),
     status,
     dateOpened: String(entry?.dateOpened || new Date().toISOString().slice(0, 10)).trim(),
+    hearingDate: String(entry?.hearingDate || "").trim(),
     courtroom: String(entry?.courtroom || "Supreme Court Chamber").trim(),
     summary: String(entry?.summary || "").trim(),
     parties: normalizeList(entry?.parties),
+    defendant: String(entry?.defendant || entry?.respondent || "").trim(),
+    charges: normalizeList(entry?.charges),
     presidingOfficial: String(entry?.presidingOfficial || "Presiding Official").trim(),
+    judge: String(entry?.judge || entry?.presidingOfficial || "Presiding Official").trim(),
+    verdict: String(entry?.verdict || "").trim(),
+    sentence: String(entry?.sentence || "").trim(),
+    classification: String(entry?.classification || "Public Judicial Notice").trim(),
+    publicCaseUrl: String(entry?.publicCaseUrl || `/supreme-court/${slug}`).trim(),
+    discordPosted: {
+      courtAnnouncement: Boolean(entry?.discordPosted?.courtAnnouncement),
+      activeHearing: Boolean(entry?.discordPosted?.activeHearing),
+      verdict: Boolean(entry?.discordPosted?.verdict),
+      archive: Boolean(entry?.discordPosted?.archive),
+      clemency: Boolean(entry?.discordPosted?.clemency)
+    },
+    courtAnnouncementMessageId: String(entry?.courtAnnouncementMessageId || "").trim(),
+    activeHearingMessageId: String(entry?.activeHearingMessageId || "").trim(),
+    verdictMessageId: String(entry?.verdictMessageId || "").trim(),
+    archiveMessageId: String(entry?.archiveMessageId || "").trim(),
+    clemencyMessageId: String(entry?.clemencyMessageId || "").trim(),
+    clemency: {
+      person: String(entry?.clemency?.person || "").trim(),
+      type: String(entry?.clemency?.type || "").trim(),
+      issuedBy: String(entry?.clemency?.issuedBy || "").trim(),
+      statement: String(entry?.clemency?.statement || "").trim(),
+      issuedAt: String(entry?.clemency?.issuedAt || "").trim()
+    },
     timeline: normalizeTimeline(entry?.timeline),
     evidence: normalizeList(entry?.evidence),
     rulings: normalizeList(entry?.rulings),
@@ -380,6 +461,55 @@ export async function getSupremeCourtCase(id, { includeRestricted = false } = {}
   return cases.find((courtCase) => courtCase.id === id) || null;
 }
 
+export async function getCourtPetitions() {
+  const content = await readContentFile({ includeRestricted: true });
+  return (content.supremeCourtPetitions || []).map(normalizePetition);
+}
+
+export async function createCourtPetition(fields) {
+  const content = await readContentFile({ includeRestricted: true });
+  const petition = normalizePetition(
+    {
+      ...fields,
+      id:
+        fields.id ||
+        `court-petition-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      submittedAt: fields.submittedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    0
+  );
+
+  content.supremeCourtPetitions = [petition, ...(content.supremeCourtPetitions || [])].slice(0, 500);
+  await writeContentFile(content);
+  return petition;
+}
+
+export async function updateCourtPetition(id, fields) {
+  const content = await readContentFile({ includeRestricted: true });
+  let updated = null;
+
+  content.supremeCourtPetitions = (content.supremeCourtPetitions || []).map((petition, index) => {
+    if (petition.id !== id) {
+      return normalizePetition(petition, index);
+    }
+
+    updated = normalizePetition(
+      {
+        ...petition,
+        ...fields,
+        id: petition.id,
+        updatedAt: new Date().toISOString()
+      },
+      index
+    );
+    return updated;
+  });
+
+  await writeContentFile(content);
+  return updated;
+}
+
 export async function saveCourtCase(fields) {
   const content = await readContentFile();
   const cases = normalizeCases(content.supremeCourtCases);
@@ -409,6 +539,34 @@ export async function archiveCourtCase(id) {
     item.id === id ? { ...item, status: "Closed" } : item
   );
   await writeContentFile(content);
+}
+
+export async function updateCourtCaseDiscordReceipt(id, fields) {
+  const content = await readContentFile();
+  const cases = normalizeCases(content.supremeCourtCases);
+  let updated = null;
+
+  content.supremeCourtCases = cases.map((item) => {
+    if (item.id !== id) {
+      return item;
+    }
+
+    updated = normalizeCase(
+      {
+        ...item,
+        ...fields,
+        discordPosted: {
+          ...(item.discordPosted || {}),
+          ...(fields.discordPosted || {})
+        }
+      },
+      0
+    );
+    return updated;
+  });
+
+  await writeContentFile(content);
+  return updated;
 }
 
 export async function deleteCourtCase(id) {
@@ -556,10 +714,32 @@ export function parseCourtCaseForm(formData) {
     caseNumber: String(formData.get("caseNumber") || "").trim(),
     status: String(formData.get("status") || "Filed").trim(),
     dateOpened: String(formData.get("dateOpened") || "").trim(),
+    hearingDate: String(formData.get("hearingDate") || "").trim(),
     courtroom: String(formData.get("courtroom") || "").trim(),
     summary: String(formData.get("summary") || "").trim(),
     parties: String(formData.get("parties") || "").trim(),
+    defendant: String(formData.get("defendant") || "").trim(),
+    charges: String(formData.get("charges") || "").trim(),
     presidingOfficial: String(formData.get("presidingOfficial") || "").trim(),
+    judge: String(formData.get("judge") || formData.get("presidingOfficial") || "").trim(),
+    verdict: String(formData.get("verdict") || "").trim(),
+    sentence: String(formData.get("sentence") || "").trim(),
+    classification: String(formData.get("classification") || "Public Judicial Notice").trim(),
+    clemency: {
+      person: String(formData.get("clemencyPerson") || "").trim(),
+      type: String(formData.get("clemencyType") || "").trim(),
+      issuedBy: String(formData.get("clemencyIssuedBy") || "").trim(),
+      statement: String(formData.get("clemencyStatement") || "").trim(),
+      issuedAt: formData.get("discordAction") === "clemency_notice" ? new Date().toISOString() : ""
+    },
     publicNotes: String(formData.get("publicNotes") || "").trim()
+  };
+}
+
+export function parseCourtPetitionForm(formData) {
+  return {
+    id: String(formData.get("petitionId") || "").trim(),
+    status: String(formData.get("status") || "pending").trim(),
+    internalNotes: String(formData.get("internalNotes") || "").trim()
   };
 }

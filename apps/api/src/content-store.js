@@ -51,6 +51,7 @@ const defaultContent = {
   governmentAuditLog: [],
   discordBroadcasts: [],
   supremeCourtCases: [],
+  supremeCourtPetitions: [],
   bulletins: [
     {
       id: "bulletin-default-1",
@@ -194,6 +195,7 @@ async function readContentFile() {
       governmentAuditLog: parsed.governmentAuditLog || [],
       discordBroadcasts: parsed.discordBroadcasts || [],
       supremeCourtCases: parsed.supremeCourtCases || [],
+      supremeCourtPetitions: parsed.supremeCourtPetitions || [],
       bulletins: withNormalizedOrder(parsed.bulletins || defaultContent.bulletins)
     };
   } catch {
@@ -345,6 +347,7 @@ function normalizeBroadcast(entry, index = 0) {
     targetDiscordId: cleanBroadcastText(entry?.targetDiscordId || "", 80),
     linkedType: cleanBroadcastText(entry?.linkedType || "", 80),
     linkedId: cleanBroadcastText(entry?.linkedId || "", 160),
+    metadata: entry?.metadata && typeof entry.metadata === "object" ? entry.metadata : {},
     requiresApproval: Boolean(entry?.requiresApproval),
     confirmed: Boolean(entry?.confirmed),
     approvalRequestedAt: entry?.approvalRequestedAt || "",
@@ -431,9 +434,14 @@ export async function updateSupremeCourtStore(fields) {
     content.supremeCourtCases = fields.supremeCourtCases;
   }
 
+  if (Array.isArray(fields.supremeCourtPetitions)) {
+    content.supremeCourtPetitions = fields.supremeCourtPetitions;
+  }
+
   await writeContentFile(content);
   return {
-    supremeCourtCases: content.supremeCourtCases
+    supremeCourtCases: content.supremeCourtCases,
+    supremeCourtPetitions: content.supremeCourtPetitions || []
   };
 }
 

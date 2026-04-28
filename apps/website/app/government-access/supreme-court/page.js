@@ -3,8 +3,13 @@ import { CourtIssuedKeyNotice } from "../../../components/CourtIssuedKeyNotice";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import {
+  courtDiscordActions,
   courtKeyRoles,
+  courtPetitionStatuses,
+  courtPetitionTypes,
   courtStatuses,
+  getCourtPetitions,
+  hearingActionTypes,
   getSupremeCourtCases
 } from "../../../lib/supreme-court";
 import { requireGovernmentUser } from "../../../lib/government-auth";
@@ -20,6 +25,7 @@ export default async function SupremeCourtControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("supremeCourtControl");
   const cases = await getSupremeCourtCases({ includeRestricted: true });
+  const petitions = await getCourtPetitions();
 
   return (
     <SiteLayout>
@@ -36,6 +42,9 @@ export default async function SupremeCourtControlPage({ searchParams }) {
               <section className="application-notice">
                 <strong>Supreme Court Register Updated</strong>
                 <p>Case records, orders, evidence, or access authority have been saved.</p>
+                {params?.broadcast ? (
+                  <p className="public-application-help">Discord court notice queued for bot delivery.</p>
+                ) : null}
               </section>
             ) : null}
 
@@ -68,10 +77,6 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                 </div>
                 <Link className="button" href="/government-access">Dashboard</Link>
               </div>
-              <p className="court-control-note">
-                Placeholder implementation: case data and hashed key records are stored in the
-                website content file until backend government auth is expanded.
-              </p>
               <form action="/government-access/supreme-court/action" className="public-application-form" method="post">
                 <input name="intent" type="hidden" value="save-case" />
                 <label className="public-application-field">
@@ -98,6 +103,24 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                     <input name="dateOpened" required type="date" />
                   </label>
                 </div>
+                <div className="public-application-grid public-application-grid--three">
+                  <label className="public-application-field">
+                    <span>Hearing Date</span>
+                    <input name="hearingDate" type="datetime-local" />
+                  </label>
+                  <label className="public-application-field">
+                    <span>Classification</span>
+                    <input defaultValue="Public Judicial Notice" name="classification" type="text" />
+                  </label>
+                  <label className="public-application-field">
+                    <span>Discord Posting</span>
+                    <select name="discordAction">
+                      {courtDiscordActions.map((action) => (
+                        <option key={action.value} value={action.value}>{action.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <label className="public-application-field">
                   <span>Courtroom</span>
                   <input name="courtroom" required type="text" />
@@ -105,6 +128,14 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                 <label className="public-application-field">
                   <span>Judge / Presiding Official</span>
                   <input name="presidingOfficial" required type="text" />
+                </label>
+                <label className="public-application-field">
+                  <span>Defendant / Respondent</span>
+                  <input name="defendant" type="text" />
+                </label>
+                <label className="public-application-field">
+                  <span>Charges</span>
+                  <textarea name="charges" placeholder="One charge per line" rows="3" />
                 </label>
                 <label className="public-application-field">
                   <span>Parties</span>
@@ -117,6 +148,10 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                 <label className="public-application-field">
                   <span>Public Notes</span>
                   <textarea name="publicNotes" rows="4" />
+                </label>
+                <label className="public-application-field">
+                  <span>Court Statement for Discord</span>
+                  <textarea name="courtStatement" rows="3" />
                 </label>
                 <button className="button button--solid-site" type="submit">
                   Create Case
@@ -163,6 +198,24 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                         <input defaultValue={courtCase.dateOpened} name="dateOpened" required type="date" />
                       </label>
                     </div>
+                    <div className="public-application-grid public-application-grid--three">
+                      <label className="public-application-field">
+                        <span>Hearing Date</span>
+                        <input defaultValue={courtCase.hearingDate} name="hearingDate" type="datetime-local" />
+                      </label>
+                      <label className="public-application-field">
+                        <span>Classification</span>
+                        <input defaultValue={courtCase.classification} name="classification" type="text" />
+                      </label>
+                      <label className="public-application-field">
+                        <span>Discord Posting</span>
+                        <select name="discordAction">
+                          {courtDiscordActions.map((action) => (
+                            <option key={action.value} value={action.value}>{action.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
                     <label className="public-application-field">
                       <span>Courtroom</span>
                       <input defaultValue={courtCase.courtroom} name="courtroom" required type="text" />
@@ -172,9 +225,31 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                       <input defaultValue={courtCase.presidingOfficial} name="presidingOfficial" required type="text" />
                     </label>
                     <label className="public-application-field">
+                      <span>Defendant / Respondent</span>
+                      <input defaultValue={courtCase.defendant} name="defendant" type="text" />
+                    </label>
+                    <label className="public-application-field">
+                      <span>Charges</span>
+                      <textarea defaultValue={courtCase.charges.join("\n")} name="charges" rows="3" />
+                    </label>
+                    <label className="public-application-field">
                       <span>Parties</span>
                       <textarea defaultValue={courtCase.parties.join("\n")} name="parties" rows="3" />
                     </label>
+                    <div className="public-application-grid public-application-grid--three">
+                      <label className="public-application-field">
+                        <span>Verdict</span>
+                        <input defaultValue={courtCase.verdict} name="verdict" type="text" />
+                      </label>
+                      <label className="public-application-field">
+                        <span>Sentence</span>
+                        <input defaultValue={courtCase.sentence} name="sentence" type="text" />
+                      </label>
+                      <label className="public-application-field court-checkbox-field">
+                        <span>Force Discord Repost</span>
+                        <input name="forceDiscordBroadcast" type="checkbox" />
+                      </label>
+                    </div>
                     <label className="public-application-field">
                       <span>Summary</span>
                       <textarea defaultValue={courtCase.summary} name="summary" required rows="4" />
@@ -183,6 +258,54 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                       <span>Public Notes</span>
                       <textarea defaultValue={courtCase.publicNotes} name="publicNotes" rows="4" />
                     </label>
+                    <label className="public-application-field">
+                      <span>Court Statement for Discord</span>
+                      <textarea name="courtStatement" rows="3" />
+                    </label>
+                    <div className="public-application-grid public-application-grid--three">
+                      <label className="public-application-field">
+                        <span>Hearing Action</span>
+                        <select name="hearingAction">
+                          <option value="">No hearing action</option>
+                          {hearingActionTypes.map((action) => (
+                            <option key={action} value={action}>{action}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="public-application-field">
+                        <span>Clemency Person</span>
+                        <input defaultValue={courtCase.clemency?.person || courtCase.defendant} name="clemencyPerson" type="text" />
+                      </label>
+                      <label className="public-application-field">
+                        <span>Clemency Type</span>
+                        <select defaultValue={courtCase.clemency?.type || "pardon"} name="clemencyType">
+                          <option value="pardon">pardon</option>
+                          <option value="sentence reduction">sentence reduction</option>
+                          <option value="restoration of citizenship">restoration of citizenship</option>
+                          <option value="warning replaced sentence">warning replaced sentence</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="public-application-grid public-application-grid--three">
+                      <label className="public-application-field">
+                        <span>Clemency Issued By</span>
+                        <input defaultValue={courtCase.clemency?.issuedBy} name="clemencyIssuedBy" type="text" />
+                      </label>
+                      <label className="public-application-field">
+                        <span>Clemency Statement</span>
+                        <input defaultValue={courtCase.clemency?.statement} name="clemencyStatement" type="text" />
+                      </label>
+                    </div>
+                    <details className="court-discord-receipts">
+                      <summary>Discord court records</summary>
+                      <dl className="court-docket-grid">
+                        <div><dt>Announcement</dt><dd>{courtCase.courtAnnouncementMessageId || "Not queued"}</dd></div>
+                        <div><dt>Active Hearing</dt><dd>{courtCase.activeHearingMessageId || "Not queued"}</dd></div>
+                        <div><dt>Verdict</dt><dd>{courtCase.verdictMessageId || "Not queued"}</dd></div>
+                        <div><dt>Archive</dt><dd>{courtCase.archiveMessageId || "Not queued"}</dd></div>
+                        <div><dt>Clemency</dt><dd>{courtCase.clemencyMessageId || "Not queued"}</dd></div>
+                      </dl>
+                    </details>
                     <button className="button button--solid-site" type="submit">
                       Edit Case
                     </button>
@@ -207,6 +330,14 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                           <input name="text" required type="text" />
                         </label>
                       </div>
+                      <label className="public-application-field">
+                        <span>Discord Posting</span>
+                        <select name="discordAction" defaultValue="none">
+                          <option value="none">Do not post to Discord</option>
+                          <option value="court_announcement">Post to Court Announcements</option>
+                          <option value="active_hearing">Post to Active Hearings</option>
+                        </select>
+                      </label>
                       <button className="button" type="submit">Add Timeline Update</button>
                     </form>
 
@@ -222,6 +353,16 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                           <label className="public-application-field">
                             <span>{label}</span>
                             <input name="text" required type="text" />
+                          </label>
+                          <label className="public-application-field">
+                            <span>Discord Posting</span>
+                            <select name="discordAction" defaultValue="none">
+                              <option value="none">Do not post to Discord</option>
+                              <option value={intent === "add-evidence" ? "active_hearing" : "court_announcement"}>
+                                {intent === "add-evidence" ? "Post to Active Hearings" : "Post to Court Announcements"}
+                              </option>
+                              <option value="legal_archive">Post to Legal Archives</option>
+                            </select>
                           </label>
                           <button className="button" type="submit">{label}</button>
                         </form>
@@ -288,6 +429,7 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                       <form action="/government-access/supreme-court/action" method="post">
                         <input name="intent" type="hidden" value="archive-case" />
                         <input name="id" type="hidden" value={courtCase.id} />
+                        <input name="discordAction" type="hidden" value="legal_archive" />
                         <button className="button" type="submit">Delete / Archive Case</button>
                       </form>
                       <form action="/government-access/supreme-court/action" method="post">
@@ -299,6 +441,78 @@ export default async function SupremeCourtControlPage({ searchParams }) {
                   </div>
                 </article>
               ))}
+            </section>
+
+            <section className="panel bulletin-control-panel" id="court-petitions">
+              <div className="panel__header">
+                <div>
+                  <p className="eyebrow">Supreme Court Registry</p>
+                  <h2>Court Petitions</h2>
+                </div>
+              </div>
+              <form action="/government-access/supreme-court/action" className="public-application-form" method="post">
+                <input name="intent" type="hidden" value="create-petition" />
+                <div className="public-application-grid public-application-grid--three">
+                  <label className="public-application-field">
+                    <span>Petitioner</span>
+                    <input name="petitionerName" required type="text" />
+                  </label>
+                  <label className="public-application-field">
+                    <span>Discord ID</span>
+                    <input name="petitionerDiscordId" type="text" />
+                  </label>
+                  <label className="public-application-field">
+                    <span>Request Type</span>
+                    <select name="requestType">
+                      {courtPetitionTypes.map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label className="public-application-field">
+                  <span>Subject</span>
+                  <input name="subject" required type="text" />
+                </label>
+                <label className="public-application-field">
+                  <span>Statement</span>
+                  <textarea name="statement" required rows="4" />
+                </label>
+                <button className="button button--solid-site" type="submit">File Petition</button>
+              </form>
+              <div className="court-petition-list">
+                {petitions.map((petition) => (
+                  <article className="court-petition-card" key={petition.id}>
+                    <form action="/government-access/supreme-court/action" className="public-application-form" method="post">
+                      <input name="intent" type="hidden" value="update-petition" />
+                      <input name="petitionId" type="hidden" value={petition.id} />
+                      <div className="panel__header">
+                        <div>
+                          <p className="eyebrow">{petition.requestType} / {petition.status}</p>
+                          <h3>{petition.subject}</h3>
+                        </div>
+                      </div>
+                      <p className="public-application-help">
+                        {petition.petitionerName || "Unknown petitioner"} / {petition.petitionerDiscordId || "No Discord ID"} / {petition.submittedAt}
+                      </p>
+                      <p>{petition.statement}</p>
+                      <label className="public-application-field">
+                        <span>Status</span>
+                        <select defaultValue={petition.status} name="status">
+                          {courtPetitionStatuses.map((status) => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="public-application-field">
+                        <span>Internal Notes</span>
+                        <textarea defaultValue={petition.internalNotes} name="internalNotes" rows="3" />
+                      </label>
+                      <button className="button" type="submit">Update Petition</button>
+                    </form>
+                  </article>
+                ))}
+              </div>
             </section>
           </>
         }
