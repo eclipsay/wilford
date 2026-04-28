@@ -71,6 +71,21 @@ function normalizeApplications(items) {
 }
 
 async function readContentFile() {
+  try {
+    const response = await fetch(`${baseUrl}/api/content`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3000)
+    });
+
+    if (response.ok) {
+      const parsed = await response.json();
+      return {
+        ...parsed,
+        publicApplications: normalizeApplications(parsed.publicApplications || [])
+      };
+    }
+  } catch {}
+
   const contentFile = resolveContentFile();
   const fallbackFile = resolveServerlessWritableFile();
 
