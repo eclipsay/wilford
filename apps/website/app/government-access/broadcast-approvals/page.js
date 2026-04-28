@@ -15,6 +15,69 @@ function isAwaitingApproval(broadcast) {
   return ["pending_approval", "approval_notified"].includes(broadcast.status);
 }
 
+function deliveryDetails(broadcast) {
+  const distribution = String(broadcast.distribution || "none");
+  const details = [];
+
+  if (distribution === "announcement" || distribution === "announcement_and_dm_all") {
+    details.push({
+      label: "Server Announcement Channel",
+      detail: "Channel: announcement channel",
+      tone: "public"
+    });
+  }
+
+  if (distribution === "dm_all" || distribution === "announcement_and_dm_all") {
+    details.push({
+      label: "DM All Server Members",
+      detail: "Mass Direct Message to all server members",
+      tone: "mass"
+    });
+  }
+
+  if (distribution === "specific_user") {
+    details.push({
+      label: "Specific Discord User",
+      detail: `Target Discord ID: ${broadcast.targetDiscordId || "Not provided"}`,
+      tone: "private"
+    });
+  }
+
+  if (distribution === "mss_only") {
+    details.push({
+      label: "MSS Channel Only",
+      detail: "Restricted Ministry of State Security delivery",
+      tone: "restricted"
+    });
+  }
+
+  if (distribution === "government_officials") {
+    details.push({
+      label: "Government Officials Only",
+      detail: "Restricted government official delivery",
+      tone: "restricted"
+    });
+  }
+
+  if (!details.length) {
+    details.push({
+      label: "No Discord Delivery / Website Only",
+      detail: "No Discord target selected",
+      tone: "none"
+    });
+  }
+
+  return details;
+}
+
+function linkedRecordLabel(broadcast) {
+  if (!broadcast.linkedId) {
+    return "No linked record";
+  }
+
+  return `${broadcast.linkedType || "record"}: ${broadcast.linkedId}`;
+}
+
 export default async function BroadcastApprovalsPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("broadcastApproval");
@@ -61,41 +124,80 @@ export default async function BroadcastApprovalsPage({ searchParams }) {
 
           <div className="bulletin-editor-list">
             {pendingBroadcasts.length ? (
-              pendingBroadcasts.map((broadcast) => (
-                <article className="panel bulletin-editor-card" key={broadcast.id}>
-                  <div className="panel__header bulletin-editor-card__header">
-                    <div>
-                      <p className="eyebrow">{broadcast.type} / {broadcast.distribution}</p>
-                      <h2>{broadcast.title}</h2>
-                      <p className="bulletin-editor-card__subtitle">
-                        Requested by {broadcast.requestedBy} / {broadcast.requestedRole}
-                      </p>
-                    </div>
-                    <div className="bulletin-editor-card__status">
-                      <span>{broadcast.status}</span>
-                      <strong>{broadcast.approvalRequestedAt || broadcast.createdAt}</strong>
-                    </div>
-                  </div>
+              pendingBroadcasts.map((broadcast) => {
+                const delivery = deliveryDetails(broadcast);
 
-                  <pre className="broadcast-preview">{broadcast.body}</pre>
-
-                  <form action="/government-access/broadcast-approvals/action" className="public-application-form" method="post">
-                    <input name="id" type="hidden" value={broadcast.id} />
-                    <label className="public-application-field">
-                      <span>Approval note optional</span>
-                      <input name="approvalNote" placeholder="Reason, instruction, or record note" type="text" />
-                    </label>
-                    <div className="bulletin-editor-card__actions">
-                      <button className="button button--solid-site" name="intent" type="submit" value="approve">
-                        Approve Broadcast
-                      </button>
-                      <button className="button button--danger-site" name="intent" type="submit" value="decline">
-                        Decline
-                      </button>
+                return (
+                  <article className={`panel bulletin-editor-card broadcast-approval-card broadcast-approval-card--${delivery[0]?.tone || "none"}`} key={broadcast.id}>
+                    <div className="panel__header bulletin-editor-card__header">
+                      <div>
+                        <p className="eyebrow">Broadcast Type / {broadcast.type}</p>
+                        <h2>{broadcast.title}</h2>
+                        <p className="bulletin-editor-card__subtitle">
+                          Requested by {broadcast.requestedBy} / {broadcast.requestedRole}
+                        </p>
+                      </div>
+                      <div className="bulletin-editor-card__status">
+                        <span>{broadcast.status}</span>
+                        <strong>{broadcast.approvalRequestedAt || broadcast.createdAt}</strong>
+                      </div>
                     </div>
-                  </form>
-                </article>
-              ))
+
+                    <section className="broadcast-delivery-panel" aria-label="Broadcast delivery method">
+                      <p className="eyebrow">Delivery Method</p>
+                      <div className="broadcast-delivery-badges">
+                        {delivery.map((item) => (
+                          <span className={`broadcast-delivery-badge broadcast-delivery-badge--${item.tone}`} key={item.label}>
+                            {item.label}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="broadcast-delivery-details">
+                        {delivery.map((item) => (
+                          <p key={item.detail}>{item.detail}</p>
+                        ))}
+                      </div>
+                    </section>
+
+                    <dl className="broadcast-approval-meta">
+                      <div>
+                        <dt>Broadcast Type</dt>
+                        <dd>{broadcast.type}</dd>
+                      </div>
+                      <div>
+                        <dt>Requested By</dt>
+                        <dd>{broadcast.requestedBy || "Unknown"} / {broadcast.requestedRole || "Unknown role"}</dd>
+                      </div>
+                      <div>
+                        <dt>Approval Required</dt>
+                        <dd>{broadcast.requiresApproval ? "Yes" : "No"}</dd>
+                      </div>
+                      <div>
+                        <dt>Linked Record</dt>
+                        <dd>{linkedRecordLabel(broadcast)}</dd>
+                      </div>
+                    </dl>
+
+                    <pre className="broadcast-preview">{broadcast.body}</pre>
+
+                    <form action="/government-access/broadcast-approvals/action" className="public-application-form" method="post">
+                      <input name="id" type="hidden" value={broadcast.id} />
+                      <label className="public-application-field">
+                        <span>Approval note optional</span>
+                        <input name="approvalNote" placeholder="Reason, instruction, or record note" type="text" />
+                      </label>
+                      <div className="bulletin-editor-card__actions">
+                        <button className="button button--solid-site" name="intent" type="submit" value="approve">
+                          Approve Broadcast
+                        </button>
+                        <button className="button button--danger-site" name="intent" type="submit" value="decline">
+                          Decline
+                        </button>
+                      </div>
+                    </form>
+                  </article>
+                );
+              })
             ) : (
               <p className="court-empty">No broadcasts are waiting for Chairman approval.</p>
             )}
