@@ -7,6 +7,9 @@ export const metadata = {
   title: "Audit Log | Government Access"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function GovernmentAuditPage() {
   await requireGovernmentUser("auditLog");
   const auditLog = await getAuditLog();

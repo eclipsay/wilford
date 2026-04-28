@@ -25,6 +25,9 @@ export const metadata = {
   title: "Bulletin Control | Government Access"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function BulletinControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("bulletinControl");

@@ -38,11 +38,18 @@ export const metadata = {
   title: "Change Government Password"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ChangeGovernmentPasswordPage({ searchParams }) {
   const user = await getCurrentGovernmentUser();
 
   if (!user) {
     redirect("/government-access/login");
+  }
+
+  if (!user.forcePasswordChange) {
+    redirect("/government-access");
   }
 
   const params = await searchParams;

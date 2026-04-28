@@ -13,6 +13,9 @@ export const metadata = {
   title: "Supreme Court Control | Government Access"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function SupremeCourtControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("supremeCourtControl");

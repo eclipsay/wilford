@@ -12,6 +12,9 @@ export const metadata = {
   title: "User Control Panel | Government Access"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function GovernmentUserControlPage({ searchParams }) {
   await requireGovernmentUser("userControl");
   const params = await searchParams;

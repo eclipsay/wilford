@@ -7,6 +7,9 @@ export const metadata = {
   title: "MSS Console | Government Access"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function MssConsolePage() {
   await requireGovernmentUser("mssTools");
 

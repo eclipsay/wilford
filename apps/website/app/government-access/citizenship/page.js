@@ -7,6 +7,9 @@ export const metadata = {
   title: "Citizenship Review | Government Access"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function CitizenshipReviewPage() {
   await requireGovernmentUser("citizenshipReview");
 

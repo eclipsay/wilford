@@ -16,7 +16,7 @@ const directory = [
     ]
   },
   {
-    section: "Executive Director Eclip",
+    section: "Senior Leadership",
     people: [
       {
         name: "Executive Director Eclip",
@@ -24,6 +24,14 @@ const directory = [
         portrait: "/wpu-grand-seal.png",
         bio: "Coordinates the ministries and ensures state doctrine becomes operational policy.",
         motto: "Directive becomes action."
+      },
+      {
+        name: "First Minister Sir Flukkston",
+        title: "First Minister of State Vision and National Development",
+        portrait: "/SirFluk.png",
+        bio:
+          "Chief adviser to Chairman Lemmie and equal executive authority alongside Executive Director Eclip. Guides long-term national vision, ceremonial affairs, elite appointments, and the future direction of the Union.",
+        motto: "Vision secures the future."
       }
     ]
   },

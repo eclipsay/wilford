@@ -247,14 +247,29 @@ function sign(payload) {
   return createHmac("sha256", authSecret()).update(payload).digest("hex");
 }
 
-function createSessionValue(username) {
+function createSessionValue(user, overrides = {}) {
   const payload = Buffer.from(
     JSON.stringify({
-      username,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      forcePasswordChange: Boolean(user.forcePasswordChange),
+      ...overrides,
       expiresAt: Date.now() + 1000 * 60 * 60 * 8
     })
   ).toString("base64url");
   return `${payload}.${sign(payload)}`;
+}
+
+async function setGovernmentSession(user, overrides = {}) {
+  const store = await cookies();
+  store.set(governmentSessionCookie, createSessionValue(user, overrides), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/government-access",
+    maxAge: 60 * 60 * 8
+  });
 }
 
 function readSessionValue(value) {
@@ -292,7 +307,33 @@ export async function getCurrentGovernmentUser() {
 
   const users = await getGovernmentUsers();
   const user = users.find((item) => item.username === session.username && item.active);
-  return user || null;
+
+  if (user) {
+    return {
+      ...user,
+      role: accessRoles.includes(session.role) ? session.role : user.role,
+      displayName: session.displayName || user.displayName,
+      forcePasswordChange:
+        session.forcePasswordChange === false ? false : Boolean(user.forcePasswordChange)
+    };
+  }
+
+  if (accessRoles.includes(session.role)) {
+    return {
+      id: `session-${session.username}`,
+      username: session.username,
+      displayName: session.displayName || session.username,
+      role: session.role,
+      active: true,
+      forcePasswordChange: Boolean(session.forcePasswordChange),
+      passwordHash: "",
+      createdAt: "",
+      lastLoginAt: "",
+      notes: "Session-backed user."
+    };
+  }
+
+  return null;
 }
 
 export function canAccess(user, permission) {
@@ -344,14 +385,7 @@ export async function loginGovernmentUser(username, password) {
   await writeAudit(content, user.username, "successful login", "Government Access login", "success");
   await writeContentFile(content);
 
-  const store = await cookies();
-  store.set(governmentSessionCookie, createSessionValue(user.username), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/government-access",
-    maxAge: 60 * 60 * 8
-  });
+  await setGovernmentSession(user);
 
   return { ok: true, forcePasswordChange: user.forcePasswordChange };
 }
@@ -388,6 +422,7 @@ export async function changeOwnPassword(username, currentPassword, newPassword) 
   );
   await writeAudit(content, username, "password changed", "User changed temporary password", "success");
   await writeContentFile(content);
+  await setGovernmentSession(user, { forcePasswordChange: false });
   return true;
 }
 

@@ -51,6 +51,9 @@ export const metadata = {
   title: "Government Access"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function GovernmentAccessPage({ searchParams }) {
   const user = await requireGovernmentUser("dashboard");
   const params = await searchParams;
@@ -167,7 +170,7 @@ export default async function GovernmentAccessPage({ searchParams }) {
           <div className="portal-grid portal-grid--restricted government-system-grid">
             {systems.map((system) => {
               const allowed = canAccess(user, system.permission);
-              const CardTag = allowed && !user.forcePasswordChange ? Link : "article";
+              const CardTag = allowed && !user.forcePasswordChange ? "a" : "article";
 
               return (
                 <CardTag

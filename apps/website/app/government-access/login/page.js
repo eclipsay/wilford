@@ -36,6 +36,9 @@ export const metadata = {
   title: "Government Access Login"
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function GovernmentAccessLoginPage({ searchParams }) {
   const user = await getCurrentGovernmentUser();
 
