@@ -32,6 +32,18 @@ export async function POST(request) {
     const store = await getEconomyStore();
     const wallet = getWallet(store, walletId);
     const salary = Math.max(0, Number(wallet?.salary ?? 125));
+    const today = new Date().toISOString().slice(0, 10);
+    const alreadyClaimed = store.transactions.some(
+      (transaction) =>
+        transaction.toWalletId === wallet?.id &&
+        transaction.type === "daily_stipend" &&
+        String(transaction.createdAt || "").startsWith(today)
+    );
+
+    if (!wallet || alreadyClaimed) {
+      return redirectTo(request, `/panem-credit?wallet=${encodeURIComponent(walletId)}&error=daily-limit`);
+    }
+
     const result = await treasuryPayment({
       walletId,
       amount: salary,

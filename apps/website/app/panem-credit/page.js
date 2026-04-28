@@ -43,8 +43,12 @@ export default async function PanemCreditPage({ searchParams }) {
         ) : null}
         {params?.error ? (
           <section className="application-notice application-notice--error">
-            <strong>Transaction Rejected</strong>
-            <p>The wallet, balance, stock, or account status could not support that request.</p>
+            <strong>{params.error === "daily-limit" ? "Daily Salary Already Claimed" : "Transaction Rejected"}</strong>
+            <p>
+              {params.error === "daily-limit"
+                ? "This wallet has already received its daily civic salary today."
+                : "The wallet, balance, stock, or account status could not support that request."}
+            </p>
           </section>
         ) : null}
 
