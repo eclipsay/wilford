@@ -3,6 +3,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   Client,
   EmbedBuilder,
@@ -1069,32 +1072,190 @@ function channelIdForBroadcast(broadcast) {
   return announcementChannelId;
 }
 
-function buildBroadcastEmbed(broadcast) {
-  const colorByType = {
-    news: 0xd7a85f,
-    emergency: 0xb3261e,
-    mss_alert: 0x1f4f46,
-    treason_notice: 0x681313
-  };
+function cleanBroadcastLine(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
 
-  return new EmbedBuilder()
-    .setColor(colorByType[broadcast.type] || 0xd7a85f)
-    .setTitle(broadcast.title || "Official WPU Broadcast")
-    .setDescription(String(broadcast.body || "").slice(0, 4000))
+function parseLegacyBroadcastBody(body = "") {
+  const lines = String(body || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const subjectLine = lines.find((line) => line.toLowerCase().startsWith("subject:"));
+  const referenceLine = lines.find((line) => line.toLowerCase().startsWith("reference:"));
+  const heading = lines[0] || "";
+  const bodyLines = lines.filter(
+    (line, index) =>
+      index !== 0 &&
+      line !== subjectLine &&
+      line !== referenceLine
+  );
+
+  return {
+    heading,
+    subject: subjectLine ? subjectLine.replace(/^subject:\s*/i, "").trim() : "",
+    reference: referenceLine ? referenceLine.replace(/^reference:\s*/i, "").trim() : "",
+    excerpt: bodyLines.join("\n").trim()
+  };
+}
+
+function absoluteWebsiteUrl(value) {
+  const clean = String(value || "").trim();
+
+  if (!clean) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(clean)) {
+    return clean;
+  }
+
+  if (clean.startsWith("/")) {
+    return `${websiteUrl}${clean}`;
+  }
+
+  return `${websiteUrl}/${clean}`;
+}
+
+function officialIssuerName(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (normalized.includes("chairman") || normalized === "chairman") {
+    return "The Office of the Chairman";
+  }
+
+  if (
+    normalized.includes("mss") ||
+    normalized.includes("state security") ||
+    normalized.includes("security command")
+  ) {
+    return "Ministry of State Security";
+  }
+
+  if (normalized.includes("supreme court") || normalized.includes("judicial")) {
+    return "Supreme Court of Panem";
+  }
+
+  if (normalized.includes("government") || normalized.includes("wpu")) {
+    return "Wilford Panem Union";
+  }
+
+  return cleanBroadcastLine(value) || "Wilford Panem Union";
+}
+
+function colorForIssuer(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (normalized.includes("chairman")) {
+    return 0xd7a85f;
+  }
+
+  if (normalized.includes("mss") || normalized.includes("state security")) {
+    return 0x681313;
+  }
+
+  if (normalized.includes("supreme court") || normalized.includes("judicial")) {
+    return 0xc0c0c0;
+  }
+
+  return 0x5b3fd6;
+}
+
+function classificationForBroadcast(broadcast, issuerName) {
+  if (broadcast.classification) {
+    return cleanBroadcastLine(broadcast.classification);
+  }
+
+  if (broadcast.type === "emergency") {
+    return "Emergency Communication";
+  }
+
+  if (broadcast.type === "mss_alert" || broadcast.type === "treason_notice") {
+    return "Security Classification";
+  }
+
+  if (issuerName === "The Office of the Chairman") {
+    return "Chairman Bulletin";
+  }
+
+  if (issuerName === "Supreme Court of Panem") {
+    return "Judicial Notice";
+  }
+
+  return "Official News";
+}
+
+function buildBroadcastEmbed(broadcast) {
+  const parsed = parseLegacyBroadcastBody(broadcast.body);
+  const headline = cleanBroadcastLine(
+    broadcast.headline ||
+      parsed.subject ||
+      broadcast.title ||
+      "Official WPU News Bulletin"
+  );
+  const issuerName = officialIssuerName(
+    broadcast.issuer ||
+      broadcast.requestedRole ||
+      broadcast.requestedBy ||
+      parsed.heading
+  );
+  const classification = classificationForBroadcast(broadcast, issuerName);
+  const articleUrl = absoluteWebsiteUrl(broadcast.articleUrl || parsed.reference);
+  const imageUrl = absoluteWebsiteUrl(broadcast.imageUrl);
+  const description = String(broadcast.excerpt || parsed.excerpt || broadcast.body || "")
+    .replace(/^Official WPU News Broadcast\s*/i, "")
+    .replace(/^Subject:\s*.*$/im, "")
+    .replace(/^Reference:\s*.*$/im, "")
+    .trim()
+    .slice(0, 1200);
+  const embed = new EmbedBuilder()
+    .setColor(colorForIssuer(`${issuerName} ${broadcast.type}`))
+    .setAuthor({ name: "Official WPU News Bulletin" })
+    .setTitle(headline)
+    .setDescription(description || "Official state communication issued for public record.")
     .addFields(
       {
         name: "Issued By",
-        value: `${broadcast.requestedBy || "Government Access"} / ${broadcast.requestedRole || "Official"}`,
+        value: issuerName,
         inline: true
       },
       {
-        name: "Reference",
-        value: broadcast.linkedId ? `${broadcast.linkedType || "record"}: ${broadcast.linkedId}` : "Unlinked broadcast",
+        name: "Classification",
+        value: classification,
         inline: true
+      },
+      {
+        name: "Reference ID",
+        value: broadcast.linkedId || broadcast.id || "State record",
+        inline: false
       }
     )
-    .setFooter({ text: "Wilford Panem Union - Official Communications" })
+    .setFooter({ text: "Wilford Panem Union • Official State Communications" })
     .setTimestamp(new Date(broadcast.createdAt || Date.now()));
+
+  if (imageUrl) {
+    embed.setImage(imageUrl);
+  }
+
+  return embed;
+}
+
+function buildBroadcastComponents(broadcast) {
+  const parsed = parseLegacyBroadcastBody(broadcast.body);
+  const articleUrl = absoluteWebsiteUrl(broadcast.articleUrl || parsed.reference);
+
+  if (!articleUrl) {
+    return [];
+  }
+
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setStyle(ButtonStyle.Link)
+        .setLabel("Read Full Article")
+        .setURL(articleUrl)
+    )
+  ];
 }
 
 function buildBroadcastApprovalEmbed(broadcast) {
@@ -1162,7 +1323,10 @@ async function sendBroadcastToChannel(broadcast, results) {
     return;
   }
 
-  await channel.send({ embeds: [buildBroadcastEmbed(broadcast)] });
+  await channel.send({
+    embeds: [buildBroadcastEmbed(broadcast)],
+    components: buildBroadcastComponents(broadcast)
+  });
   results.recipients.push({ target: channelId, method: "channel" });
   results.successCount += 1;
 }
@@ -1177,7 +1341,10 @@ async function sendBroadcastDm(userId, broadcast, results) {
   }
 
   try {
-    await user.send({ embeds: [buildBroadcastEmbed(broadcast)] });
+    await user.send({
+      embeds: [buildBroadcastEmbed(broadcast)],
+      components: buildBroadcastComponents(broadcast)
+    });
     results.recipients.push({ target: userId, method: "dm" });
     results.successCount += 1;
   } catch (error) {

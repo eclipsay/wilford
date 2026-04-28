@@ -51,6 +51,12 @@ async function enqueueArticleBroadcast(user, formData, fields, linkedId = "") {
       body: fields.subtitle || fields.body,
       link: linkedId ? `/news/${linkedId}` : ""
     }),
+    headline: fields.title,
+    excerpt: fields.subtitle || fields.body,
+    issuer: fields.source || fields.category || user.role,
+    classification: fields.category || "Official News",
+    imageUrl: fields.heroImage,
+    articleUrl: linkedId ? `/news/${linkedId}` : "",
     distribution: options.distribution,
     targetDiscordId: options.targetDiscordId,
     requiresApproval: requiresChairmanApproval({
