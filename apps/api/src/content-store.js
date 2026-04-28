@@ -193,6 +193,15 @@ function normalizeEconomyStore(economy = {}) {
     ...Object.fromEntries(taxTypes.map((tax) => [tax.id, tax.defaultRate])),
     ...(economy.taxRates || {})
   };
+  const storedDistricts =
+    Array.isArray(economy.districts) && economy.districts.length
+      ? economy.districts
+      : districtEconomyDefaults;
+  const storedDistrictKeys = new Set(storedDistricts.map((district) => district.id || district.name));
+  const districts = [
+    ...storedDistricts,
+    ...districtEconomyDefaults.filter((district) => !storedDistrictKeys.has(district.id) && !storedDistrictKeys.has(district.name))
+  ];
 
   return {
     wallets: Array.isArray(economy.wallets) ? economy.wallets : [],
@@ -204,10 +213,7 @@ function normalizeEconomyStore(economy = {}) {
     listings: Array.isArray(economy.listings) ? economy.listings : [],
     taxRecords: Array.isArray(economy.taxRecords) ? economy.taxRecords : [],
     taxRates,
-    districts:
-      Array.isArray(economy.districts) && economy.districts.length
-        ? economy.districts
-        : districtEconomyDefaults,
+    districts,
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
     categories:
       Array.isArray(economy.categories) && economy.categories.length

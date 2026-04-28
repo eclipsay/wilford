@@ -59,9 +59,14 @@ function defaultTaxRates() {
 }
 
 export function normalizeEconomyStore(economy = {}) {
-  const districts = Array.isArray(economy.districts) && economy.districts.length
+  const storedDistricts = Array.isArray(economy.districts) && economy.districts.length
     ? economy.districts
     : districtEconomyDefaults;
+  const storedDistrictKeys = new Set(storedDistricts.map((district) => district.id || district.name));
+  const districts = [
+    ...storedDistricts,
+    ...districtEconomyDefaults.filter((district) => !storedDistrictKeys.has(district.id) && !storedDistrictKeys.has(district.name))
+  ];
   const marketItems = (Array.isArray(economy.marketItems) && economy.marketItems.length
     ? economy.marketItems
     : marketItemDefaults

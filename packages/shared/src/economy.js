@@ -12,6 +12,7 @@ export const taxTypes = [
 export const walletStatuses = ["active", "frozen", "restricted"];
 
 export const districtEconomyDefaults = [
+  ["The Capitol", "Government administration / treasury command", "State offices, ceremonial goods, credit administration", 92, 88, 97],
   ["District 1", "Luxury goods", "Jewellery, ceremonial fabrics, prestige items", 74, 86, 88],
   ["District 2", "Masonry / weapons / security equipment", "Stonework, armaments, shield gear", 82, 77, 81],
   ["District 3", "Electronics / technology", "Circuitry, radios, industrial control systems", 68, 91, 79],
@@ -26,7 +27,7 @@ export const districtEconomyDefaults = [
   ["District 12", "Coal / minerals", "Coal, ore, industrial minerals", 61, 89, 65],
   ["District 13", "Advanced military/industrial technology", "Restricted prototypes and strategic equipment", 47, 96, 78]
 ].map(([name, productionType, goodsProduced, supplyLevel, demandLevel, prosperityRating], index) => ({
-  id: `district-${index + 1}`,
+  id: index === 0 ? "capitol" : `district-${index}`,
   name,
   productionType,
   goodsProduced,
@@ -36,7 +37,7 @@ export const districtEconomyDefaults = [
   taxContribution: 2500 + index * 330,
   tradeVolume: 9000 + index * 710,
   loyaltyScore: Math.max(54, 96 - index * 2),
-  developmentStatus: index === 12 ? "Restricted Development" : index < 5 ? "Priority Growth" : "Stable Output"
+  developmentStatus: index === 0 ? "Seat of Government" : index === 13 ? "Restricted Development" : index < 6 ? "Priority Growth" : "Stable Output"
 }));
 
 export const marketItemDefaults = [
