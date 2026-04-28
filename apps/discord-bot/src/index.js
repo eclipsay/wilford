@@ -232,7 +232,7 @@ function requireEconomyAdmin(interaction) {
   return hasSlashCommandAccess(interaction, PermissionsBitField.Flags.ManageGuild);
 }
 
-async function replyEconomy(interaction, embed, ephemeral = true) {
+async function replyEconomy(interaction, embed, ephemeral = false) {
   await interaction.reply({ embeds: [embed], ephemeral });
 }
 
