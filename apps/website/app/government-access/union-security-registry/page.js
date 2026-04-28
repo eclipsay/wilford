@@ -79,7 +79,10 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
                 <label className="public-application-field"><span>Discord ID</span><input name="discordId" /></label>
                 <label className="public-application-field"><span>District</span><select name="district">{economy.districts.map((district) => <option key={district.id} value={district.name}>{district.name}</option>)}</select></label>
                 <label className="public-application-field"><span>Wallet link</span><select name="walletId"><option value="">None</option>{economy.wallets.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
+                <label className="public-application-field"><span>Opening balance</span><input defaultValue="500" min="0" name="openingBalance" type="number" /></label>
+                <label className="public-application-field"><span>Daily salary</span><input defaultValue="125" min="0" name="salary" type="number" /></label>
               </div>
+              <label className="public-application-toggle"><input defaultChecked name="createWallet" type="checkbox" /><span>Create wallet if no wallet is selected</span></label>
               <button className="button button--solid-site" type="submit">Create Citizen ID</button>
             </form>
           </section>
@@ -114,6 +117,7 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
                 <label className="public-application-field"><span>MSS status</span><select defaultValue={selected.securityClassification} name="securityClassification">{securityClassifications.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
                 <label className="public-application-field"><span>Expiry optional</span><input defaultValue={selected.expiryDate} disabled={!identityAccess} name="expiryDate" /></label>
               </div>
+              <label className="public-application-toggle"><input name="createWallet" type="checkbox" /><span>Create and link Panem Credit wallet if missing</span></label>
               <label className="public-application-field"><span>Internal notes</span><textarea defaultValue={selected.internalNotes} name="internalNotes" rows="3" /></label>
               <div className="bulletin-editor-card__actions">
                 <button className="button button--solid-site" name="intent" type="submit" value="save">Save Record</button>

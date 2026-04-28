@@ -172,6 +172,23 @@ async function writeEconomyStore(economy) {
   return parsed.economy || parsed;
 }
 
+async function readGovernmentAccessStore() {
+  if (!adminApiKey) {
+    throw new Error("ADMIN_API_KEY is required for citizen registry checks.");
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/government-access-store`, {
+    headers: { "x-admin-key": adminApiKey },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Citizen registry unavailable (${response.status}).`);
+  }
+
+  return response.json();
+}
+
 function getEconomyWallet(economy, id) {
   return (economy.wallets || []).find(
     (wallet) => wallet.id === id || wallet.userId === id || wallet.discordId === id
@@ -203,6 +220,41 @@ function ensureDiscordWallet(economy, user) {
   };
   economy.wallets = [wallet, ...(economy.wallets || [])];
   return wallet;
+}
+
+function getVerifiedDiscordCitizen(governmentStore, economy, user) {
+  const discordId = String(user?.id || "").trim();
+  const citizen = (governmentStore.citizenRecords || []).find((record) =>
+    String(record.discordId || "").trim() === discordId &&
+    record.verificationStatus === "Verified" &&
+    !record.lostOrStolen &&
+    !["Revoked", "Enemy of the State"].includes(record.securityClassification)
+  );
+
+  if (!citizen) {
+    return null;
+  }
+
+  const wallet = getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId);
+  if (!wallet) {
+    return { citizen, wallet: null };
+  }
+
+  return { citizen, wallet };
+}
+
+function citizenRequiredEmbed() {
+  return ministryEmbed(
+    "Citizen Registration Required",
+    `Panem Credit commands require verified citizenship and a linked wallet.\nApply at ${websiteUrl}/citizenship or contact the Ministry of Credit & Records with your Discord ID.`
+  );
+}
+
+function walletLinkRequiredEmbed() {
+  return ministryEmbed(
+    "Wallet Link Required",
+    "Your citizen identity is verified, but no Panem Credit wallet is linked to your Union Security record. Contact the Ministry of Credit & Records."
+  );
 }
 
 function pushEconomyTransaction(economy, transaction) {
@@ -238,7 +290,7 @@ async function replyEconomy(interaction, embed, ephemeral = false) {
 
 async function handleEconomySlashCommand(interaction) {
   const name = interaction.commandName;
-  const economyCommands = new Set([
+  const citizenEconomyCommands = new Set([
     "balance",
     "pay",
     "transactions",
@@ -248,7 +300,9 @@ async function handleEconomySlashCommand(interaction) {
     "buy",
     "sell",
     "district",
-    "leaderboard",
+    "leaderboard"
+  ]);
+  const adminEconomyCommands = new Set([
     "grant",
     "fine",
     "freeze-wallet",
@@ -257,19 +311,33 @@ async function handleEconomySlashCommand(interaction) {
     "run-tax",
     "economy-report"
   ]);
+  const economyCommands = new Set([...citizenEconomyCommands, ...adminEconomyCommands]);
 
   if (!economyCommands.has(name)) {
     return false;
   }
 
   const economy = await readEconomyStore();
-  const wallet = ensureDiscordWallet(economy, interaction.user);
+  const governmentStore = await readGovernmentAccessStore();
+  const identity = getVerifiedDiscordCitizen(governmentStore, economy, interaction.user);
+
+  if (citizenEconomyCommands.has(name)) {
+    if (!identity) {
+      await replyEconomy(interaction, citizenRequiredEmbed(), true);
+      return true;
+    }
+    if (!identity.wallet) {
+      await replyEconomy(interaction, walletLinkRequiredEmbed(), true);
+      return true;
+    }
+  }
+
+  const wallet = identity?.wallet;
 
   if (name === "balance") {
-    await writeEconomyStore(economy);
     await replyEconomy(
       interaction,
-      ministryEmbed("Panem Credit Balance", `${wallet.displayName}\n${formatCredits(wallet.balance)}\n${wallet.title || titleForBalance(wallet.balance)} / ${wallet.status}`)
+      ministryEmbed("Panem Credit Balance", `${identity.citizen.name}\n${wallet.displayName}\n${formatCredits(wallet.balance)}\n${wallet.title || titleForBalance(wallet.balance)} / ${wallet.status}`)
     );
     return true;
   }
@@ -277,7 +345,16 @@ async function handleEconomySlashCommand(interaction) {
   if (name === "pay") {
     const target = interaction.options.getUser("user", true);
     const amount = interaction.options.getNumber("amount", true);
-    const recipient = ensureDiscordWallet(economy, target);
+    const recipientIdentity = getVerifiedDiscordCitizen(governmentStore, economy, target);
+    if (!recipientIdentity) {
+      await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "The recipient is not a verified citizen with a registered Discord ID."), true);
+      return true;
+    }
+    const recipient = recipientIdentity.wallet;
+    if (!recipient) {
+      await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "The recipient has no linked Panem Credit wallet."), true);
+      return true;
+    }
     if (wallet.status !== "active" || recipient.status === "frozen" || amount <= 0 || wallet.balance < amount) {
       await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "The wallet status or balance cannot support this payment."));
       return true;
@@ -435,9 +512,20 @@ async function handleEconomySlashCommand(interaction) {
   }
 
   const target = interaction.options.getUser("user");
-  const targetWallet = target ? ensureDiscordWallet(economy, target) : null;
+  const targetIdentity = target ? getVerifiedDiscordCitizen(governmentStore, economy, target) : null;
+  const targetWallet = targetIdentity?.wallet || null;
   const amount = interaction.options.getNumber("amount") || 0;
   const reason = interaction.options.getString("reason") || "Treasury action";
+
+  if (target && !targetIdentity) {
+    await replyEconomy(interaction, ministryEmbed("Citizen Required", `${target.tag} does not have a verified citizen record linked to their Discord ID.`), true);
+    return true;
+  }
+
+  if (target && !targetWallet) {
+    await replyEconomy(interaction, ministryEmbed("Wallet Required", `${target.tag} has a citizen record but no linked Panem Credit wallet.`), true);
+    return true;
+  }
 
   if (name === "grant" && targetWallet) {
     targetWallet.balance += amount;

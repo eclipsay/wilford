@@ -4,6 +4,7 @@ import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import { canAccess, requireGovernmentUser } from "../../../lib/government-auth";
 import { getEconomyStore } from "../../../lib/panem-credit";
+import { getCitizenState } from "../../../lib/citizen-state";
 
 export const metadata = {
   title: "Panem Credit Control | Government Access"
@@ -15,7 +16,7 @@ export const revalidate = 0;
 export default async function PanemCreditControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("economyView");
-  const store = await getEconomyStore();
+  const [store, citizenState] = await Promise.all([getEconomyStore(), getCitizenState()]);
   const fullAccess = canAccess(user, "economyControl");
   const securityAccess = canAccess(user, "economySecurity");
   const totalCredits = store.wallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
@@ -86,6 +87,15 @@ export default async function PanemCreditControlPage({ searchParams }) {
                     {store.districts.map((district) => <option key={district.id} value={district.name}>{district.name}</option>)}
                   </select>
                 </label>
+                <label className="public-application-field">
+                  <span>Link citizen record</span>
+                  <select name="citizenId">
+                    <option value="">None</option>
+                    {citizenState.citizenRecords.map((citizen) => (
+                      <option key={citizen.id} value={citizen.id}>{citizen.name} / {citizen.unionSecurityId}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
               <button className="button button--solid-site" type="submit">Create Wallet</button>
             </form>
@@ -96,7 +106,9 @@ export default async function PanemCreditControlPage({ searchParams }) {
           <p className="eyebrow">Wallet Registry</p>
           <h2>Citizen Accounts</h2>
           <div className="government-user-list">
-            {store.wallets.map((wallet) => (
+            {store.wallets.map((wallet) => {
+              const linkedCitizen = citizenState.citizenRecords.find((citizen) => citizen.walletId === wallet.id || citizen.discordId === wallet.discordId || citizen.userId === wallet.userId);
+              return (
               <article className="panel government-user-card panem-admin-wallet" key={wallet.id}>
                 <div className="panel__header">
                   <div>
@@ -111,6 +123,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
                   <span><strong>{wallet.district || "Unassigned"}</strong> District</span>
                   <span><strong>{wallet.taxStatus}</strong> Tax status</span>
                   <span><strong>{wallet.title || titleForBalance(wallet.balance)}</strong> Title</span>
+                  <span><strong>{linkedCitizen?.name || "Unlinked"}</strong> Citizen record</span>
                 </div>
                 {fullAccess ? (
                   <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
@@ -134,6 +147,15 @@ export default async function PanemCreditControlPage({ searchParams }) {
                       </label>
                       <label className="public-application-field"><span>Custom title</span><input defaultValue={wallet.title || ""} name="title" placeholder={titleForBalance(wallet.balance)} /></label>
                       <label className="public-application-field"><span>Tax status</span><input defaultValue={wallet.taxStatus} name="taxStatus" /></label>
+                      <label className="public-application-field">
+                        <span>Linked citizen</span>
+                        <select defaultValue={linkedCitizen?.id || ""} name="citizenId">
+                          <option value="">None</option>
+                          {citizenState.citizenRecords.map((citizen) => (
+                            <option key={citizen.id} value={citizen.id}>{citizen.name} / {citizen.unionSecurityId}</option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
                     <button className="button button--solid-site" type="submit">Save Wallet Profile</button>
                   </form>
@@ -148,7 +170,8 @@ export default async function PanemCreditControlPage({ searchParams }) {
                   ) : null}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
 

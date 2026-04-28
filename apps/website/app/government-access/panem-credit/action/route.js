@@ -18,6 +18,7 @@ import {
   getEconomyStore,
   getWallet
 } from "../../../../lib/panem-credit";
+import { updateCitizenRecord } from "../../../../lib/citizen-state";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
@@ -55,7 +56,7 @@ export async function POST(request) {
   }
 
   if (intent === "create-wallet") {
-    await createWallet({
+    const store = await createWallet({
       userId: formData.get("userId"),
       discordId: formData.get("discordId"),
       displayName: formData.get("displayName"),
@@ -63,6 +64,15 @@ export async function POST(request) {
       salary: formData.get("salary"),
       district: formData.get("district")
     }, actorName);
+    const citizenId = String(formData.get("citizenId") || "").trim();
+    const wallet = getWallet(store, String(formData.get("userId") || "").trim()) || getWallet(store, String(formData.get("discordId") || "").trim());
+    if (citizenId && wallet) {
+      await updateCitizenRecord(citizenId, {
+        walletId: wallet.id,
+        discordId: wallet.discordId,
+        district: wallet.district
+      });
+    }
   }
 
   if (intent === "edit-balance") {
@@ -78,6 +88,14 @@ export async function POST(request) {
       wallet.taxStatus = String(formData.get("taxStatus") || wallet.taxStatus || "compliant").replace(/[<>]/g, "").trim().slice(0, 80);
       wallet.updatedAt = new Date().toISOString();
       await saveEconomyStore(store);
+      const citizenId = String(formData.get("citizenId") || "").trim();
+      if (citizenId) {
+        await updateCitizenRecord(citizenId, {
+          walletId: wallet.id,
+          discordId: wallet.discordId,
+          district: wallet.district
+        });
+      }
     }
   }
 
