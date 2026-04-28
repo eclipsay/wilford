@@ -9,12 +9,13 @@ import { fileURLToPath } from "node:url";
 
 export const governmentSessionCookie = "wpu_government_session";
 
-const baseUrl =
+const baseUrl = (
   process.env.API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   (process.env.NODE_ENV === "production"
     ? "https://api.wilfordindustries.org"
-    : "http://localhost:4000");
+    : "http://localhost:4000")
+).replace(/\/+$/, "");
 
 export const accessRoles = [
   "Supreme Chairman",

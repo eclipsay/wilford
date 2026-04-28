@@ -3,12 +3,13 @@ import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-const baseUrl =
+const baseUrl = (
   process.env.API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   (process.env.NODE_ENV === "production"
     ? "https://api.wilfordindustries.org"
-    : "http://localhost:4000");
+    : "http://localhost:4000")
+).replace(/\/+$/, "");
 
 const categories = [
   "Chairman",

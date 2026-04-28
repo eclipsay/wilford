@@ -4,10 +4,11 @@ import { redirect } from "next/navigation";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 
-const baseUrl =
+const baseUrl = (
   process.env.API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:4000";
+  "http://localhost:4000"
+).replace(/\/+$/, "");
 
 async function submitPetitionAction(formData) {
   "use server";

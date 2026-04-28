@@ -1,9 +1,10 @@
 import { fallbackCommits, filterVisibleCommits } from "@wilford/shared";
 
-const baseUrl =
+const baseUrl = (
   process.env.API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:4000";
+  "http://localhost:4000"
+).replace(/\/+$/, "");
 
 const fallbackContent = {
   settings: {

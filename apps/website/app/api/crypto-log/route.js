@@ -3,10 +3,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const baseUrl =
+const baseUrl = (
   process.env.API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://127.0.0.1:4000";
+  "http://127.0.0.1:4000"
+).replace(/\/+$/, "");
 
 function resolveContentFile() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
