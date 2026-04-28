@@ -193,11 +193,7 @@ async function requestAdminArticles(path, options = {}) {
 export async function getAllArticles() {
   try {
     return await requestAdminArticles("/api/admin/articles");
-  } catch (error) {
-    if (process.env.NODE_ENV === "production") {
-      throw error;
-    }
-  }
+  } catch {}
 
   const content = await readContentFile();
   return normalizeArticles(content.articles);
