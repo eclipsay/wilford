@@ -4,7 +4,7 @@ import {
   getAllBulletins,
   getBulletinSourceMeta,
 } from "../../../lib/bulletins";
-import { getAllArticles } from "../../../lib/articles";
+import { getPublishedArticles } from "../../../lib/articles";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import { requireGovernmentUser } from "../../../lib/government-auth";
@@ -34,7 +34,7 @@ export default async function BulletinControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("bulletinControl");
   const bulletins = await getAllBulletins();
-  const articles = await getAllArticles();
+  const articles = await getPublishedArticles().catch(() => []);
 
   return (
     <SiteLayout>
@@ -129,7 +129,7 @@ export default async function BulletinControlPage({ searchParams }) {
                     <option value="">No linked article</option>
                     {articles.map((article) => (
                       <option key={article.id} value={article.id}>
-                        {article.title} ({article.status})
+                        {article.title}
                       </option>
                     ))}
                   </select>
@@ -228,7 +228,7 @@ export default async function BulletinControlPage({ searchParams }) {
                           <option value="">No linked article</option>
                           {articles.map((article) => (
                             <option key={article.id} value={article.id}>
-                              {article.title} ({article.status})
+                              {article.title}
                             </option>
                           ))}
                         </select>

@@ -147,11 +147,7 @@ export async function getCitizenApplications() {
   try {
     const data = await requestAdminApplications("/api/admin/applications");
     return normalizeApplications(data.applications || []);
-  } catch (error) {
-    if (process.env.NODE_ENV === "production") {
-      throw error;
-    }
-  }
+  } catch {}
 
   const content = await readContentFile();
   return normalizeApplications(content.publicApplications);
