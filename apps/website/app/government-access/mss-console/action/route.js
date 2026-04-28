@@ -8,7 +8,8 @@ import {
   createDiscordBroadcast,
   formatMssSecurityAlert,
   mssClassifications,
-  mssThreatLevels
+  mssThreatLevels,
+  requiresChairmanApproval
 } from "../../../../lib/discord-broadcasts";
 
 function redirectTo(request, path) {
@@ -53,7 +54,6 @@ export async function POST(request) {
   const evidenceNotes = clean(formData.get("evidenceNotes"), 1400);
   const distribution = mapDistribution(formData.get("distribution"));
   const targetDiscordId = clean(formData.get("targetDiscordId"), 80);
-  const confirmed = formData.get("confirmDiscordBroadcast") === "on";
   const requiresApproval = formData.get("requiresApproval") === "on";
 
   if (!subjectName || !reason) {
@@ -68,16 +68,10 @@ export async function POST(request) {
     return redirectTo(request, "/government-access/mss-console?error=discord&detail=Specific%20Discord%20ID%20is%20required.");
   }
 
-  if (
-    (distribution === "dm_all" || classification === "Enemy of the State") &&
-    !confirmed
-  ) {
-    return redirectTo(request, "/government-access/mss-console?error=confirm&detail=Dangerous%20security%20broadcasts%20require%20confirmation.");
-  }
-
   try {
+    const type = classification === "Enemy of the State" ? "treason_notice" : "mss_alert";
     const broadcast = await createDiscordBroadcast({
-      type: classification === "Enemy of the State" ? "treason_notice" : "mss_alert",
+      type,
       title:
         classification === "Enemy of the State"
           ? "MSS Security Directive"
@@ -91,8 +85,13 @@ export async function POST(request) {
       }),
       distribution,
       targetDiscordId,
-      requiresApproval,
-      confirmed,
+      requiresApproval:
+        requiresApproval ||
+        requiresChairmanApproval({
+          distribution,
+          type
+        }),
+      confirmed: false,
       linkedType: "mss-security-alert",
       linkedId: subjectName,
       requestedBy: user.username,

@@ -408,6 +408,10 @@ app.post("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
   const title = String(req.body?.title || "").trim();
   const body = String(req.body?.body || "").trim();
   const distribution = String(req.body?.distribution || "none").trim();
+  const type = String(req.body?.type || "news").trim();
+  const dangerousBroadcast =
+    ["dm_all", "announcement_and_dm_all"].includes(distribution) ||
+    type === "treason_notice";
 
   if (!title || !body) {
     return res.status(400).json({ error: "Broadcast title and body are required." });
@@ -421,24 +425,16 @@ app.post("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
     return res.status(400).json({ error: "A Discord user ID is required for specific delivery." });
   }
 
-  if (
-    (["dm_all", "announcement_and_dm_all"].includes(distribution) ||
-      req.body?.type === "treason_notice") &&
-    req.body?.confirmed !== true
-  ) {
-    return res.status(400).json({ error: "Dangerous broadcasts require explicit confirmation." });
-  }
-
   const broadcast = await createDiscordBroadcast({
-    type: req.body?.type || "news",
+    type,
     title,
     body,
     distribution,
     targetDiscordId: req.body?.targetDiscordId || "",
     linkedType: req.body?.linkedType || "",
     linkedId: req.body?.linkedId || "",
-    requiresApproval: Boolean(req.body?.requiresApproval),
-    confirmed: Boolean(req.body?.confirmed),
+    requiresApproval: dangerousBroadcast || Boolean(req.body?.requiresApproval),
+    confirmed: !dangerousBroadcast && Boolean(req.body?.confirmed),
     requestedBy: req.body?.requestedBy || "system",
     requestedRole: req.body?.requestedRole || ""
   });
@@ -447,7 +443,15 @@ app.post("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
 });
 
 app.post("/api/admin/discord-broadcasts/:id", requireAdmin, async (req, res) => {
-  const allowedStatuses = ["pending", "processing", "completed", "failed"];
+  const allowedStatuses = [
+    "pending_approval",
+    "approval_notified",
+    "declined",
+    "pending",
+    "processing",
+    "completed",
+    "failed"
+  ];
   const status = String(req.body?.status || "").trim().toLowerCase();
 
   if (!allowedStatuses.includes(status)) {
@@ -461,7 +465,14 @@ app.post("/api/admin/discord-broadcasts/:id", requireAdmin, async (req, res) => 
     successCount: Number(req.body?.successCount || 0),
     failureCount: Number(req.body?.failureCount || 0),
     failures: Array.isArray(req.body?.failures) ? req.body.failures : [],
-    error: req.body?.error || ""
+    error: req.body?.error || "",
+    confirmed: Boolean(req.body?.confirmed),
+    approvalNotifiedAt: req.body?.approvalNotifiedAt || "",
+    approvedAt: req.body?.approvedAt || "",
+    approvedBy: req.body?.approvedBy || "",
+    declinedAt: req.body?.declinedAt || "",
+    declinedBy: req.body?.declinedBy || "",
+    approvalNote: req.body?.approvalNote || ""
   });
 
   if (!broadcast) {

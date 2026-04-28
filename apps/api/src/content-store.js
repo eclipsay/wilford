@@ -307,12 +307,19 @@ function cleanBroadcastText(value, maxLength = 4000) {
 function normalizeBroadcast(entry, index = 0) {
   const now = new Date().toISOString();
   const status = String(entry?.status || "pending").trim().toLowerCase();
+  const allowedStatuses = [
+    "pending_approval",
+    "approval_notified",
+    "declined",
+    "pending",
+    "processing",
+    "completed",
+    "failed"
+  ];
 
   return {
     id: String(entry?.id || `broadcast-${Date.now().toString(36)}-${index}`),
-    status: ["pending", "processing", "completed", "failed"].includes(status)
-      ? status
-      : "pending",
+    status: allowedStatuses.includes(status) ? status : "pending",
     type: cleanBroadcastText(entry?.type || "news", 80),
     title: cleanBroadcastText(entry?.title || "Official WPU Broadcast", 160),
     body: cleanBroadcastText(entry?.body || "", 4000),
@@ -322,6 +329,13 @@ function normalizeBroadcast(entry, index = 0) {
     linkedId: cleanBroadcastText(entry?.linkedId || "", 160),
     requiresApproval: Boolean(entry?.requiresApproval),
     confirmed: Boolean(entry?.confirmed),
+    approvalRequestedAt: entry?.approvalRequestedAt || "",
+    approvalNotifiedAt: entry?.approvalNotifiedAt || "",
+    approvedAt: entry?.approvedAt || "",
+    approvedBy: cleanBroadcastText(entry?.approvedBy || "", 120),
+    declinedAt: entry?.declinedAt || "",
+    declinedBy: cleanBroadcastText(entry?.declinedBy || "", 120),
+    approvalNote: cleanBroadcastText(entry?.approvalNote || "", 1000),
     requestedBy: cleanBroadcastText(entry?.requestedBy || "system", 120),
     requestedRole: cleanBroadcastText(entry?.requestedRole || "", 120),
     createdAt: entry?.createdAt || now,
@@ -337,6 +351,8 @@ function normalizeBroadcast(entry, index = 0) {
 
 export async function createDiscordBroadcast(entry) {
   const content = await readContentFile();
+  const requiresApproval = Boolean(entry.requiresApproval);
+  const now = new Date().toISOString();
   const broadcast = normalizeBroadcast(
     {
       ...entry,
@@ -345,9 +361,11 @@ export async function createDiscordBroadcast(entry) {
         `broadcast-${Date.now().toString(36)}-${Math.random()
           .toString(36)
           .slice(2, 8)}`,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      status: requiresApproval ? "pending_approval" : "pending",
+      requiresApproval,
+      approvalRequestedAt: requiresApproval ? now : "",
+      createdAt: now,
+      updatedAt: now
     },
     0
   );

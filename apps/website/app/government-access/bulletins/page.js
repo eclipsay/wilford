@@ -51,11 +51,11 @@ function DiscordBroadcastFields() {
         </label>
         <label className="public-application-toggle">
           <input name="confirmDiscordBroadcast" type="checkbox" />
-          <span>Confirm dangerous broadcast / DM all members</span>
+          <span>Submit dangerous broadcast for Chairman approval</span>
         </label>
       </div>
       <p className="public-application-help">
-        Emergency and mass-DM broadcasts require confirmation before the bot will process them.
+        DM-all and Enemy of the State notices become Chairman approval requests before delivery.
       </p>
     </fieldset>
   );

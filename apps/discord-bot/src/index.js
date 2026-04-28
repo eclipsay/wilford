@@ -41,11 +41,13 @@ const adminApiKey = String(process.env.ADMIN_API_KEY || "").trim();
 const broadcastGuildId = String(process.env.DISCORD_GUILD_ID || "").trim();
 const announcementChannelId = String(process.env.DISCORD_ANNOUNCEMENT_CHANNEL_ID || "").trim();
 const mssChannelId = String(process.env.DISCORD_MSS_CHANNEL_ID || "").trim();
+const lemmieDiscordUserId = String(process.env.DISCORD_LEMMIE_USER_ID || botOwnerId).trim();
 const applicationGuildId = String(
   process.env.DISCORD_APPLICATION_GUILD_ID || process.env.DISCORD_GUILD_ID || ""
 ).trim();
 const applicationCommandUrl =
   process.env.DISCORD_COMMANDS_URL || "https://wilfordindustries.org/commands";
+const websiteUrl = (process.env.WEBSITE_URL || "https://wilfordindustries.org").replace(/\/+$/, "");
 const pollIntervalMs = Math.max(
   15000,
   Number(process.env.DISCORD_COMMITS_POLL_INTERVAL_MS || 60000)
@@ -722,6 +724,32 @@ async function getPendingDiscordBroadcasts() {
   return Array.isArray(payload?.broadcasts) ? payload.broadcasts : [];
 }
 
+async function getBroadcastApprovalRequests() {
+  if (!adminApiKey) {
+    return [];
+  }
+
+  const requests = [];
+
+  for (const status of ["pending_approval", "approval_notified"]) {
+    const response = await fetch(`${apiUrl}/api/admin/discord-broadcasts?status=${status}`, {
+      headers: {
+        "x-admin-key": adminApiKey
+      },
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error(`Broadcast approval request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    requests.push(...(Array.isArray(payload?.broadcasts) ? payload.broadcasts : []));
+  }
+
+  return requests;
+}
+
 async function markDiscordBroadcast(broadcastId, payload) {
   if (!adminApiKey) {
     return;
@@ -776,6 +804,54 @@ function buildBroadcastEmbed(broadcast) {
     )
     .setFooter({ text: "Wilford Panem Union - Official Communications" })
     .setTimestamp(new Date(broadcast.createdAt || Date.now()));
+}
+
+function buildBroadcastApprovalEmbed(broadcast) {
+  return new EmbedBuilder()
+    .setColor(0xb3261e)
+    .setTitle("Broadcast Approval Required")
+    .setDescription(String(broadcast.body || "").slice(0, 3000))
+    .addFields(
+      {
+        name: "Request",
+        value: `${broadcast.title || "Official Broadcast"}\n${broadcast.type} / ${broadcast.distribution}`,
+        inline: false
+      },
+      {
+        name: "Requested By",
+        value: `${broadcast.requestedBy || "Unknown"} / ${broadcast.requestedRole || "Unknown role"}`,
+        inline: true
+      },
+      {
+        name: "Website Review",
+        value: `${websiteUrl}/government-access/broadcast-approvals`,
+        inline: false
+      }
+    )
+    .setFooter({ text: `Broadcast ID: ${broadcast.id}` })
+    .setTimestamp(new Date(broadcast.createdAt || Date.now()));
+}
+
+async function notifyLemmieForBroadcastApproval(broadcast) {
+  if (!lemmieDiscordUserId) {
+    return;
+  }
+
+  const user = await client.users.fetch(lemmieDiscordUserId).catch(() => null);
+
+  if (!user) {
+    throw new Error("Unable to find Lemmie Discord user for broadcast approval.");
+  }
+
+  await user.send({ embeds: [buildBroadcastApprovalEmbed(broadcast)] });
+  await markDiscordBroadcast(broadcast.id, {
+    status: "approval_notified",
+    approvalNotifiedAt: new Date().toISOString(),
+    recipients: [],
+    successCount: 0,
+    failureCount: 0,
+    failures: []
+  });
 }
 
 async function sendBroadcastToChannel(broadcast, results) {
@@ -1131,6 +1207,7 @@ async function publishCommitUpdates() {
 let isPublishing = false;
 let isProcessingWebsiteApplications = false;
 let isProcessingDiscordBroadcasts = false;
+let isProcessingBroadcastApprovals = false;
 
 async function runCommitLoop() {
   if (isPublishing) {
@@ -1197,6 +1274,32 @@ async function runDiscordBroadcastLoop() {
     );
   } finally {
     isProcessingDiscordBroadcasts = false;
+  }
+}
+
+async function runBroadcastApprovalLoop() {
+  if (isProcessingBroadcastApprovals) {
+    return;
+  }
+
+  isProcessingBroadcastApprovals = true;
+
+  try {
+    const broadcasts = await getBroadcastApprovalRequests();
+
+    for (const broadcast of broadcasts) {
+      if (broadcast.status === "pending_approval") {
+        await notifyLemmieForBroadcastApproval(broadcast);
+      }
+    }
+  } catch (error) {
+    console.log(
+      `Broadcast approval notification error: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  } finally {
+    isProcessingBroadcastApprovals = false;
   }
 }
 
@@ -1346,6 +1449,8 @@ client.once("ready", () => {
   setInterval(runWebsiteApplicationsLoop, 20000);
   runDiscordBroadcastLoop();
   setInterval(runDiscordBroadcastLoop, 15000);
+  runBroadcastApprovalLoop();
+  setInterval(runBroadcastApprovalLoop, 15000);
 });
 
 client.on("messageCreate", async (message) => {

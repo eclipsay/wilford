@@ -38,6 +38,13 @@ export const mssDistributions = [
   { value: "specific_user", label: "DM specific Discord ID" }
 ];
 
+export function requiresChairmanApproval(fields = {}) {
+  return (
+    ["dm_all", "announcement_and_dm_all"].includes(fields.distribution) ||
+    fields.type === "treason_notice"
+  );
+}
+
 const headingByType = {
   news: "Official WPU News Broadcast",
   emergency: "Emergency Directive",
@@ -151,4 +158,16 @@ export async function createDiscordBroadcast(fields) {
 export async function getDiscordBroadcasts() {
   const { broadcasts } = await requestBroadcasts("/api/admin/discord-broadcasts");
   return Array.isArray(broadcasts) ? broadcasts : [];
+}
+
+export async function updateDiscordBroadcast(id, fields) {
+  const { broadcast } = await requestBroadcasts(
+    `/api/admin/discord-broadcasts/${encodeURIComponent(id)}`,
+    {
+      method: "POST",
+      body: JSON.stringify(fields)
+    }
+  );
+
+  return broadcast;
 }

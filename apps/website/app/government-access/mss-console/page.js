@@ -103,7 +103,7 @@ export default async function MssConsolePage({ searchParams }) {
               </label>
               <label className="public-application-toggle">
                 <input name="confirmDiscordBroadcast" type="checkbox" />
-                <span>Confirm dangerous broadcast / DM all members</span>
+                <span>Submit dangerous broadcast for Chairman approval</span>
               </label>
             </div>
             <button className="button button--solid-site" type="submit">

@@ -10,18 +10,15 @@ import { addAuditEvent, assertTrustedPostOrigin, requireGovernmentUser } from ".
 import {
   createDiscordBroadcast,
   formatBroadcastMessage,
-  parseBroadcastOptions
+  parseBroadcastOptions,
+  requiresChairmanApproval
 } from "../../../../lib/discord-broadcasts";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
 }
 
-function canBroadcast(user, fields, type) {
-  if (type === "treason_notice") {
-    return ["Supreme Chairman", "Executive Director", "Security Command"].includes(user.role);
-  }
-
+function canBroadcast(user, fields) {
   if (["Supreme Chairman", "Executive Director"].includes(user.role)) {
     return true;
   }
@@ -66,12 +63,8 @@ async function enqueueBulletinBroadcast(user, formData, fields, linkedId = "") {
 
   const type = options.type || broadcastTypeForBulletin(fields);
 
-  if (!canBroadcast(user, fields, type)) {
+  if (!canBroadcast(user, fields)) {
     throw new Error("Your role is not authorised to send this broadcast.");
-  }
-
-  if (type === "treason_notice" && !options.confirmed) {
-    throw new Error("Enemy of the State notices require confirmation.");
   }
 
   return createDiscordBroadcast({
@@ -84,7 +77,11 @@ async function enqueueBulletinBroadcast(user, formData, fields, linkedId = "") {
     }),
     distribution: options.distribution,
     targetDiscordId: options.targetDiscordId,
-    confirmed: options.confirmed,
+    requiresApproval: requiresChairmanApproval({
+      distribution: options.distribution,
+      type
+    }),
+    confirmed: false,
     linkedType: "bulletin",
     linkedId,
     requestedBy: user.username,

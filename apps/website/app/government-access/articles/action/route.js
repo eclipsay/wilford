@@ -13,18 +13,15 @@ import {
 import {
   createDiscordBroadcast,
   formatBroadcastMessage,
-  parseBroadcastOptions
+  parseBroadcastOptions,
+  requiresChairmanApproval
 } from "../../../../lib/discord-broadcasts";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
 }
 
-function canBroadcast(user, type) {
-  if (type === "treason_notice") {
-    return ["Supreme Chairman", "Executive Director"].includes(user.role);
-  }
-
+function canBroadcast(user) {
   return ["Supreme Chairman", "Executive Director", "Minister"].includes(user.role);
 }
 
@@ -35,12 +32,8 @@ async function enqueueArticleBroadcast(user, formData, fields, linkedId = "") {
     return null;
   }
 
-  if (!canBroadcast(user, options.type)) {
+  if (!canBroadcast(user)) {
     throw new Error("Your role is not authorised to send article broadcasts.");
-  }
-
-  if (options.type === "treason_notice" && !options.confirmed) {
-    throw new Error("Enemy of the State notices require confirmation.");
   }
 
   return createDiscordBroadcast({
@@ -60,7 +53,11 @@ async function enqueueArticleBroadcast(user, formData, fields, linkedId = "") {
     }),
     distribution: options.distribution,
     targetDiscordId: options.targetDiscordId,
-    confirmed: options.confirmed,
+    requiresApproval: requiresChairmanApproval({
+      distribution: options.distribution,
+      type: options.type
+    }),
+    confirmed: false,
     linkedType: "article",
     linkedId,
     requestedBy: user.username,

@@ -40,6 +40,12 @@ const systems = [
     permission: "mssTools"
   },
   {
+    title: "Broadcast Approvals",
+    text: "Approve or decline server-wide Discord broadcasts and high-risk directives.",
+    href: "/government-access/broadcast-approvals",
+    permission: "broadcastApproval"
+  },
+  {
     title: "Citizen Applications",
     text: "Review citizenship applications and clerk intake material.",
     href: "/government-access/citizenship",
