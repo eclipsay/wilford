@@ -26,7 +26,7 @@ function toDateTimeLocal(value) {
   return date.toISOString().slice(0, 16);
 }
 
-function DiscordBroadcastFields() {
+function DiscordBroadcastFields({ showResend = false }) {
   return (
     <fieldset className="broadcast-fieldset">
       <legend>Discord Broadcast Optional</legend>
@@ -55,9 +55,15 @@ function DiscordBroadcastFields() {
           <input name="confirmDiscordBroadcast" type="checkbox" />
           <span>Submit dangerous broadcast for Chairman approval</span>
         </label>
+        {showResend ? (
+          <label className="public-application-toggle">
+            <input name="forceDiscordBroadcast" type="checkbox" />
+            <span>Resend even if this article has already been broadcast</span>
+          </label>
+        ) : null}
       </div>
       <p className="public-application-help">
-        DM-all and Enemy of the State notices become Chairman approval requests before delivery.
+        Broadcasts only send for published articles. DM-all and Enemy of the State notices become Chairman approval requests before delivery.
       </p>
     </fieldset>
   );
@@ -81,6 +87,20 @@ export default async function ArticleControlPage({ searchParams }) {
           <section className="application-notice">
             <strong>Article Register Updated</strong>
             <p>Publication records have been saved{params?.broadcast ? " and Discord delivery has been queued." : "."}</p>
+          </section>
+        ) : null}
+
+        {params?.broadcast === "skipped-draft" ? (
+          <section className="application-notice application-notice--error">
+            <strong>Discord Broadcast Skipped</strong>
+            <p>Discord broadcast skipped because article is not published.</p>
+          </section>
+        ) : null}
+
+        {params?.broadcast === "skipped-duplicate" ? (
+          <section className="application-notice">
+            <strong>Discord Broadcast Skipped</strong>
+            <p>This article has already been broadcast. Select resend to queue it again.</p>
           </section>
         ) : null}
 
@@ -235,7 +255,7 @@ export default async function ArticleControlPage({ searchParams }) {
                       <span>Featured article</span>
                     </label>
                   </div>
-                  <DiscordBroadcastFields />
+                  <DiscordBroadcastFields showResend />
                   <div className="bulletin-editor-card__actions">
                     <button className="button button--solid-site" type="submit">
                       Save Article

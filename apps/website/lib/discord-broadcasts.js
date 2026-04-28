@@ -104,7 +104,8 @@ export function parseBroadcastOptions(formData) {
     distribution,
     type,
     targetDiscordId: cleanText(formData.get("targetDiscordId") || "", 80),
-    confirmed: formData.get("confirmDiscordBroadcast") === "on"
+    confirmed: formData.get("confirmDiscordBroadcast") === "on",
+    forceResend: formData.get("forceDiscordBroadcast") === "on"
   };
 }
 

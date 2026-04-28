@@ -13,6 +13,7 @@ import {
 import {
   createDiscordBroadcast,
   formatBroadcastMessage,
+  getDiscordBroadcasts,
   parseBroadcastOptions,
   requiresChairmanApproval
 } from "../../../../lib/discord-broadcasts";
@@ -25,18 +26,58 @@ function canBroadcast(user) {
   return ["Supreme Chairman", "Executive Director", "Minister"].includes(user.role);
 }
 
+function isPublishedArticle(fields) {
+  return fields.status === "published" || fields.published === true;
+}
+
+function publicUrl(value) {
+  const clean = String(value || "").trim();
+
+  if (!clean) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(clean)) {
+    return clean;
+  }
+
+  if (clean.startsWith("/")) {
+    return `https://wilfordindustries.org${clean}`;
+  }
+
+  return `https://wilfordindustries.org/${clean.replace(/^public\//, "")}`;
+}
+
 async function enqueueArticleBroadcast(user, formData, fields, linkedId = "") {
   const options = parseBroadcastOptions(formData);
 
   if (!options.enabled) {
-    return null;
+    return { status: "none" };
+  }
+
+  if (!isPublishedArticle(fields)) {
+    return { status: "skipped-draft" };
   }
 
   if (!canBroadcast(user)) {
     throw new Error("Your role is not authorised to send article broadcasts.");
   }
 
-  return createDiscordBroadcast({
+  if (linkedId && !options.forceResend) {
+    const broadcasts = await getDiscordBroadcasts().catch(() => []);
+    const alreadyBroadcast = broadcasts.some(
+      (broadcast) =>
+        broadcast.linkedType === "article" &&
+        broadcast.linkedId === linkedId &&
+        ["pending", "pending_approval", "approval_notified", "processing", "completed"].includes(broadcast.status)
+    );
+
+    if (alreadyBroadcast) {
+      return { status: "skipped-duplicate" };
+    }
+  }
+
+  const broadcast = await createDiscordBroadcast({
     type: options.type,
     title:
       options.type === "emergency"
@@ -55,8 +96,8 @@ async function enqueueArticleBroadcast(user, formData, fields, linkedId = "") {
     excerpt: fields.subtitle || fields.body,
     issuer: fields.source || fields.category || user.role,
     classification: fields.category || "Official News",
-    imageUrl: fields.heroImage,
-    articleUrl: linkedId ? `/news/${linkedId}` : "",
+    imageUrl: publicUrl(fields.imageUrl || fields.heroImage || fields.thumbnail),
+    articleUrl: linkedId ? publicUrl(`/news/${linkedId}`) : "",
     distribution: options.distribution,
     targetDiscordId: options.targetDiscordId,
     requiresApproval: requiresChairmanApproval({
@@ -69,6 +110,24 @@ async function enqueueArticleBroadcast(user, formData, fields, linkedId = "") {
     requestedBy: user.username,
     requestedRole: user.role
   });
+
+  return broadcast ? { status: "queued", broadcast } : { status: "none" };
+}
+
+function broadcastRedirectSuffix(result) {
+  if (result?.status === "queued") {
+    return "&broadcast=queued";
+  }
+
+  if (result?.status === "skipped-draft") {
+    return "&broadcast=skipped-draft";
+  }
+
+  if (result?.status === "skipped-duplicate") {
+    return "&broadcast=skipped-duplicate";
+  }
+
+  return "";
 }
 
 export async function POST(request) {
@@ -90,12 +149,16 @@ export async function POST(request) {
     try {
       const articles = await createArticle(fields);
       const createdArticle = articles.find((article) => article.title === fields.title);
-      const broadcast = await enqueueArticleBroadcast(user, formData, fields, createdArticle?.id || "");
+      const broadcastResult = await enqueueArticleBroadcast(user, formData, fields, createdArticle?.id || "");
       await addAuditEvent(user.username, "article added", fields.title, "success");
-      if (broadcast) {
-        await addAuditEvent(user.username, "discord broadcast queued", broadcast.id, "success");
+      if (broadcastResult?.broadcast) {
+        await addAuditEvent(user.username, "discord broadcast queued", broadcastResult.broadcast.id, "success");
+      } else if (broadcastResult?.status === "skipped-draft") {
+        await addAuditEvent(user.username, "discord broadcast skipped", "article not published", "info");
+      } else if (broadcastResult?.status === "skipped-duplicate") {
+        await addAuditEvent(user.username, "discord broadcast skipped", "duplicate article broadcast", "info");
       }
-      return redirectTo(request, `/government-access/articles?saved=1${broadcast ? "&broadcast=queued" : ""}`);
+      return redirectTo(request, `/government-access/articles?saved=1${broadcastRedirectSuffix(broadcastResult)}`);
     } catch (error) {
       return redirectTo(
         request,
@@ -114,12 +177,16 @@ export async function POST(request) {
 
     try {
       await updateArticle(id, fields);
-      const broadcast = await enqueueArticleBroadcast(user, formData, fields, id);
+      const broadcastResult = await enqueueArticleBroadcast(user, formData, fields, id);
       await addAuditEvent(user.username, "article edited", id, "success");
-      if (broadcast) {
-        await addAuditEvent(user.username, "discord broadcast queued", broadcast.id, "success");
+      if (broadcastResult?.broadcast) {
+        await addAuditEvent(user.username, "discord broadcast queued", broadcastResult.broadcast.id, "success");
+      } else if (broadcastResult?.status === "skipped-draft") {
+        await addAuditEvent(user.username, "discord broadcast skipped", "article not published", "info");
+      } else if (broadcastResult?.status === "skipped-duplicate") {
+        await addAuditEvent(user.username, "discord broadcast skipped", "duplicate article broadcast", "info");
       }
-      return redirectTo(request, `/government-access/articles?saved=1${broadcast ? "&broadcast=queued" : ""}`);
+      return redirectTo(request, `/government-access/articles?saved=1${broadcastRedirectSuffix(broadcastResult)}`);
     } catch (error) {
       return redirectTo(
         request,
