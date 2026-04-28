@@ -1,10 +1,13 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cookies } from "next/headers";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { districtEconomyDefaults } from "@wilford/shared";
 import { getEconomyStore, getWallet } from "./panem-credit";
+
+export const citizenSessionCookie = "wpu_citizen_session";
 
 const baseUrl = (
   process.env.API_URL ||
@@ -85,6 +88,53 @@ function adminApiKey() {
   return process.env.GOVERNMENT_STORE_API_KEY || process.env.BULLETIN_API_KEY || process.env.ADMIN_API_KEY;
 }
 
+function authSecret() {
+  return (
+    process.env.CITIZEN_PORTAL_SECRET ||
+    process.env.GOVERNMENT_AUTH_SECRET ||
+    process.env.PANEL_SESSION_SECRET ||
+    process.env.ADMIN_API_KEY ||
+    "WPU-DEVELOPMENT-CITIZEN-PORTAL-SECRET"
+  );
+}
+
+function normalizeLookup(value) {
+  return cleanText(value, 180).toLowerCase().replace(/\s+/g, " ");
+}
+
+function sign(payload) {
+  return createHmac("sha256", authSecret()).update(payload).digest("hex");
+}
+
+function createSessionValue(record) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      citizenId: record.id,
+      unionSecurityId: record.unionSecurityId,
+      expiresAt: Date.now() + 1000 * 60 * 60 * 8
+    })
+  ).toString("base64url");
+  return `${payload}.${sign(payload)}`;
+}
+
+function readSessionValue(value) {
+  const [payload, signature] = String(value || "").split(".");
+  if (!payload || !signature) return null;
+
+  const expected = Buffer.from(sign(payload));
+  const actual = Buffer.from(signature);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+    return null;
+  }
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return session.expiresAt > Date.now() ? session : null;
+  } catch {
+    return null;
+  }
+}
+
 function districtNumber(name) {
   if (name === "The Capitol" || name === "Capitol") return 0;
   return Number(String(name).replace(/\D/g, "")) || 0;
@@ -140,11 +190,11 @@ export function defaultDistrictProfiles(economyDistricts = districtEconomyDefaul
 
 function seedCitizenRecords(store) {
   return [
-    ["citizen-chairman", "Chairman Lemmie", "chairman", "The Capitol", "Supreme Chairman", "Clear", "wallet-chairman"],
-    ["citizen-eclip", "Executive Director Eclip", "eclip", "District 3", "Executive Command", "Clear", "wallet-eclip"],
-    ["citizen-flukkston", "Sir Flukkston", "flukkston", "District 2", "Executive Command", "Clear", "wallet-flukkston"],
-    ["citizen-public", "Registered Citizen", "citizen", "District 8", "Active Citizen", "Clear", "wallet-citizen"]
-  ].map(([id, name, userId, district, status, securityClassification, walletId], index) => {
+    ["citizen-chairman", "Chairman Lemmie", "chairman", "The Capitol", "Supreme Chairman", "Clear", "wallet-chairman", "WPU-CR-2026-0001", "WPU-VERIFY-CHAIRMAN"],
+    ["citizen-eclip", "Executive Director Eclip", "eclip", "District 3", "Executive Command", "Clear", "wallet-eclip", "WPU-03-2026-0002", "WPU-VERIFY-ECLIP"],
+    ["citizen-flukkston", "Sir Flukkston", "flukkston", "District 2", "Executive Command", "Clear", "wallet-flukkston", "WPU-02-2026-0003", "WPU-VERIFY-FLUK"],
+    ["citizen-public", "Registered Citizen", "citizen", "District 8", "Active Citizen", "Clear", "wallet-citizen", "WPU-08-2026-0004", "WPU-VERIFY-CITIZEN"]
+  ].map(([id, name, userId, district, status, securityClassification, walletId, unionSecurityId, verificationCode], index) => {
     const wallet = getWallet(store, walletId);
     return normalizeCitizenRecord({
       id,
@@ -156,8 +206,8 @@ function seedCitizenRecords(store) {
       citizenStatus: status,
       securityClassification,
       walletId,
-      unionSecurityId: createSecurityId(district),
-      verificationCode: createVerificationCode(),
+      unionSecurityId,
+      verificationCode,
       issueDate: "2026-04-28",
       expiryDate: "",
       verificationStatus: "Verified",
@@ -258,7 +308,8 @@ function normalizeCitizenState(content = {}, economyStore) {
       : seedCitizenRecords(economyStore)
     ).map(normalizeCitizenRecord),
     citizenRequests: (Array.isArray(content.citizenRequests) ? content.citizenRequests : []).map(normalizeCitizenRequest),
-    districtProfiles
+    districtProfiles,
+    citizenActivity: Array.isArray(content.citizenActivity) ? content.citizenActivity : []
   };
 }
 
@@ -329,7 +380,8 @@ export async function saveCitizenState(nextState) {
     ...currentLocal,
     citizenRecords: nextState.citizenRecords || [],
     citizenRequests: nextState.citizenRequests || [],
-    districtProfiles: nextState.districtProfiles || []
+    districtProfiles: nextState.districtProfiles || [],
+    citizenActivity: nextState.citizenActivity || []
   };
 
   try {
@@ -357,6 +409,26 @@ export async function createCitizenRequest(fields) {
   state.citizenRequests = [request, ...state.citizenRequests].slice(0, 500);
   await saveCitizenState(state);
   return request;
+}
+
+export async function recordCitizenActivity(citizenId, action, detail = "") {
+  const state = await getCitizenState();
+  const record = state.citizenRecords.find((citizen) => citizen.id === citizenId);
+  if (!record) return state;
+
+  state.citizenActivity = [
+    {
+      id: createId("citizen-activity"),
+      citizenId: record.id,
+      citizenName: record.name,
+      unionSecurityId: record.unionSecurityId,
+      action: cleanText(action, 120),
+      detail: cleanText(detail, 600),
+      createdAt: new Date().toISOString()
+    },
+    ...(state.citizenActivity || [])
+  ].slice(0, 1000);
+  return saveCitizenState(state);
 }
 
 export async function updateCitizenRequest(id, fields) {
@@ -474,6 +546,69 @@ export function findCitizenBySelector(state, selector) {
       .filter(Boolean)
       .some((item) => String(item).toLowerCase() === value)
   ) || state.citizenRecords[0];
+}
+
+export function findCitizenForLogin(state, name, unionSecurityId) {
+  const requestedName = normalizeLookup(name);
+  const requestedSecurityId = normalizeLookup(unionSecurityId).replace(/\s/g, "");
+  if (!requestedName || !requestedSecurityId) return null;
+
+  return state.citizenRecords.find((record) =>
+    normalizeLookup(record.name) === requestedName &&
+    normalizeLookup(record.unionSecurityId).replace(/\s/g, "") === requestedSecurityId &&
+    record.verificationStatus === "Verified" &&
+    !record.lostOrStolen &&
+    !["Revoked", "Suspended", "Lost/Stolen"].includes(record.verificationStatus) &&
+    !["Revoked", "Enemy of the State"].includes(record.securityClassification)
+  ) || null;
+}
+
+export async function loginCitizen(name, unionSecurityId) {
+  const state = await getCitizenState();
+  const record = findCitizenForLogin(state, name, unionSecurityId);
+  if (!record) return { ok: false };
+
+  const store = await cookies();
+  store.set(citizenSessionCookie, createSessionValue(record), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 8
+  });
+  await recordCitizenActivity(record.id, "login", "Citizen Portal access granted.");
+  return { ok: true, record };
+}
+
+export async function logoutCitizen() {
+  const record = await getCurrentCitizen();
+  const store = await cookies();
+  store.set(citizenSessionCookie, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0
+  });
+  if (record) {
+    await recordCitizenActivity(record.id, "logout", "Citizen Portal session ended.");
+  }
+}
+
+export async function getCurrentCitizen() {
+  const store = await cookies();
+  const session = readSessionValue(store.get(citizenSessionCookie)?.value);
+  if (!session?.citizenId) return null;
+
+  const state = await getCitizenState();
+  const record = state.citizenRecords.find((citizen) =>
+    citizen.id === session.citizenId &&
+    citizen.unionSecurityId === session.unionSecurityId &&
+    citizen.verificationStatus === "Verified" &&
+    !citizen.lostOrStolen &&
+    !["Revoked", "Suspended", "Lost/Stolen"].includes(citizen.verificationStatus)
+  );
+  return record || null;
 }
 
 export async function hydrateCitizenProfile(record) {

@@ -3,8 +3,7 @@ import { formatCredits, taxLabel, titleForBalance } from "@wilford/shared";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import {
-  findCitizenBySelector,
-  getCitizenState,
+  getCurrentCitizen,
   hydrateCitizenProfile,
   requestCategories,
   requestPriorities
@@ -23,8 +22,65 @@ function sum(records, predicate) {
 
 export default async function CitizenPortalPage({ searchParams }) {
   const params = await searchParams;
-  const state = await getCitizenState();
-  const record = findCitizenBySelector(state, params?.citizen);
+  const record = await getCurrentCitizen();
+
+  if (!record) {
+    return (
+      <SiteLayout>
+        <PageHero
+          eyebrow="Citizen Services"
+          title="Citizen Portal"
+          description="Secure access to identity, Panem Credit, tax status, district affiliation, requests, and official notices."
+        />
+
+        <main className="content content--wide portal-page portal-page--citizen citizen-dashboard-page">
+          {params?.error ? (
+            <section className="application-notice application-notice--error">
+              <strong>Access Denied</strong>
+              <p>
+                {params.error === "session"
+                  ? "Your citizen session has expired. Please identify yourself again."
+                  : "The name and Union Security ID could not be verified."}
+              </p>
+            </section>
+          ) : null}
+
+          {params?.loggedOut ? (
+            <section className="application-notice">
+              <strong>Signed Out</strong>
+              <p>Your citizen portal session has ended.</p>
+            </section>
+          ) : null}
+
+          <section className="portal-intro scroll-fade">
+            <div>
+              <p className="eyebrow">Secure Civic Access</p>
+              <h2>Identify before service.</h2>
+              <p>
+                Enter your legal citizen name and Union Security ID. The portal
+                will only open the matching citizen record and will record civic
+                activity against that identity for future marketplace and Panem
+                Credit services.
+              </p>
+            </div>
+            <form action="/citizen-portal/action" className="portal-status public-application-form citizen-login-form" method="post">
+              <input name="intent" type="hidden" value="login" />
+              <label className="public-application-field">
+                <span>Citizen name</span>
+                <input autoComplete="name" name="citizenName" required />
+              </label>
+              <label className="public-application-field">
+                <span>Union Security ID</span>
+                <input autoComplete="off" name="unionSecurityId" placeholder="WPU-CR-2026-ABCD" required />
+              </label>
+              <button className="button button--solid-site" type="submit">Enter Citizen Portal</button>
+            </form>
+          </section>
+        </main>
+      </SiteLayout>
+    );
+  }
+
   const profile = await hydrateCitizenProfile(record);
   const wallet = profile.wallet;
   const activeRequests = profile.requests.filter((request) => !["Completed", "Rejected"].includes(request.status));
@@ -61,16 +117,9 @@ export default async function CitizenPortalPage({ searchParams }) {
               Citizen services are linked to Union Security ID, district assignment,
               Panem Credit wallet, requests, taxes, and official notices.
             </p>
-            <form action="/citizen-portal" className="panem-inline-form" method="get">
-              <label className="public-application-field">
-                <span>Citizen record</span>
-                <select defaultValue={record.id} name="citizen">
-                  {state.citizenRecords.map((citizen) => (
-                    <option key={citizen.id} value={citizen.id}>{citizen.name} / {citizen.district}</option>
-                  ))}
-                </select>
-              </label>
-              <button className="button" type="submit">View</button>
+            <form action="/citizen-portal/action" method="post">
+              <input name="intent" type="hidden" value="logout" />
+              <button className="button" type="submit">Sign Out</button>
             </form>
           </div>
           <div className="portal-status identity-status-panel">
@@ -139,9 +188,7 @@ export default async function CitizenPortalPage({ searchParams }) {
           <p className="eyebrow">Citizen Services</p>
           <h2>Submit Government Request</h2>
           <form action="/citizen-portal/action" className="panel public-application-form citizen-request-form" method="post">
-            <input name="citizenId" type="hidden" value={record.id} />
-            <input name="citizenName" type="hidden" value={record.name} />
-            <input name="district" type="hidden" value={record.district} />
+            <input name="intent" type="hidden" value="request" />
             <div className="public-application-grid public-application-grid--three">
               <label className="public-application-field">
                 <span>Category</span>

@@ -2,6 +2,7 @@ import { formatCredits, taxLabel, titleForBalance } from "@wilford/shared";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getEconomyStore, getWallet } from "../../lib/panem-credit";
+import { getCurrentCitizen } from "../../lib/citizen-state";
 
 export const metadata = {
   title: "Panem Credit"
@@ -16,15 +17,83 @@ function sumTaxes(records) {
 
 export default async function PanemCreditPage({ searchParams }) {
   const params = await searchParams;
+  const citizen = await getCurrentCitizen();
+
+  if (!citizen) {
+    return (
+      <SiteLayout>
+        <PageHero
+          eyebrow="Ministry of Credit & Records"
+          title="Panem Credit"
+          description="Secure citizen banking requires Union Security identification."
+        />
+
+        <main className="content content--wide finance-page panem-credit-page">
+          {params?.error ? (
+            <section className="application-notice application-notice--error">
+              <strong>Account Access Required</strong>
+              <p>Enter your citizen name and Union Security ID before opening Panem Credit.</p>
+            </section>
+          ) : null}
+
+          <section className="portal-intro scroll-fade">
+            <div>
+              <p className="eyebrow">Secure Banking Access</p>
+              <h2>Union Security ID required.</h2>
+              <p>
+                Panem Credit accounts are tied to citizen identity records. Your
+                Union Security ID identifies the wallet, district affiliation,
+                tax status, marketplace actions, and transaction history attached
+                to your account.
+              </p>
+            </div>
+            <form action="/citizen-portal/action" className="portal-status public-application-form citizen-login-form" method="post">
+              <input name="intent" type="hidden" value="login" />
+              <input name="returnTo" type="hidden" value="/panem-credit" />
+              <label className="public-application-field">
+                <span>Citizen name</span>
+                <input autoComplete="name" name="citizenName" required />
+              </label>
+              <label className="public-application-field">
+                <span>Union Security ID</span>
+                <input autoComplete="off" name="unionSecurityId" placeholder="WPU-08-2026-0004" required />
+              </label>
+              <button className="button button--solid-site" type="submit">Open Panem Credit</button>
+            </form>
+          </section>
+        </main>
+      </SiteLayout>
+    );
+  }
+
   const store = await getEconomyStore();
-  const selectedWallet = getWallet(store, params?.wallet) || store.wallets[0];
+  const selectedWallet = getWallet(store, citizen.walletId || citizen.userId || citizen.discordId);
+
+  if (!selectedWallet) {
+    return (
+      <SiteLayout>
+        <PageHero
+          eyebrow="Ministry of Credit & Records"
+          title="Panem Credit"
+          description="Secure citizen banking, taxation, and marketplace exchange."
+        />
+
+        <main className="content content--wide finance-page panem-credit-page">
+          <section className="application-notice application-notice--error">
+            <strong>No Wallet Linked</strong>
+            <p>Your citizen identity is verified, but no Panem Credit wallet is linked to this record.</p>
+          </section>
+        </main>
+      </SiteLayout>
+    );
+  }
+
   const walletTransactions = store.transactions
     .filter((transaction) => transaction.fromWalletId === selectedWallet.id || transaction.toWalletId === selectedWallet.id)
     .slice(0, 12);
   const walletTaxes = store.taxRecords.filter((record) => record.walletId === selectedWallet.id);
   const paidTax = sumTaxes(walletTaxes.filter((record) => record.status === "paid"));
   const outstandingTax = sumTaxes(walletTaxes.filter((record) => record.status !== "paid"));
-  const topWallets = [...store.wallets].sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0)).slice(0, 5);
 
   return (
     <SiteLayout>
@@ -47,6 +116,8 @@ export default async function PanemCreditPage({ searchParams }) {
             <p>
               {params.error === "daily-limit"
                 ? "This wallet has already received its daily civic salary today."
+                : params.error === "session"
+                  ? "Your citizen banking session has expired. Please identify yourself again."
                 : "The wallet, balance, stock, or account status could not support that request."}
             </p>
           </section>
@@ -60,17 +131,7 @@ export default async function PanemCreditPage({ searchParams }) {
             </div>
             <div className="wallet-card__balance">{formatCredits(selectedWallet.balance)}</div>
             <span>{selectedWallet.title || titleForBalance(selectedWallet.balance)} / {selectedWallet.status.toUpperCase()}</span>
-            <form action="/panem-credit" className="panem-inline-form" method="get">
-              <label className="public-application-field">
-                <span>Active wallet</span>
-                <select defaultValue={selectedWallet.id} name="wallet">
-                  {store.wallets.map((wallet) => (
-                    <option key={wallet.id} value={wallet.id}>{wallet.displayName}</option>
-                  ))}
-                </select>
-              </label>
-              <button className="button" type="submit">View</button>
-            </form>
+            <p>{citizen.name} / {citizen.unionSecurityId}</p>
           </article>
 
           <article className="finance-panel">
@@ -90,14 +151,9 @@ export default async function PanemCreditPage({ searchParams }) {
             <div className="panem-action-grid">
               <form action="/panem-credit/action" className="public-application-form" method="post">
                 <input name="intent" type="hidden" value="send" />
-                <input name="walletId" type="hidden" value={selectedWallet.id} />
                 <label className="public-application-field">
-                  <span>Recipient</span>
-                  <select name="toWalletId">
-                    {store.wallets.filter((wallet) => wallet.id !== selectedWallet.id).map((wallet) => (
-                      <option key={wallet.id} value={wallet.id}>{wallet.displayName}</option>
-                    ))}
-                  </select>
+                  <span>Recipient Union Security ID</span>
+                  <input autoComplete="off" name="recipientSecurityId" placeholder="WPU-03-2026-0002" required />
                 </label>
                 <label className="public-application-field">
                   <span>Amount</span>
@@ -111,7 +167,6 @@ export default async function PanemCreditPage({ searchParams }) {
               </form>
               <form action="/panem-credit/action" method="post">
                 <input name="intent" type="hidden" value="daily" />
-                <input name="walletId" type="hidden" value={selectedWallet.id} />
                 <button className="button" type="submit">Claim Daily Civic Stipend</button>
               </form>
             </div>
@@ -134,7 +189,6 @@ export default async function PanemCreditPage({ searchParams }) {
                 </dl>
                 <form action="/panem-credit/action" className="panem-inline-form" method="post">
                   <input name="intent" type="hidden" value="buy" />
-                  <input name="walletId" type="hidden" value={selectedWallet.id} />
                   <input name="itemId" type="hidden" value={item.id} />
                   <input defaultValue="1" min="1" name="quantity" type="number" />
                   <button className="button button--solid-site" type="submit">Buy</button>
@@ -149,7 +203,6 @@ export default async function PanemCreditPage({ searchParams }) {
           <h2>Citizen Listing Desk</h2>
           <form action="/panem-credit/action" className="panel public-application-form" method="post">
             <input name="intent" type="hidden" value="sell" />
-            <input name="walletId" type="hidden" value={selectedWallet.id} />
             <div className="public-application-grid public-application-grid--three">
               <label className="public-application-field">
                 <span>Good</span>
@@ -230,14 +283,12 @@ export default async function PanemCreditPage({ searchParams }) {
               </ul>
             </article>
             <article className="panel">
-              <h3>Leaderboard</h3>
+              <h3>Account Security</h3>
               <ul className="government-mini-list">
-                {topWallets.map((wallet) => (
-                  <li key={wallet.id}>
-                    <span>{wallet.displayName}</span>
-                    <strong>{formatCredits(wallet.balance)}</strong>
-                  </li>
-                ))}
+                <li><span>Union Security ID</span><strong>{citizen.unionSecurityId}</strong></li>
+                <li><span>District</span><strong>{citizen.district}</strong></li>
+                <li><span>Verification</span><strong>{citizen.verificationStatus}</strong></li>
+                <li><span>Security classification</span><strong>{citizen.securityClassification}</strong></li>
               </ul>
             </article>
           </div>

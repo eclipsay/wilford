@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { createCitizenRequest } from "../../../lib/citizen-state";
+import {
+  createCitizenRequest,
+  getCurrentCitizen,
+  loginCitizen,
+  logoutCitizen,
+  recordCitizenActivity
+} from "../../../lib/citizen-state";
 import { assertTrustedPostOrigin } from "../../../lib/government-auth";
 
 function redirectTo(request, path) {
@@ -12,16 +18,35 @@ export async function POST(request) {
   }
 
   const formData = await request.formData();
-  const citizenId = String(formData.get("citizenId") || "").trim();
-  await createCitizenRequest({
-    citizenName: formData.get("citizenName"),
-    citizenId,
-    district: formData.get("district"),
+  const intent = String(formData.get("intent") || "").trim();
+
+  if (intent === "login") {
+    const result = await loginCitizen(formData.get("citizenName"), formData.get("unionSecurityId"));
+    const returnTo = String(formData.get("returnTo") || "/citizen-portal").trim();
+    const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/citizen-portal";
+    return redirectTo(request, result.ok ? `${safeReturnTo}${safeReturnTo.includes("?") ? "&" : "?"}login=success` : "/citizen-portal?error=login");
+  }
+
+  if (intent === "logout") {
+    await logoutCitizen();
+    return redirectTo(request, "/citizen-portal?loggedOut=1");
+  }
+
+  const citizen = await getCurrentCitizen();
+  if (!citizen) {
+    return redirectTo(request, "/citizen-portal?error=session");
+  }
+
+  const submitted = await createCitizenRequest({
+    citizenName: citizen.name,
+    citizenId: citizen.id,
+    district: citizen.district,
     category: formData.get("category"),
     priority: formData.get("priority"),
     message: formData.get("message"),
     attachments: formData.get("attachments")
   });
+  await recordCitizenActivity(citizen.id, "request submitted", `${submitted.category} / ${submitted.id}`);
 
-  return redirectTo(request, `/citizen-portal?citizen=${encodeURIComponent(citizenId)}&saved=request`);
+  return redirectTo(request, "/citizen-portal?saved=request");
 }

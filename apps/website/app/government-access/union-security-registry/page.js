@@ -26,6 +26,7 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
   const selected = findCitizenBySelector(state, params?.citizen);
   const wallet = getWallet(economy, selected.walletId || selected.userId || selected.discordId);
   const requests = state.citizenRequests.filter((request) => request.citizenId === selected.id);
+  const activity = (state.citizenActivity || []).filter((entry) => entry.citizenId === selected.id).slice(0, 10);
   const taxes = wallet ? economy.taxRecords.filter((tax) => tax.walletId === wallet.id).slice(0, 8) : [];
   const transactions = wallet ? economy.transactions.filter((transaction) => transaction.fromWalletId === wallet.id || transaction.toWalletId === wallet.id).slice(0, 8) : [];
   const identityAccess = canAccess(user, "identityRegistry");
@@ -133,6 +134,7 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
             <article className="panel"><h3>Request History</h3><ul className="government-mini-list">{requests.slice(0, 8).map((request) => <li key={request.id}><span>{request.category} / {request.status}</span><strong>{request.priority}</strong></li>)}</ul></article>
             <article className="panel"><h3>Tax Activity</h3><ul className="government-mini-list">{taxes.map((tax) => <li key={tax.id}><span>{taxLabel(tax.taxType)} / {tax.status}</span><strong>{formatCredits(tax.amount)}</strong></li>)}</ul></article>
             <article className="panel"><h3>Economy Activity</h3><ul className="government-mini-list">{transactions.map((transaction) => <li key={transaction.id}><span>{transaction.type} / {transaction.reason}</span><strong>{formatCredits(transaction.amount)}</strong></li>)}</ul></article>
+            <article className="panel"><h3>Website Activity</h3><ul className="government-mini-list">{activity.map((entry) => <li key={entry.id}><span>{entry.action} / {entry.detail}</span><strong>{entry.createdAt.slice(0, 10)}</strong></li>)}</ul></article>
           </div>
         </section>
 
