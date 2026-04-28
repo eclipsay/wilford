@@ -15,6 +15,11 @@ const categories = [
   "Government",
   "Supreme Court",
   "MSS",
+  "Ministries",
+  "Industry",
+  "Order",
+  "Ministry of Production",
+  "Ministry of Order",
   "Panem Credit",
   "Districts",
   "Eternal Engine",
@@ -25,6 +30,149 @@ const priorities = ["standard", "priority", "emergency"];
 
 export const bulletinCategories = categories;
 export const bulletinPriorities = priorities;
+
+const sourceStyles = {
+  chairman: {
+    className: "chairman",
+    icon: "CL",
+    seal: "Chairman's Seal",
+    title: "Chairman's Directive",
+    subtitle: "Issued from the Supreme Chairman's office",
+    priorityLabel: "Imperial Priority"
+  },
+  "supreme-court": {
+    className: "court",
+    icon: "SC",
+    seal: "Supreme Court Seal",
+    title: "Supreme Court Notice",
+    subtitle: "Formal publication of the Union judiciary",
+    priorityLabel: "Court Priority"
+  },
+  mss: {
+    className: "mss",
+    icon: "MSS",
+    seal: "Security Seal",
+    title: "MSS Security Bulletin",
+    subtitle: "Restricted advisory from State Security Command",
+    priorityLabel: "Security Priority"
+  },
+  ministries: {
+    className: "ministry",
+    icon: "MIN",
+    seal: "Ministerial Seal",
+    title: "Ministerial Notice",
+    subtitle: "Operational update from Union ministries",
+    priorityLabel: "Ministry Priority"
+  },
+  industry: {
+    className: "industry",
+    icon: "IND",
+    seal: "Industrial Seal",
+    title: "Industry Directorate",
+    subtitle: "Production and infrastructure bulletin",
+    priorityLabel: "Industrial Priority"
+  },
+  order: {
+    className: "order",
+    icon: "ORD",
+    seal: "Order Seal",
+    title: "Ministry of Order",
+    subtitle: "Authority notice for civic stability",
+    priorityLabel: "Authority Priority"
+  },
+  government: {
+    className: "government",
+    icon: "WPU",
+    seal: "Grand State Seal",
+    title: "Government Bulletin",
+    subtitle: "Central administrative communication",
+    priorityLabel: "State Priority"
+  },
+  "panem-credit": {
+    className: "credit",
+    icon: "CR",
+    seal: "Treasury Seal",
+    title: "Panem Credit Notice",
+    subtitle: "Treasury and civic credit communication",
+    priorityLabel: "Treasury Priority"
+  },
+  districts: {
+    className: "industry",
+    icon: "DST",
+    seal: "District Seal",
+    title: "District Production Notice",
+    subtitle: "District output and civic logistics bulletin",
+    priorityLabel: "District Priority"
+  },
+  "eternal-engine": {
+    className: "engine",
+    icon: "EE",
+    seal: "Engine Seal",
+    title: "Eternal Engine Dispatch",
+    subtitle: "Rail command and continuity update",
+    priorityLabel: "Engine Priority"
+  },
+  general: {
+    className: "general",
+    icon: "WPU",
+    seal: "Public Seal",
+    title: "Public Bulletin",
+    subtitle: "General notice from the Wilford Panem Union",
+    priorityLabel: "Public Priority"
+  }
+};
+
+function toSourceKey(category) {
+  const value = String(category || "General").trim().toLowerCase();
+
+  if (value.includes("chairman")) {
+    return "chairman";
+  }
+
+  if (value.includes("court")) {
+    return "supreme-court";
+  }
+
+  if (value.includes("mss") || value.includes("security")) {
+    return "mss";
+  }
+
+  if (value.includes("order")) {
+    return "order";
+  }
+
+  if (
+    value.includes("industry") ||
+    value.includes("production") ||
+    value.includes("works") ||
+    value.includes("district")
+  ) {
+    return "industry";
+  }
+
+  if (value.includes("ministry") || value.includes("ministries")) {
+    return "ministries";
+  }
+
+  if (value.includes("credit") || value.includes("treasury")) {
+    return "panem-credit";
+  }
+
+  if (value.includes("engine") || value.includes("transport")) {
+    return "eternal-engine";
+  }
+
+  if (value.includes("government")) {
+    return "government";
+  }
+
+  return "general";
+}
+
+export function getBulletinSourceMeta(category) {
+  const key = toSourceKey(category);
+  return sourceStyles[key] || sourceStyles.general;
+}
 
 const defaultBulletins = [
   "Chairman Lemmie announces new prosperity initiative",

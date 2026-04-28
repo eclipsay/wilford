@@ -2,6 +2,7 @@ import {
   bulletinCategories,
   bulletinPriorities,
   getAllBulletins,
+  getBulletinSourceMeta,
 } from "../../../lib/bulletins";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
@@ -128,23 +129,41 @@ export default async function BulletinControlPage({ searchParams }) {
 
             <section className="bulletin-editor-list" aria-label="Current bulletin items">
               {bulletins.length ? (
-                bulletins.map((bulletin, index) => (
-                  <article
-                    className={`panel bulletin-editor-card bulletin-editor-card--${bulletin.priority}`}
-                    key={bulletin.id}
-                  >
+                bulletins.map((bulletin, index) => {
+                  const source = getBulletinSourceMeta(bulletin.category);
+                  const showPriorityBadge = bulletin.priority !== "standard";
+
+                  return (
+                    <article
+                      className={`panel bulletin-editor-card bulletin-editor-card--${bulletin.priority} bulletin-editor-card--source-${source.className}`}
+                      key={bulletin.id}
+                    >
                     <form action="/government-access/bulletins/action" className="public-application-form" method="post">
                       <input name="intent" type="hidden" value="update" />
                       <input name="id" type="hidden" value={bulletin.id} />
-                      <div className="panel__header">
-                        <div>
-                          <p className="eyebrow">
-                            {String(index + 1).padStart(2, "0")} / {bulletin.category}
-                          </p>
-                          <h2>{bulletin.headline}</h2>
+                      <div className="panel__header bulletin-editor-card__header">
+                        <div className="bulletin-editor-card__identity">
+                          <span className="bulletin-editor-card__seal" aria-label={source.seal}>
+                            {source.icon}
+                          </span>
+                          <div>
+                            <p className="eyebrow">
+                              {String(index + 1).padStart(2, "0")} / {source.title}
+                            </p>
+                            <h2>{bulletin.headline}</h2>
+                            <p className="bulletin-editor-card__subtitle">
+                              {source.subtitle}
+                            </p>
+                          </div>
                         </div>
                         <div className="bulletin-editor-card__status">
-                          <span>{bulletin.priority}</span>
+                          {showPriorityBadge ? (
+                            <span className="bulletin-editor-card__priority-badge">
+                              {source.priorityLabel}
+                            </span>
+                          ) : (
+                            <span>{bulletin.category}</span>
+                          )}
                           <strong>{bulletin.active ? "Active" : "Inactive"}</strong>
                         </div>
                       </div>
@@ -222,8 +241,9 @@ export default async function BulletinControlPage({ searchParams }) {
                         </button>
                       </form>
                     </div>
-                  </article>
-                ))
+                    </article>
+                  );
+                })
               ) : (
                 <section className="panel bulletin-restricted-panel">
                   <p className="eyebrow">No Active Register</p>
