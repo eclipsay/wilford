@@ -104,7 +104,10 @@ export default async function EnemiesOfTheStatePage({ searchParams }) {
         <section className="enemy-registry-grid" aria-label="Public enemy registry">
           {visibleEntries.length ? (
             visibleEntries.map((entry) => (
-              <article className="enemy-registry-card" key={entry.id}>
+              <article
+                className={`enemy-registry-card ${entry.imageUrl ? "" : "enemy-registry-card--no-image"}`}
+                key={entry.id}
+              >
                 {entry.imageUrl ? (
                   <img
                     className="enemy-registry-card__image"
