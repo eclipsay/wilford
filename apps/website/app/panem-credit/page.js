@@ -55,7 +55,7 @@ export default async function PanemCreditPage({ searchParams }) {
               <h2>{selectedWallet.displayName}</h2>
             </div>
             <div className="wallet-card__balance">{formatCredits(selectedWallet.balance)}</div>
-            <span>{titleForBalance(selectedWallet.balance)} / {selectedWallet.status.toUpperCase()}</span>
+            <span>{selectedWallet.title || titleForBalance(selectedWallet.balance)} / {selectedWallet.status.toUpperCase()}</span>
             <form action="/panem-credit" className="panem-inline-form" method="get">
               <label className="public-application-field">
                 <span>Active wallet</span>

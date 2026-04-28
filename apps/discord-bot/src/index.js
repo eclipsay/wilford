@@ -192,7 +192,8 @@ function ensureDiscordWallet(economy, user) {
     balance: 500,
     district: "",
     status: "active",
-    taxStatus: "compliant",
+      title: "",
+      taxStatus: "compliant",
     exempt: false,
     underReview: false,
     linkedEnemyRecordId: "",
@@ -267,7 +268,7 @@ async function handleEconomySlashCommand(interaction) {
     await writeEconomyStore(economy);
     await replyEconomy(
       interaction,
-      ministryEmbed("Panem Credit Balance", `${wallet.displayName}\n${formatCredits(wallet.balance)}\n${titleForBalance(wallet.balance)} / ${wallet.status}`)
+      ministryEmbed("Panem Credit Balance", `${wallet.displayName}\n${formatCredits(wallet.balance)}\n${wallet.title || titleForBalance(wallet.balance)} / ${wallet.status}`)
     );
     return true;
   }

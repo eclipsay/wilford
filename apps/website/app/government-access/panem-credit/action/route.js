@@ -69,6 +69,11 @@ export async function POST(request) {
     const wallet = getWallet(store, String(formData.get("walletId") || "").trim());
     if (wallet) {
       wallet.balance = Math.max(0, Number(formData.get("balance") || 0));
+      wallet.displayName = String(formData.get("displayName") || wallet.displayName || "").replace(/[<>]/g, "").trim().slice(0, 120);
+      wallet.discordId = String(formData.get("discordId") || "").replace(/[<>]/g, "").trim().slice(0, 80);
+      wallet.district = String(formData.get("district") || "").replace(/[<>]/g, "").trim().slice(0, 80);
+      wallet.title = String(formData.get("title") || "").replace(/[<>]/g, "").trim().slice(0, 80);
+      wallet.taxStatus = String(formData.get("taxStatus") || wallet.taxStatus || "compliant").replace(/[<>]/g, "").trim().slice(0, 80);
       wallet.updatedAt = new Date().toISOString();
       await saveEconomyStore(store);
     }

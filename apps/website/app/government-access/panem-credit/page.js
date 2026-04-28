@@ -108,16 +108,31 @@ export default async function PanemCreditControlPage({ searchParams }) {
                   <span><strong>{formatCredits(wallet.balance)}</strong> Balance</span>
                   <span><strong>{wallet.district || "Unassigned"}</strong> District</span>
                   <span><strong>{wallet.taxStatus}</strong> Tax status</span>
-                  <span><strong>{titleForBalance(wallet.balance)}</strong> Title</span>
+                  <span><strong>{wallet.title || titleForBalance(wallet.balance)}</strong> Title</span>
                 </div>
                 {fullAccess ? (
                   <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
                     <input name="intent" type="hidden" value="edit-balance" />
                     <input name="walletId" type="hidden" value={wallet.id} />
-                    <div className="public-application-grid public-application-grid--two">
+                    <div className="public-application-grid public-application-grid--three">
+                      <label className="public-application-field"><span>Display name</span><input defaultValue={wallet.displayName} name="displayName" /></label>
                       <label className="public-application-field"><span>Balance</span><input defaultValue={wallet.balance} min="0" name="balance" type="number" /></label>
-                      <button className="button button--solid-site" type="submit">Edit Balance</button>
+                      <label className="public-application-field"><span>Discord ID</span><input defaultValue={wallet.discordId} name="discordId" /></label>
                     </div>
+                    <div className="public-application-grid public-application-grid--three">
+                      <label className="public-application-field">
+                        <span>District</span>
+                        <select defaultValue={wallet.district || ""} name="district">
+                          <option value="">Unassigned</option>
+                          {store.districts.map((district) => (
+                            <option key={district.id} value={district.name}>{district.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="public-application-field"><span>Custom title</span><input defaultValue={wallet.title || ""} name="title" placeholder={titleForBalance(wallet.balance)} /></label>
+                      <label className="public-application-field"><span>Tax status</span><input defaultValue={wallet.taxStatus} name="taxStatus" /></label>
+                    </div>
+                    <button className="button button--solid-site" type="submit">Save Wallet Profile</button>
                   </form>
                 ) : null}
                 <div className="bulletin-editor-card__actions">
