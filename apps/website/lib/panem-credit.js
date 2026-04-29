@@ -626,6 +626,19 @@ async function readRemoteStore() {
   return parsed.economy || parsed;
 }
 
+async function readPublicEconomyStore() {
+  const response = await fetch(`${baseUrl}/api/economy`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(4000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Public economy read failed with ${response.status}.`);
+  }
+
+  return response.json();
+}
+
 async function writeRemoteStore(economy) {
   const key = adminApiKey();
   if (!key) {
@@ -654,6 +667,10 @@ async function writeRemoteStore(economy) {
 export async function getEconomyStore() {
   try {
     return normalizeEconomyStore(await readRemoteStore());
+  } catch {}
+
+  try {
+    return normalizeEconomyStore(await readPublicEconomyStore());
   } catch {}
 
   try {

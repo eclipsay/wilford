@@ -236,6 +236,57 @@ async function writeEconomyStore(economy) {
   return compactEconomy;
 }
 
+async function writeEconomyWalletPatch(economy, walletIds = []) {
+  if (!adminApiKey) {
+    throw new Error("ADMIN_API_KEY is required for Panem Credit commands.");
+  }
+
+  const ids = new Set(walletIds.filter(Boolean));
+  const payload = {
+    wallets: (economy.wallets || []).filter((wallet) => ids.has(wallet.id)),
+    transactions: (economy.transactions || []).slice(0, 12),
+    taxRecords: (economy.taxRecords || []).slice(0, 12),
+    alerts: (economy.alerts || []).slice(0, 12),
+    raidLogs: (economy.raidLogs || []).slice(0, 12),
+    lootboxLogs: (economy.lootboxLogs || []).slice(0, 12),
+    lootboxAllocationDate: economy.lootboxAllocationDate,
+    globalLootboxesOpenedToday: economy.globalLootboxesOpenedToday,
+    perUserLootboxesOpenedToday: economy.perUserLootboxesOpenedToday,
+    gamblingJackpot: economy.gamblingJackpot
+  };
+  const body = JSON.stringify(payload);
+  const payloadSize = Buffer.byteLength(body, "utf8");
+
+  let response;
+  try {
+    response = await fetch(`${apiUrl}/api/admin/economy-wallet-patch`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-key": adminApiKey
+      },
+      body,
+      cache: "no-store"
+    });
+  } catch (error) {
+    console.error("[economy-wallet-patch]", {
+      apiUrl,
+      payloadSize,
+      message: error?.message || String(error),
+      cause: error?.cause?.code || error?.code || ""
+    });
+    throw new Error("Economy update failed. Please try again later.");
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error("[economy-wallet-patch]", { status: response.status, payloadSize, detail: detail.slice(0, 400) });
+    throw new Error(`Panem Credit ledger write failed (${response.status}).`);
+  }
+
+  return true;
+}
+
 async function readGovernmentAccessStore() {
   if (!adminApiKey) {
     throw new Error("ADMIN_API_KEY is required for citizen registry checks.");
@@ -2860,7 +2911,7 @@ async function handleEconomySlashCommand(interaction) {
       createdAt: new Date().toISOString()
     }, ...(economy.lootboxLogs || [])].slice(0, 300);
     pushEconomyTransaction(economy, { fromWalletId: "lucky-crate", toWalletId: wallet.id, amount: inventoryItemValue(item, economy) * quantity, type: "lootbox", reason: `${crate.label}: ${quantity} x ${item.name}${lowRoll ? " / low roll" : ""}${taxPenalty ? ` / ${formatCredits(taxPenalty)} penalty` : ""}`, createdBy: interaction.user.id, meta: { key: item.id, rarity, quantity, crateId: crate.id, cost, taxPenalty, lowRoll } });
-    await writeEconomyStore(economy);
+    await writeEconomyWalletPatch(economy, [wallet.id]);
     await replyEconomy(interaction, ministryEmbed("Lucky Crate Opened", `${crate.label} opened for ${formatCredits(cost)}.\nReward: ${quantity} x ${item.name}\nRarity: ${rarity}${lowRoll ? "\nLow roll: minimal reward" : ""}${taxPenalty ? `\nPenalty: ${formatCredits(taxPenalty)}` : ""}\nRemaining today: ${Math.max(0, lootboxDailyGlobalLimit - Number(economy.globalLootboxesOpenedToday || 0))} Union crates / ${Math.max(0, lootboxDailyUserLimit - Number(economy.perUserLootboxesOpenedToday[wallet.id] || 0))} for you.`), false, economyQuickLinks("inventory", "portal"));
     return true;
   }

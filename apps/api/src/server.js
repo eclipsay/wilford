@@ -587,6 +587,57 @@ app.post("/api/admin/economy-store", requireAdmin, async (req, res) => {
   res.json({ economy });
 });
 
+app.post("/api/admin/economy-wallet-patch", requireAdmin, async (req, res) => {
+  const patch = req.body || {};
+  const economy = await getEconomyStore();
+
+  if (Array.isArray(patch.wallets)) {
+    const nextWallets = new Map((economy.wallets || []).map((wallet) => [wallet.id, wallet]));
+    for (const wallet of patch.wallets) {
+      if (wallet?.id) nextWallets.set(wallet.id, wallet);
+    }
+    economy.wallets = [...nextWallets.values()];
+  }
+
+  const prependUnique = (existing = [], incoming = [], limit = 500) => {
+    const seen = new Set();
+    return [...incoming, ...existing].filter((entry) => {
+      const key = entry?.id || JSON.stringify(entry);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, limit);
+  };
+
+  if (Array.isArray(patch.transactions)) {
+    economy.transactions = prependUnique(economy.transactions, patch.transactions, 600);
+  }
+  if (Array.isArray(patch.taxRecords)) {
+    economy.taxRecords = prependUnique(economy.taxRecords, patch.taxRecords, 600);
+  }
+  if (Array.isArray(patch.alerts)) {
+    economy.alerts = prependUnique(economy.alerts, patch.alerts, 300);
+  }
+  if (Array.isArray(patch.raidLogs)) {
+    economy.raidLogs = prependUnique(economy.raidLogs, patch.raidLogs, 250);
+  }
+  if (Array.isArray(patch.lootboxLogs)) {
+    economy.lootboxLogs = prependUnique(economy.lootboxLogs, patch.lootboxLogs, 300);
+  }
+
+  for (const key of [
+    "lootboxAllocationDate",
+    "globalLootboxesOpenedToday",
+    "perUserLootboxesOpenedToday",
+    "gamblingJackpot"
+  ]) {
+    if (Object.hasOwn(patch, key)) economy[key] = patch[key];
+  }
+
+  await updateEconomyStore(economy);
+  res.json({ ok: true });
+});
+
 app.get("/api/admin/supreme-court-store", requireAdmin, async (_req, res) => {
   const content = await getContent();
   res.json({
