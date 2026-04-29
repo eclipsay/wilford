@@ -30,6 +30,9 @@ export default async function MssConsolePage({ searchParams }) {
   const user = await requireGovernmentUser("enemyRegistryDraft");
   const [entries, state, economy] = await Promise.all([getAllEnemyEntries(), getCitizenState(), getEconomyStore()]);
   const security = getSecurityDashboard(economy);
+  const mssCitizenAlerts = (state.citizenAlerts || [])
+    .filter((alert) => alert.type === "MSS Warning" || alert.issuingAuthority === "Ministry of State Security")
+    .slice(0, 20);
   const canIssuePublic = canAccess(user, "enemyRegistryPublic");
   const canCreateAlerts = canAccess(user, "mssTools");
   const visiblePingOptions = ["Supreme Chairman", "Executive Director", "MSS Command", "Security Command"].includes(user.role)
@@ -167,6 +170,20 @@ export default async function MssConsolePage({ searchParams }) {
                 <p>{raid.reason} / seized {raid.seizedItems.length} item type(s) / fine {raid.fineAmount || 0} PC</p>
               </article>
             )) : <p className="court-empty">No raid logs recorded.</p>}
+          </div>
+        </section>
+
+        <section className="state-section">
+          <p className="eyebrow">Citizen Alert Logs</p>
+          <h2>MSS Citizen Alerts</h2>
+          <div className="government-audit-list">
+            {mssCitizenAlerts.length ? mssCitizenAlerts.map((alert) => (
+              <article className="government-audit-row government-audit-row--warning" key={alert.id}>
+                <span>{alert.createdAt}</span>
+                <strong>{alert.citizenName} / {alert.type}</strong>
+                <p>{alert.actionTaken} / {alert.status || "open"} / Discord: {alert.discordDeliveryStatus || "not_requested"}</p>
+              </article>
+            )) : <p className="court-empty">No MSS citizen alerts recorded.</p>}
           </div>
         </section>
 

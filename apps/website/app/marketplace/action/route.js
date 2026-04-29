@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assertTrustedPostOrigin } from "../../../lib/government-auth";
 import { safeAction } from "../../../lib/action-routes";
 import { getCurrentCitizen, recordCitizenActivity } from "../../../lib/citizen-state";
+import { createCitizenAlert } from "../../../lib/citizen-alerts";
 import {
   buyCitizenListing,
   buyMarketItem,
@@ -43,6 +44,15 @@ export const POST = safeAction("marketplace/action", "/marketplace", async funct
     });
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "marketplace state purchase", `${formData.get("quantity") || 1} x ${formData.get("itemId") || "item"}`);
+      await createCitizenAlert({
+        citizenId: citizen.id,
+        type: "Marketplace Notice",
+        issuingAuthority: "Marketplace Authority",
+        message: `Marketplace purchase recorded: ${formData.get("quantity") || 1} x ${formData.get("itemId") || "item"}.`,
+        actionTaken: "Purchase recorded",
+        linkedRecordType: "marketplace",
+        transactionId: result.store?.transactions?.[0]?.id || ""
+      }).catch(() => null);
     }
     return redirectTo(request, `/marketplace?${result.ok ? "saved=buy" : "error=buy"}`);
   }
@@ -57,6 +67,15 @@ export const POST = safeAction("marketplace/action", "/marketplace", async funct
     });
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "marketplace listing", `${formData.get("quantity") || 1} x ${formData.get("itemId") || "item"}`);
+      await createCitizenAlert({
+        citizenId: citizen.id,
+        type: "Marketplace Notice",
+        issuingAuthority: "Marketplace Authority",
+        message: `Marketplace listing created: ${formData.get("quantity") || 1} x ${formData.get("itemId") || "item"}.`,
+        actionTaken: "Listing created",
+        linkedRecordType: "marketplace",
+        transactionId: result.store?.transactions?.[0]?.id || ""
+      }).catch(() => null);
     }
     return redirectTo(request, `/marketplace?${result.ok ? "saved=sell" : "error=sell"}`);
   }
@@ -70,6 +89,16 @@ export const POST = safeAction("marketplace/action", "/marketplace", async funct
     });
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "marketplace listing purchase", String(formData.get("listingId") || ""));
+      await createCitizenAlert({
+        citizenId: citizen.id,
+        type: "Marketplace Notice",
+        issuingAuthority: "Marketplace Authority",
+        message: `Citizen listing purchase recorded: ${String(formData.get("listingId") || "")}.`,
+        actionTaken: "Listing purchase recorded",
+        linkedRecordType: "marketplace_listing",
+        linkedRecordId: String(formData.get("listingId") || ""),
+        transactionId: result.store?.transactions?.[0]?.id || ""
+      }).catch(() => null);
     }
     return redirectTo(request, `/marketplace?${result.ok ? "saved=listing" : `error=${result.reason || "listing"}`}`);
   }

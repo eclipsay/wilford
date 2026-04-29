@@ -33,7 +33,14 @@ export default async function CitizenAlertsPage({ searchParams }) {
   const params = await searchParams;
   const state = await getCitizenState();
   const districts = [...new Set(state.citizenRecords.map((citizen) => citizen.district).filter(Boolean))];
-  const recentAlerts = [...(state.citizenAlerts || [])].slice(0, 40);
+  const citizenFilter = String(params?.citizen || "").trim();
+  const typeFilter = String(params?.type || "").trim();
+  const statusFilter = String(params?.status || "").trim();
+  const recentAlerts = [...(state.citizenAlerts || [])]
+    .filter((alert) => !citizenFilter || alert.citizenId === citizenFilter)
+    .filter((alert) => !typeFilter || alert.type === typeFilter)
+    .filter((alert) => !statusFilter || (alert.status || "open") === statusFilter || (statusFilter === "unread" && !alert.readByCitizen))
+    .slice(0, 80);
 
   return (
     <SiteLayout>
@@ -69,6 +76,7 @@ export default async function CitizenAlertsPage({ searchParams }) {
           </div>
 
           <form action="/government-access/citizen-alerts/action" className="public-application-form" method="post">
+            <input name="intent" type="hidden" value="issue" />
             <div className="public-application-grid public-application-grid--three">
               <label className="public-application-field">
                 <span>Target mode</span>
@@ -155,16 +163,62 @@ export default async function CitizenAlertsPage({ searchParams }) {
         <section className="state-section scroll-fade">
           <p className="eyebrow">Alert Ledger</p>
           <h2>Recent Citizen Alerts</h2>
+          <form action="/government-access/citizen-alerts" className="public-application-form" method="get">
+            <div className="public-application-grid public-application-grid--three">
+              <label className="public-application-field">
+                <span>Citizen</span>
+                <select defaultValue={citizenFilter} name="citizen">
+                  <option value="">All citizens</option>
+                  {state.citizenRecords.map((citizen) => (
+                    <option key={citizen.id} value={citizen.id}>{citizen.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="public-application-field">
+                <span>Type</span>
+                <select defaultValue={typeFilter} name="type">
+                  <option value="">All types</option>
+                  {citizenAlertTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </label>
+              <label className="public-application-field">
+                <span>Status</span>
+                <select defaultValue={statusFilter} name="status">
+                  <option value="">All statuses</option>
+                  <option value="open">Open</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="unread">Unread</option>
+                </select>
+              </label>
+            </div>
+            <button className="button" type="submit">Filter</button>
+          </form>
           <div className="government-audit-list">
             {recentAlerts.length ? recentAlerts.map((alert) => (
               <article className={`government-audit-row government-audit-row--${alertSeverityClass(alert.type)}`} key={alert.id}>
                 <span>{alert.createdAt}</span>
                 <strong>{alert.type} / {alert.citizenName}</strong>
                 <p>
-                  {alert.issuingAuthority} / {alert.actionTaken}
+                  {alert.issuingAuthority} / {alert.actionTaken} / {alert.status || "open"} / {alert.readByCitizen ? "read" : "unread"}
                   {alert.amount ? ` / ${formatCredits(alert.amount)}` : ""}
                   {alert.discordDeliveryRequested ? ` / Discord: ${alert.discordDeliveryStatus}` : " / Website only"}
                 </p>
+                <p>
+                  <Link href={`/government-access/users?query=${encodeURIComponent(alert.citizenId)}`}>Citizen profile</Link>
+                  {alert.transactionId || alert.linkedRecordId || alert.caseId ? ` / Linked: ${alert.transactionId || alert.linkedRecordId || alert.caseId}` : ""}
+                </p>
+                <div className="citizen-alert-card__actions">
+                  <form action="/government-access/citizen-alerts/action" method="post">
+                    <input name="intent" type="hidden" value="resend-discord" />
+                    <input name="alertId" type="hidden" value={alert.id} />
+                    <button className="button" type="submit">Resend DM</button>
+                  </form>
+                  <form action="/government-access/citizen-alerts/action" method="post">
+                    <input name="intent" type="hidden" value="resolve" />
+                    <input name="alertId" type="hidden" value={alert.id} />
+                    <button className="button" type="submit">Mark Resolved</button>
+                  </form>
+                </div>
               </article>
             )) : <p className="court-empty">No citizen alerts recorded.</p>}
           </div>
@@ -179,4 +233,3 @@ function alertSeverityClass(type) {
   if (["Fine", "Tax Notice", "Court Notice"].includes(type)) return "warning";
   return "info";
 }
-

@@ -44,7 +44,7 @@ export default async function PanemCreditPage({ searchParams }) {
           {params?.error ? (
             <section className="application-notice application-notice--error">
               <strong>Account Access Required</strong>
-              <p>Enter your citizen name and private login code before opening Panem Credit.</p>
+              <p>Enter your citizen username, Discord ID, or citizen handle and password before opening Panem Credit.</p>
             </section>
           ) : null}
 
@@ -62,16 +62,12 @@ export default async function PanemCreditPage({ searchParams }) {
               <input name="intent" type="hidden" value="login" />
               <input name="returnTo" type="hidden" value="/panem-credit" />
               <label className="public-application-field">
-                <span>Citizen name or username</span>
-                <input autoComplete="username" name="citizenName" required />
-              </label>
-              <label className="public-application-field">
-                <span>Private login code</span>
-                <input autoComplete="off" name="unionSecurityId" placeholder="WPU-08-2026-0004" required />
+                <span>Username / Discord ID / Citizen handle</span>
+                <input autoComplete="username" name="citizenIdentifier" required />
               </label>
               <label className="public-application-field">
                 <span>Portal password</span>
-                <input autoComplete="current-password" name="portalPassword" type="password" />
+                <input autoComplete="current-password" name="portalPassword" required type="password" />
               </label>
               <button className="button button--solid-site" type="submit">Open Panem Credit</button>
             </form>

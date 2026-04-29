@@ -43,7 +43,7 @@ export default async function CitizenPortalPage({ searchParams }) {
                   ? "Your citizen session has expired. Please identify yourself again."
                   : params.error === "password"
                     ? "The password change failed. Check the temporary password and use at least 8 characters."
-                    : "The name, private login code, or portal password could not be verified."}
+                    : "The username, Discord ID, citizen handle, or password could not be verified."}
               </p>
             </section>
           ) : null}
@@ -60,25 +60,19 @@ export default async function CitizenPortalPage({ searchParams }) {
               <p className="eyebrow">Secure Civic Access</p>
               <h2>Identify before service.</h2>
               <p>
-                Enter your citizen name or portal username and private login code. The portal
-                will only open the matching citizen record and will record civic
-                activity against that identity for future marketplace and Panem
-                Credit services.
+                Enter your citizen username, Discord ID, or citizen handle and password.
+                Union ID and private verification codes are used for identity checks, not daily login.
               </p>
             </div>
             <form action="/citizen-portal/action" className="portal-status public-application-form citizen-login-form" method="post">
               <input name="intent" type="hidden" value="login" />
               <label className="public-application-field">
-                <span>Citizen name or username</span>
-                <input autoComplete="username" name="citizenName" required />
-              </label>
-              <label className="public-application-field">
-                <span>Private login code</span>
-                <input autoComplete="off" name="unionSecurityId" placeholder="WPU-CR-2026-ABCD" required />
+                <span>Username / Discord ID / Citizen handle</span>
+                <input autoComplete="username" name="citizenIdentifier" required />
               </label>
               <label className="public-application-field">
                 <span>Portal password</span>
-                <input autoComplete="current-password" name="portalPassword" type="password" />
+                <input autoComplete="current-password" name="portalPassword" required type="password" />
                 <small className="public-application-help">New citizens should use the temporary password sent by Discord DM.</small>
               </label>
               <button className="button button--solid-site" type="submit">Enter Citizen Portal</button>
@@ -89,8 +83,17 @@ export default async function CitizenPortalPage({ searchParams }) {
     );
   }
 
-  const profile = await hydrateCitizenProfile(record);
-  const economy = await getEconomyStore();
+  let profile;
+  let economy;
+  let alertLoadFailed = false;
+  try {
+    profile = await hydrateCitizenProfile(record);
+    economy = await getEconomyStore();
+  } catch {
+    alertLoadFailed = true;
+    profile = { record, wallet: null, requests: [], alerts: [], taxes: [], district: null };
+    economy = { raidLogs: [], inventoryItems: [], marketItems: [], stockCompanies: [] };
+  }
   const wallet = profile.wallet;
   const security = getSecurityDashboard(economy, wallet);
   const recentRaids = wallet ? economy.raidLogs.filter((raid) => raid.walletId === wallet.id).slice(0, 5) : [];
@@ -273,6 +276,7 @@ export default async function CitizenPortalPage({ searchParams }) {
             <h2>{record.name}</h2>
             <dl className="panem-ledger">
               <div><dt>Public handle</dt><dd>@{record.citizenHandle || record.portalUsername || record.userId}</dd></div>
+              <div><dt>Union Security ID</dt><dd>{record.unionSecurityId}</dd></div>
               <div><dt>Verification Code</dt><dd>{record.verificationCode}</dd></div>
               <div><dt>District</dt><dd>{record.district}</dd></div>
               <div><dt>Status</dt><dd>{record.citizenStatus}</dd></div>
@@ -361,9 +365,25 @@ export default async function CitizenPortalPage({ searchParams }) {
         <section className="state-section scroll-fade citizen-alert-center" id="citizen-alert-center">
           <p className="eyebrow">Citizen Alert Center</p>
           <h2>{unreadAlerts.length ? `${unreadAlerts.length} Unread Alert${unreadAlerts.length === 1 ? "" : "s"}` : "Alert History"}</h2>
+          {alertLoadFailed ? (
+            <section className="application-notice application-notice--error">
+              <strong>Alert records could not be loaded.</strong>
+              <p>Try again shortly or contact Citizen Services if the issue continues.</p>
+            </section>
+          ) : null}
+          {unreadAlerts.length ? (
+            <form action="/citizen-portal/action" method="post">
+              <input name="intent" type="hidden" value="mark_all_alerts_read" />
+              <button className="button" type="submit">Mark All Read</button>
+            </form>
+          ) : null}
           <div className="government-user-list">
             {alerts.length ? alerts.map((alert) => (
-              <article className={`panel citizen-alert-card citizen-alert-card--${alert.readByCitizen ? "read" : "unread"}`} key={alert.id}>
+              <article
+                className={`panel citizen-alert-card citizen-alert-card--${alert.readByCitizen ? "read" : "unread"}${params?.alert === alert.id ? " citizen-alert-card--selected" : ""}`}
+                id={`citizen-alert-${alert.id}`}
+                key={alert.id}
+              >
                 <div className="panel__header">
                   <div>
                     <p className="eyebrow">{alert.type}</p>
@@ -373,15 +393,28 @@ export default async function CitizenPortalPage({ searchParams }) {
                 </div>
                 <p>{alert.message}</p>
                 <dl className="panem-ledger">
+                  <div><dt>Status</dt><dd>{alert.status || "open"}</dd></div>
+                  <div><dt>Severity</dt><dd>{alert.severity || "standard"}</dd></div>
                   <div><dt>Date / time</dt><dd>{alert.createdAt}</dd></div>
                   <div><dt>Action taken</dt><dd>{alert.actionTaken}</dd></div>
                   <div><dt>Amount</dt><dd>{alert.amount ? formatCredits(alert.amount) : "None"}</dd></div>
                   <div><dt>Linked record</dt><dd>{alert.transactionId || alert.linkedRecordId || alert.caseId || "None"}</dd></div>
                 </dl>
-                {alert.appealEnabled ? (
+                {alert.appealEnabled || !alert.readByCitizen ? (
                   <div className="citizen-alert-card__actions">
+                    {!alert.readByCitizen ? (
+                      <form action="/citizen-portal/action" method="post">
+                        <input name="intent" type="hidden" value="mark_alert_read" />
+                        <input name="alertId" type="hidden" value={alert.id} />
+                        <button className="button" type="submit">Mark Read</button>
+                      </form>
+                    ) : null}
+                    {alert.appealEnabled ? (
+                      <>
                     <Link className="button" href="#citizen-request-form">Submit Appeal</Link>
                     <Link className="button" href="/supreme-court">Court Petition</Link>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </article>

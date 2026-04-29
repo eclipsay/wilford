@@ -10,6 +10,7 @@ import {
   logoutCitizen,
   recordCitizenActivity
 } from "../../../lib/citizen-state";
+import { markCitizenAlertRead } from "../../../lib/citizen-alerts";
 import { assertTrustedPostOrigin } from "../../../lib/government-auth";
 
 function redirectTo(request, path) {
@@ -26,8 +27,7 @@ export const POST = safeAction("citizen-portal/action", "/citizen-portal", async
 
   if (intent === "login") {
     const result = await loginCitizen(
-      formData.get("citizenName"),
-      formData.get("unionSecurityId"),
+      formData.get("citizenIdentifier"),
       formData.get("portalPassword")
     );
     const returnTo = String(formData.get("returnTo") || "/citizen-portal").trim();
@@ -52,6 +52,15 @@ export const POST = safeAction("citizen-portal/action", "/citizen-portal", async
       formData.get("newPassword")
     );
     return redirectTo(request, result.ok ? "/citizen-portal?saved=password" : "/citizen-portal?error=password");
+  }
+
+  if (intent === "mark_alert_read" || intent === "mark_all_alerts_read") {
+    await markCitizenAlertRead({
+      citizenId: citizen.id,
+      alertId: String(formData.get("alertId") || "").trim(),
+      all: intent === "mark_all_alerts_read"
+    });
+    return redirectTo(request, "/citizen-portal?saved=alert-read#citizen-alert-center");
   }
 
   if (intent === "work_permit") {

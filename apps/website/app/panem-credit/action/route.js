@@ -7,6 +7,7 @@ import {
   findCitizenForTransfer,
   recordCitizenActivity
 } from "../../../lib/citizen-state";
+import { createCitizenAlert } from "../../../lib/citizen-alerts";
 import {
   buyMarketItem,
   buyPrestigeItem,
@@ -63,6 +64,29 @@ export const POST = safeAction("panem-credit/action", "/panem-credit", async fun
     });
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "panem credit transfer", `${recipient?.citizen?.citizenHandle ? `@${recipient.citizen.citizenHandle}` : recipient?.citizen?.name || recipient?.wallet?.displayName || "Unknown recipient"} / ${amount || 0} PC`);
+      await createCitizenAlert({
+        citizenId: recipient?.citizen?.id || "",
+        walletId: recipient?.wallet?.id || "",
+        type: "General Notice",
+        issuingAuthority: "Ministry of Credit & Records",
+        message: `Payment received: ${amount || 0} PC from ${citizen.name}.`,
+        actionTaken: "Payment received",
+        amount,
+        linkedRecordType: "panem_credit_transaction",
+        transactionId: result.store?.transactions?.[0]?.id || ""
+      }).catch(() => null);
+      if (taxAmount) {
+        await createCitizenAlert({
+          citizenId: citizen.id,
+          type: "Tax Notice",
+          issuingAuthority: "Ministry of Credit & Records",
+          message: `Trade tax applied to your payment: ${taxAmount} PC.`,
+          actionTaken: "Transfer tax applied",
+          amount: taxAmount,
+          linkedRecordType: "panem_credit_transaction",
+          transactionId: result.store?.transactions?.[0]?.id || ""
+        }).catch(() => null);
+      }
     }
     return redirectTo(request, `/panem-credit?${result.ok ? "saved=transfer" : `error=${result.reason || "transfer"}`}`);
   }

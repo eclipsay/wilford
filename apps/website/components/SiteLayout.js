@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { brand } from "@wilford/shared";
 import { NewsTicker } from "./NewsTicker";
+import { getCitizenState, getCurrentCitizen } from "../lib/citizen-state";
 
 const stateNavigation = [
   { label: "The Chairman", href: "/chairman" },
@@ -20,6 +21,26 @@ const stateNavigation = [
 
 export async function SiteLayout({ children }) {
   const panelUrl = "https://panel.wilfordindustries.org/";
+  const citizen = await getCurrentCitizen();
+  let recentAlerts = [];
+  let unreadCount = 0;
+
+  if (citizen) {
+    try {
+      const state = await getCitizenState();
+      recentAlerts = (state.citizenAlerts || [])
+        .filter((alert) => alert.citizenId === citizen.id)
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        .slice(0, 8);
+      unreadCount = recentAlerts.filter((alert) => !alert.readByCitizen).length;
+      if (recentAlerts.length < (state.citizenAlerts || []).filter((alert) => alert.citizenId === citizen.id && !alert.readByCitizen).length) {
+        unreadCount = (state.citizenAlerts || []).filter((alert) => alert.citizenId === citizen.id && !alert.readByCitizen).length;
+      }
+    } catch {
+      recentAlerts = [];
+      unreadCount = 0;
+    }
+  }
 
   return (
     <div className="site-shell">
@@ -51,6 +72,47 @@ export async function SiteLayout({ children }) {
             </Link>
           ))}
         </nav>
+
+        <details className={`notification-menu${unreadCount ? " notification-menu--active" : ""}`}>
+          <summary aria-label={`Citizen notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}>
+            <span className="notification-menu__icon" aria-hidden="true">🔔</span>
+            {unreadCount > 0 ? <span className="notification-menu__badge">{unreadCount}</span> : null}
+          </summary>
+          <section className="notification-menu__panel" aria-label="Recent notifications">
+            <div className="notification-menu__header">
+              <strong>Notifications</strong>
+              {citizen && unreadCount > 0 ? (
+                <form action="/citizen-portal/action" method="post">
+                  <input name="intent" type="hidden" value="mark_all_alerts_read" />
+                  <button type="submit">Mark all read</button>
+                </form>
+              ) : null}
+            </div>
+            {citizen ? (
+              <div className="notification-menu__list">
+                {recentAlerts.length ? recentAlerts.map((alert) => (
+                  <Link
+                    className={`notification-menu__item${alert.readByCitizen ? "" : " notification-menu__item--unread"}`}
+                    href={`/citizen-portal/alerts/${encodeURIComponent(alert.id)}`}
+                    key={alert.id}
+                  >
+                    <span className="notification-menu__type" aria-hidden="true">{iconForAlert(alert.type)}</span>
+                    <span>
+                      <strong>{alert.type || "Official Notice"}</strong>
+                      <small>{alert.message || alert.actionTaken || "Official notice issued."}</small>
+                      <em>{formatAlertTime(alert.createdAt)}</em>
+                    </span>
+                  </Link>
+                )) : (
+                  <p className="notification-menu__empty">No citizen alerts recorded.</p>
+                )}
+              </div>
+            ) : (
+              <p className="notification-menu__empty">Enter the Citizen Portal to view notifications.</p>
+            )}
+            <Link className="notification-menu__all" href="/citizen-portal#citizen-alert-center">View All Alerts</Link>
+          </section>
+        </details>
 
         <a
           className="button admin-portal-button"
@@ -93,4 +155,23 @@ export async function SiteLayout({ children }) {
       </footer>
     </div>
   );
+}
+
+function iconForAlert(type = "") {
+  if (/mss|wallet|raid|emergency/i.test(type)) return "!";
+  if (/court|fine|tax/i.test(type)) return "§";
+  if (/market|stock/i.test(type)) return "$";
+  return "•";
+}
+
+function formatAlertTime(value = "") {
+  if (!value) return "Unknown time";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }

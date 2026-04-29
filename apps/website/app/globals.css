@@ -185,6 +185,179 @@ h3 {
   box-shadow: 0 0 28px rgba(243, 204, 138, 0.24), inset 0 0 0 1px rgba(243, 204, 138, 0.14);
 }
 
+.notification-menu {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: 2px;
+}
+
+.notification-menu summary {
+  position: relative;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(243, 204, 138, 0.58);
+  border-radius: 50%;
+  color: var(--gold-bright);
+  background:
+    radial-gradient(circle at 50% 20%, rgba(243, 204, 138, 0.18), transparent 52%),
+    rgba(17, 8, 6, 0.74);
+  cursor: pointer;
+  list-style: none;
+  box-shadow: inset 0 0 0 1px rgba(243, 204, 138, 0.08);
+}
+
+.notification-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.notification-menu summary:hover,
+.notification-menu summary:focus-visible,
+.notification-menu[open] summary {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 22px rgba(243, 204, 138, 0.2), inset 0 0 0 1px rgba(243, 204, 138, 0.12);
+}
+
+.notification-menu__icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.notification-menu__badge {
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 224, 183, 0.72);
+  border-radius: 999px;
+  color: #fff4dc;
+  background: linear-gradient(180deg, #d42e27, #7b0e0a);
+  font-size: 0.72rem;
+  font-weight: 800;
+  box-shadow: 0 0 18px rgba(212, 46, 39, 0.48);
+}
+
+.notification-menu__panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 30;
+  width: min(360px, calc(100vw - 28px));
+  padding: 14px;
+  border: 1px solid rgba(243, 204, 138, 0.42);
+  background:
+    linear-gradient(180deg, rgba(35, 11, 9, 0.98), rgba(9, 5, 5, 0.98)),
+    var(--panel);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.45), 0 0 26px rgba(211, 161, 73, 0.12);
+}
+
+.notification-menu__header,
+.notification-menu__item,
+.notification-menu__all {
+  display: flex;
+  align-items: center;
+}
+
+.notification-menu__header {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--gold-bright);
+  text-transform: uppercase;
+}
+
+.notification-menu__header button {
+  border: 0;
+  color: var(--gold);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.notification-menu__list {
+  display: grid;
+  gap: 8px;
+  max-height: 430px;
+  overflow: auto;
+}
+
+.notification-menu__item {
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(243, 204, 138, 0.18);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.notification-menu__item--unread {
+  border-color: rgba(216, 61, 53, 0.64);
+  background:
+    linear-gradient(90deg, rgba(216, 61, 53, 0.16), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 3px 0 0 rgba(216, 61, 53, 0.9), 0 0 20px rgba(216, 61, 53, 0.08);
+}
+
+.notification-menu__type {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(243, 204, 138, 0.38);
+  border-radius: 50%;
+  color: var(--gold-bright);
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 0.84rem;
+}
+
+.notification-menu__item span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.notification-menu__item strong {
+  color: var(--gold-bright);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.notification-menu__item small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.notification-menu__item em,
+.notification-menu__empty {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-style: normal;
+}
+
+.notification-menu__empty {
+  margin: 8px 0;
+}
+
+.notification-menu__all {
+  justify-content: center;
+  min-height: 38px;
+  margin-top: 10px;
+  border: 1px solid rgba(243, 204, 138, 0.34);
+  color: var(--gold-bright);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
 .button--active {
   background: rgba(67, 18, 14, 0.96);
   border-color: var(--gold);
@@ -6720,6 +6893,11 @@ body {
     radial-gradient(circle at 86% 0%, rgba(243, 204, 138, 0.14), transparent 34%),
     linear-gradient(180deg, rgba(94, 14, 16, 0.62), rgba(6, 4, 4, 0.98)),
     rgba(10, 4, 4, 0.96);
+}
+
+.citizen-alert-card--selected {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 34px rgba(243, 204, 138, 0.22);
 }
 
 .citizen-alert-card__actions {

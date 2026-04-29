@@ -48,6 +48,24 @@ export function filterAlertsForCitizen(alerts = [], citizen) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
+export function findCitizenForAlert(state, selector = {}) {
+  const values = [
+    selector.citizenId,
+    selector.walletId,
+    selector.discordId,
+    selector.userId,
+    selector.unionSecurityId
+  ].map((value) => cleanText(value, 180).toLowerCase()).filter(Boolean);
+
+  if (!values.length) return null;
+
+  return (state.citizenRecords || []).find((citizen) =>
+    [citizen.id, citizen.walletId, citizen.discordId, citizen.userId, citizen.unionSecurityId]
+      .map((value) => cleanText(value, 180).toLowerCase())
+      .some((value) => values.includes(value))
+  ) || null;
+}
+
 export function canIssueAlertAction(user, action = "none") {
   const role = user?.role || "";
   if (["Supreme Chairman", "Executive Director", "Executive Command"].includes(role)) return true;
@@ -152,30 +170,26 @@ export async function issueCitizenAlerts(fields, actor) {
     };
     createdAlerts.push(alert);
 
-    if (discordDeliveryRequested && citizen.discordId) {
-      try {
-        await createDiscordBroadcast({
-          type: alertSeverity(type, enforcementAction) === "critical" ? "emergency" : "news",
-          distribution: "specific_user",
-          targetDiscordId: citizen.discordId,
-          title: alertTitle(alert),
-          body: `${message}\n\nAction: ${actionTaken}${amount ? `\nAmount: ${amount} PC` : ""}`,
-          requestedBy: actorName,
-          requestedRole: actor?.role || "Government",
-          linkedType: alert.linkedRecordType || "citizen_alert",
-          linkedId: alert.id,
-          articleUrl: "/citizen-portal"
-        });
-        alert.discordDeliveryStatus = "queued";
-      } catch (error) {
-        alert.discordDeliveryStatus = "failed";
-        alert.discordDeliveryError = error instanceof Error ? error.message : "Discord delivery failed.";
-      }
-    }
   }
 
   state.citizenAlerts = [...createdAlerts, ...(state.citizenAlerts || [])].slice(0, 1000);
   await saveCitizenState(state);
+
+  for (const alert of createdAlerts.filter((entry) => entry.discordDeliveryRequested)) {
+    const citizen = targets.find((target) => target.id === alert.citizenId);
+    const delivered = await queueDiscordAlertDelivery(alert, citizen, actor);
+    Object.assign(alert, delivered, { updatedAt: new Date().toISOString() });
+  }
+
+  if (createdAlerts.some((alert) => alert.discordDeliveryRequested)) {
+    const deliveredState = await getCitizenState();
+    deliveredState.citizenAlerts = (deliveredState.citizenAlerts || []).map((existing) => {
+      const delivered = createdAlerts.find((alert) => alert.id === existing.id);
+      return delivered ? { ...existing, ...delivered } : existing;
+    });
+    await saveCitizenState(deliveredState);
+  }
+
   await addAuditEvent(
     actorName,
     enforcementAction === "none" ? "citizen alert issued" : `citizen enforcement: ${enforcementAction}`,
@@ -184,4 +198,124 @@ export async function issueCitizenAlerts(fields, actor) {
   );
 
   return { ok: true, alerts: createdAlerts, targets };
+}
+
+export async function queueDiscordAlertDelivery(alert, citizen, actor = {}) {
+  if (!citizen?.discordId) {
+    return { ...alert, discordDeliveryStatus: "no_discord_id", discordDeliveryError: "" };
+  }
+
+  try {
+    await createDiscordBroadcast({
+      type: alertSeverity(alert.type, alert.enforcementAction) === "critical" ? "emergency" : "news",
+      distribution: "specific_user",
+      targetDiscordId: citizen.discordId,
+      title: alertTitle(alert),
+      body: `${alert.message || "Official notice issued."}\n\nAction: ${alert.actionTaken || "Notice issued"}${alert.amount ? `\nAmount: ${alert.amount} PC` : ""}`,
+      requestedBy: actor?.displayName || actor?.username || alert.createdBy || "system",
+      requestedRole: actor?.role || alert.issuingAuthority || "Government",
+      linkedType: alert.linkedRecordType || "citizen_alert",
+      linkedId: alert.id,
+      articleUrl: "/citizen-portal"
+    });
+    return { ...alert, discordDeliveryStatus: "queued", discordDeliveryError: "" };
+  } catch (error) {
+    return {
+      ...alert,
+      discordDeliveryStatus: "failed",
+      discordDeliveryError: error instanceof Error ? error.message : "Discord delivery failed."
+    };
+  }
+}
+
+export async function createCitizenAlert(fields = {}, actor = {}) {
+  const state = await getCitizenState();
+  const citizen = findCitizenForAlert(state, fields);
+  if (!citizen) return { ok: false, reason: "citizen-not-found", alert: null };
+
+  const type = citizenAlertTypes.includes(fields.type) ? fields.type : "General Notice";
+  const enforcementAction = citizenEnforcementActions.includes(fields.enforcementAction)
+    ? fields.enforcementAction
+    : "none";
+  const now = new Date().toISOString();
+  const actorName = actor?.displayName || actor?.username || fields.createdBy || "system";
+  let alert = {
+    id: cleanText(fields.id || createId("alert"), 120),
+    citizenId: citizen.id,
+    citizenName: citizen.name,
+    district: citizen.district,
+    type,
+    issuingAuthority: citizenAlertAuthorities.includes(fields.issuingAuthority)
+      ? fields.issuingAuthority
+      : cleanText(fields.issuingAuthority || "Government", 160),
+    severity: cleanText(fields.severity || alertSeverity(type, enforcementAction), 40),
+    category: cleanText(fields.category || type, 80),
+    message: cleanText(fields.message || fields.reason || "Official notice issued.", 1600),
+    enforcementAction,
+    actionTaken: cleanText(fields.actionTaken || (enforcementAction === "none" ? "Notice issued" : enforcementAction.replace(/_/g, " ")), 500),
+    amount: Math.max(0, Number(fields.amount || 0)),
+    linkedRecordType: cleanText(fields.linkedRecordType || "", 80),
+    linkedRecordId: cleanText(fields.linkedRecordId || "", 160),
+    transactionId: cleanText(fields.transactionId || "", 160),
+    caseId: cleanText(fields.caseId || "", 160),
+    appealEnabled: fields.appealEnabled !== false,
+    status: cleanText(fields.status || "open", 80),
+    websiteOnly: !fields.discordDeliveryRequested,
+    discordDeliveryRequested: Boolean(fields.discordDeliveryRequested),
+    discordDeliveryStatus: fields.discordDeliveryRequested ? "pending" : "not_requested",
+    discordDeliveryError: "",
+    readByCitizen: false,
+    createdBy: actorName,
+    createdAt: fields.createdAt || now,
+    updatedAt: now
+  };
+
+  state.citizenAlerts = [alert, ...(state.citizenAlerts || []).filter((entry) => entry.id !== alert.id)].slice(0, 1000);
+  await saveCitizenState(state);
+
+  if (alert.discordDeliveryRequested) {
+    alert = await queueDiscordAlertDelivery(alert, citizen, actor);
+    const latestState = await getCitizenState();
+    latestState.citizenAlerts = (latestState.citizenAlerts || []).map((entry) =>
+      entry.id === alert.id ? { ...entry, ...alert, updatedAt: new Date().toISOString() } : entry
+    );
+    await saveCitizenState(latestState);
+  }
+
+  return { ok: true, alert, citizen };
+}
+
+export async function updateCitizenAlert(id, fields = {}) {
+  const state = await getCitizenState();
+  let updated = null;
+  state.citizenAlerts = (state.citizenAlerts || []).map((alert) => {
+    if (alert.id !== id) return alert;
+    updated = { ...alert, ...fields, updatedAt: new Date().toISOString() };
+    return updated;
+  });
+  if (!updated) return { ok: false, reason: "alert-not-found" };
+  await saveCitizenState(state);
+  return { ok: true, alert: updated };
+}
+
+export async function markCitizenAlertRead({ citizenId, alertId = "", all = false }) {
+  const state = await getCitizenState();
+  let changed = 0;
+  state.citizenAlerts = (state.citizenAlerts || []).map((alert) => {
+    if (alert.citizenId !== citizenId || (!all && alert.id !== alertId)) return alert;
+    if (alert.readByCitizen) return alert;
+    changed += 1;
+    return { ...alert, readByCitizen: true, readAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  });
+  if (changed) await saveCitizenState(state);
+  return { ok: true, changed };
+}
+
+export async function resendCitizenAlertDiscord(alertId, actor = {}) {
+  const state = await getCitizenState();
+  const alert = (state.citizenAlerts || []).find((entry) => entry.id === alertId);
+  const citizen = alert ? state.citizenRecords.find((record) => record.id === alert.citizenId) : null;
+  if (!alert || !citizen) return { ok: false, reason: "alert-not-found" };
+  const updated = await queueDiscordAlertDelivery({ ...alert, discordDeliveryRequested: true }, citizen, actor);
+  return updateCitizenAlert(alert.id, updated);
 }

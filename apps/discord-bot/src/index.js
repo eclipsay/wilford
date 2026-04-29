@@ -456,6 +456,8 @@ function createCitizenAlertRecord(citizen, fields = {}) {
     enforcementAction: action,
     actionTaken: String(fields.actionTaken || (action === "none" ? "Notice issued" : action.replace(/_/g, " "))).trim(),
     amount: Math.max(0, Number(fields.amount || 0)),
+    severity: String(fields.severity || (["Emergency Taxation", "Wallet Freeze", "MSS Warning"].includes(type) ? "critical" : type === "Fine" ? "high" : "standard")).trim(),
+    category: String(fields.category || type).trim(),
     linkedRecordType: String(fields.linkedRecordType || "").trim(),
     linkedRecordId: String(fields.linkedRecordId || "").trim(),
     transactionId: String(fields.transactionId || "").trim(),
@@ -465,6 +467,10 @@ function createCitizenAlertRecord(citizen, fields = {}) {
     discordDeliveryStatus: fields.discordDeliveryRequested ? "pending" : "not_requested",
     discordDeliveryError: "",
     readByCitizen: false,
+    status: String(fields.status || "open").trim(),
+    readAt: "",
+    resolvedAt: "",
+    resolvedBy: "",
     createdBy: String(fields.createdBy || "discord-bot").trim(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -497,6 +503,48 @@ async function deliverCitizenAlertDm(userId, alert) {
     return { status: "delivered", error: "" };
   } catch (error) {
     return { status: "failed", error: error instanceof Error ? error.message : "DM failed." };
+  }
+}
+
+async function saveCitizenAlertThenDm(governmentStore, citizen, alert, userId = "") {
+  governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || []).filter((entry) => entry.id !== alert.id)].slice(0, 1000);
+  await writeGovernmentAccessStore(governmentStore);
+
+  if (!alert.discordDeliveryRequested) {
+    return { alert, delivery: { status: "not_requested", error: "" } };
+  }
+
+  const delivery = await deliverCitizenAlertDm(userId || citizen?.discordId, alert);
+  alert.discordDeliveryStatus = delivery.status;
+  alert.discordDeliveryError = delivery.error;
+  alert.updatedAt = new Date().toISOString();
+  governmentStore.citizenAlerts = (governmentStore.citizenAlerts || []).map((entry) =>
+    entry.id === alert.id ? alert : entry
+  );
+  await writeGovernmentAccessStore(governmentStore);
+  return { alert, delivery };
+}
+
+async function updateLinkedCitizenAlertDelivery(broadcast, status, error = "") {
+  if (broadcast?.linkedType !== "citizen_alert" || !broadcast.linkedId) {
+    return;
+  }
+  try {
+    const governmentStore = await readGovernmentAccessStore();
+    let changed = false;
+    governmentStore.citizenAlerts = (governmentStore.citizenAlerts || []).map((alert) => {
+      if (alert.id !== broadcast.linkedId) return alert;
+      changed = true;
+      return {
+        ...alert,
+        discordDeliveryStatus: status,
+        discordDeliveryError: error,
+        updatedAt: new Date().toISOString()
+      };
+    });
+    if (changed) await writeGovernmentAccessStore(governmentStore);
+  } catch (updateError) {
+    console.error("[citizen-alert-delivery-sync]", updateError);
   }
 }
 
@@ -2380,7 +2428,7 @@ async function handleEconomySlashCommand(interaction) {
   if (name === "alerts") {
     const rows = citizenAlerts(governmentStore, identity.citizen.id)
       .slice(0, 10)
-      .map((alert) => `${alert.id}: ${alert.type} - ${alert.actionTaken || alert.message}`)
+      .map((alert) => `${alert.id}: ${alert.readByCitizen ? "read" : "unread"} / ${alert.type} / ${alert.createdAt || "unknown date"} - ${alert.actionTaken || alert.message}`)
       .join("\n") || "No citizen alerts recorded.";
     await replyEconomy(interaction, ministryEmbed("Citizen Alerts", rows), true, economyQuickLinks("portal"));
     return true;
@@ -2393,6 +2441,10 @@ async function handleEconomySlashCommand(interaction) {
       await replyEconomy(interaction, ministryEmbed("Alert Not Found", "That alert is not attached to your citizen record."), true);
       return true;
     }
+    alert.readByCitizen = true;
+    alert.readAt = new Date().toISOString();
+    alert.updatedAt = alert.readAt;
+    await writeGovernmentAccessStore(governmentStore);
     await replyEconomy(interaction, citizenAlertEmbed(alert, true), true, economyQuickLinks("portal"));
     return true;
   }
@@ -3036,7 +3088,7 @@ async function handleEconomySlashCommand(interaction) {
     for (const log of result.logs) {
       const citizen = (governmentStore.citizenRecords || []).find((record) => record.walletId === log.walletId);
       if (citizen?.discordId) {
-        await deliverCitizenAlertDm(citizen.discordId, createCitizenAlertRecord(citizen, {
+        await saveCitizenAlertThenDm(governmentStore, citizen, createCitizenAlertRecord(citizen, {
           type: "MSS Warning",
           issuingAuthority: "Ministry of State Security",
           message: `MSS raid completed. ${log.seizedItems.length} item type(s) seized. Fine: ${formatCredits(log.fineAmount || 0)}.`,
@@ -3047,7 +3099,7 @@ async function handleEconomySlashCommand(interaction) {
           linkedRecordId: log.raidId,
           createdBy: interaction.user.id,
           discordDeliveryRequested: true
-        }));
+        }), citizen.discordId);
       }
     }
     await replyEconomy(interaction, ministryEmbed("MSS Raid Initiated", `Target count: ${result.logs.length}\nReason: ${raidReason}\nOutcome: ${result.logs.reduce((sum, log) => sum + log.seizedItems.length, 0)} item type(s) seized.`));
@@ -3086,10 +3138,7 @@ async function handleEconomySlashCommand(interaction) {
       discordDeliveryRequested: true,
       createdBy: interaction.user.id
     });
-    const delivery = await deliverCitizenAlertDm(target.id, alert);
-    alert.discordDeliveryStatus = delivery.status;
-    alert.discordDeliveryError = delivery.error;
-    governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
+    const { delivery } = await saveCitizenAlertThenDm(governmentStore, targetIdentity.citizen, alert, target.id);
     governmentStore.governmentAuditLog = [{ id: createId("audit"), at: new Date().toISOString(), actor: interaction.user.id, action: "discord citizen alert", detail: `${type} to ${target.tag}`, status: delivery.status === "failed" ? "failed" : "success" }, ...(governmentStore.governmentAuditLog || [])].slice(0, 300);
     await writeGovernmentAccessStore(governmentStore);
     await replyEconomy(interaction, ministryEmbed("Citizen Alert Sent", `${type} issued to ${target.tag}.\nDiscord DM: ${delivery.status}`), true);
@@ -3114,10 +3163,7 @@ async function handleEconomySlashCommand(interaction) {
       discordDeliveryRequested: true,
       createdBy: interaction.user.id
     });
-    const delivery = await deliverCitizenAlertDm(target.id, alert);
-    alert.discordDeliveryStatus = delivery.status;
-    alert.discordDeliveryError = delivery.error;
-    governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
+    const { delivery } = await saveCitizenAlertThenDm(governmentStore, targetIdentity.citizen, alert, target.id);
     governmentStore.governmentAuditLog = [{ id: createId("audit"), at: new Date().toISOString(), actor: interaction.user.id, action: "discord emergency taxation", detail: `${formatCredits(deduction)} from ${target.tag}: ${reasonText}`, status: delivery.status === "failed" ? "failed" : "success" }, ...(governmentStore.governmentAuditLog || [])].slice(0, 300);
     await Promise.all([writeEconomyStore(economy), writeGovernmentAccessStore(governmentStore)]);
     await replyEconomy(interaction, ministryEmbed("Emergency Taxation Issued", `${formatCredits(deduction)} deducted from ${target.tag}.\nDiscord DM: ${delivery.status}`));
@@ -3129,11 +3175,7 @@ async function handleEconomySlashCommand(interaction) {
     pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: targetWallet.id, amount, type: "grant", reason, createdBy: interaction.user.id });
     if (targetIdentity) {
       const alert = createCitizenAlertRecord(targetIdentity.citizen, { type: "General Notice", message: `${formatCredits(amount)} grant payment issued. Reason: ${reason}`, issuingAuthority: "Ministry of Credit & Records", enforcementAction: "grant_payment", actionTaken: `${formatCredits(amount)} paid`, amount, transactionId: economy.transactions?.[0]?.id || "", discordDeliveryRequested: true, createdBy: interaction.user.id });
-      const delivery = await deliverCitizenAlertDm(target.id, alert);
-      alert.discordDeliveryStatus = delivery.status;
-      alert.discordDeliveryError = delivery.error;
-      governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
-      await writeGovernmentAccessStore(governmentStore);
+      await saveCitizenAlertThenDm(governmentStore, targetIdentity.citizen, alert, target.id);
     }
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Grant Issued", `${formatCredits(amount)} issued to ${target.tag}.`));
@@ -3146,11 +3188,7 @@ async function handleEconomySlashCommand(interaction) {
     pushEconomyTransaction(economy, { fromWalletId: targetWallet.id, toWalletId: "treasury", amount, type: "fine", reason, createdBy: interaction.user.id });
     if (targetIdentity) {
       const alert = createCitizenAlertRecord(targetIdentity.citizen, { type: "Fine", message: `${formatCredits(amount)} fine issued. Reason: ${reason}`, issuingAuthority: "Ministry of Credit & Records", enforcementAction: "fine", actionTaken: `${formatCredits(amount)} deducted`, amount, transactionId: economy.transactions?.[0]?.id || "", discordDeliveryRequested: true, createdBy: interaction.user.id });
-      const delivery = await deliverCitizenAlertDm(target.id, alert);
-      alert.discordDeliveryStatus = delivery.status;
-      alert.discordDeliveryError = delivery.error;
-      governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
-      await writeGovernmentAccessStore(governmentStore);
+      await saveCitizenAlertThenDm(governmentStore, targetIdentity.citizen, alert, target.id);
     }
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Fine Issued", `${formatCredits(amount)} fined from ${target.tag}.`));
@@ -3162,11 +3200,7 @@ async function handleEconomySlashCommand(interaction) {
     pushEconomyTransaction(economy, { fromWalletId: targetWallet.id, toWalletId: targetWallet.id, amount: 0, type: name, reason, createdBy: interaction.user.id });
     if (targetIdentity) {
       const alert = createCitizenAlertRecord(targetIdentity.citizen, { type: "Wallet Freeze", message: `Wallet ${targetWallet.status}. Reason: ${reason}`, issuingAuthority: "Ministry of State Security", enforcementAction: name === "freeze-wallet" ? "wallet_freeze" : "wallet_unfreeze", actionTaken: `Wallet ${targetWallet.status}`, transactionId: economy.transactions?.[0]?.id || "", discordDeliveryRequested: true, createdBy: interaction.user.id });
-      const delivery = await deliverCitizenAlertDm(target.id, alert);
-      alert.discordDeliveryStatus = delivery.status;
-      alert.discordDeliveryError = delivery.error;
-      governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
-      await writeGovernmentAccessStore(governmentStore);
+      await saveCitizenAlertThenDm(governmentStore, targetIdentity.citizen, alert, target.id);
     }
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Wallet Status Updated", `${target.tag} is now ${targetWallet.status}.`));
@@ -5342,6 +5376,11 @@ async function processDiscordBroadcast(broadcast) {
       ...results,
       error: status === "failed" ? "One or more broadcast deliveries failed." : ""
     });
+    await updateLinkedCitizenAlertDelivery(
+      broadcast,
+      status === "completed" ? "sent" : "failed",
+      status === "failed" ? (results.failures[0]?.error || "One or more broadcast deliveries failed.") : ""
+    );
   } catch (error) {
     await markDiscordBroadcast(broadcast.id, {
       status: "failed",
@@ -5349,6 +5388,11 @@ async function processDiscordBroadcast(broadcast) {
       ...results,
       error: error instanceof Error ? error.message : "Broadcast delivery failed."
     });
+    await updateLinkedCitizenAlertDelivery(
+      broadcast,
+      "failed",
+      error instanceof Error ? error.message : "Broadcast delivery failed."
+    );
   }
 }
 

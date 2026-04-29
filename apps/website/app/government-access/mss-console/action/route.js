@@ -13,6 +13,7 @@ import {
   mssThreatLevels,
   requiresChairmanApproval
 } from "../../../../lib/discord-broadcasts";
+import { createCitizenAlert } from "../../../../lib/citizen-alerts";
 import {
   createEnemyEntry,
   deleteEnemyEntry,
@@ -132,6 +133,18 @@ export const POST = safeAction("government-access/mss-console/action", "/governm
     if (!result.ok) {
       return redirectTo(request, `/government-access/mss-console?error=raid&detail=${encodeURIComponent(result.reason || "Raid failed: citizen record not found")}`);
     }
+    await Promise.all(result.logs.map((log) => createCitizenAlert({
+      walletId: log.walletId,
+      type: "MSS Warning",
+      issuingAuthority: "Ministry of State Security",
+      message: `MSS raid completed. ${log.seizedItems?.length || 0} item type(s) seized. Fine: ${log.fineAmount || 0} PC. Reason: ${log.reason}`,
+      enforcementAction: Number(log.fineAmount || 0) ? "asset_seizure" : "none",
+      actionTaken: `${log.seizedItems?.length || 0} item type(s) seized`,
+      amount: log.fineAmount || 0,
+      linkedRecordType: "mss_raid",
+      linkedRecordId: log.raidId,
+      discordDeliveryRequested: true
+    }, user).catch(() => null)));
     const emptyRaid = result.logs.every((log) => !log.seizedItems?.length && !Number(log.fineAmount || 0));
     return redirectTo(request, `/government-access/mss-console?raidSaved=1&count=${result.logs.length}&detail=${encodeURIComponent(emptyRaid ? "Raid completed: no contraband found" : "Raid completed")}`);
   }
@@ -200,6 +213,19 @@ export const POST = safeAction("government-access/mss-console/action", "/governm
       requestedBy: user.username,
       requestedRole: user.role
     });
+
+    if (distribution === "specific_user" && targetDiscordId) {
+      await createCitizenAlert({
+        discordId: targetDiscordId,
+        type: "MSS Warning",
+        issuingAuthority: "Ministry of State Security",
+        message: formatMssSecurityAlert({ subjectName, classification, threatLevel, reason, evidenceNotes }),
+        actionTaken: `${classification} security advisory`,
+        linkedRecordType: "mss-security-alert",
+        linkedRecordId: subjectName,
+        discordDeliveryRequested: true
+      }, user).catch(() => null);
+    }
 
     await addAuditEvent(
       user.username,

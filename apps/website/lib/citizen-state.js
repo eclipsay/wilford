@@ -433,6 +433,8 @@ function normalizeCitizenAlert(entry = {}) {
     district: cleanText(entry.district || "", 80),
     type,
     issuingAuthority: cleanText(entry.issuingAuthority || "Government", 160),
+    severity: cleanText(entry.severity || "standard", 40),
+    category: cleanText(entry.category || type, 80),
     message: cleanText(entry.message || "", 1600),
     enforcementAction: action,
     actionTaken: cleanText(entry.actionTaken || (action === "none" ? "Notice issued" : action.replace(/_/g, " ")), 500),
@@ -447,6 +449,10 @@ function normalizeCitizenAlert(entry = {}) {
     discordDeliveryStatus: cleanText(entry.discordDeliveryStatus || (entry.discordDeliveryRequested ? "pending" : "not_requested"), 80),
     discordDeliveryError: cleanText(entry.discordDeliveryError || "", 500),
     readByCitizen: Boolean(entry.readByCitizen),
+    readAt: cleanText(entry.readAt || "", 80),
+    status: cleanText(entry.status || "open", 80),
+    resolvedAt: cleanText(entry.resolvedAt || "", 80),
+    resolvedBy: cleanText(entry.resolvedBy || "", 160),
     createdBy: cleanText(entry.createdBy || "system", 160),
     createdAt: entry.createdAt || now,
     updatedAt: entry.updatedAt || entry.createdAt || now
@@ -805,16 +811,22 @@ export function findCitizenForTransfer(state, economy, selector) {
   return { citizen: null, wallet: walletMatches[0] };
 }
 
-export function findCitizenForLogin(state, name, unionSecurityId, password = "") {
-  const requestedName = normalizeLookup(name);
-  const requestedSecurityId = normalizeLookup(unionSecurityId).replace(/\s/g, "");
-  if (!requestedName || !requestedSecurityId) return null;
+export function findCitizenForLogin(state, identifier, password = "") {
+  const requestedIdentifier = normalizeLookup(identifier);
+  const requestedDiscordId = cleanText(identifier, 120).replace(/[<@!>]/g, "").trim().toLowerCase();
+  if (!requestedIdentifier || !password) return null;
 
   return state.citizenRecords.find((record) =>
-    [record.name, record.portalUsername, record.userId]
+    [
+      record.portalUsername,
+      record.userId,
+      record.citizenHandle,
+      record.discordId,
+      record.discordUsername,
+      record.name
+    ]
       .filter(Boolean)
-      .some((item) => normalizeLookup(item) === requestedName) &&
-    normalizeLookup(record.unionSecurityId).replace(/\s/g, "") === requestedSecurityId &&
+      .some((item) => normalizeLookup(item) === requestedIdentifier || normalizeLookup(item).replace(/^@+/, "") === requestedIdentifier.replace(/^@+/, "") || normalizeLookup(item) === requestedDiscordId) &&
     (!record.passwordHash || verifyPassword(password, record.passwordHash)) &&
     record.verificationStatus === "Verified" &&
     !record.lostOrStolen &&
@@ -823,9 +835,9 @@ export function findCitizenForLogin(state, name, unionSecurityId, password = "")
   ) || null;
 }
 
-export async function loginCitizen(name, unionSecurityId, password = "") {
+export async function loginCitizen(identifier, password = "") {
   const state = await getCitizenState();
-  const record = findCitizenForLogin(state, name, unionSecurityId, password);
+  const record = findCitizenForLogin(state, identifier, password);
   if (!record) return { ok: false };
 
   const store = await cookies();

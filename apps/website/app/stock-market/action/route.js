@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assertTrustedPostOrigin } from "../../../lib/government-auth";
 import { safeAction } from "../../../lib/action-routes";
 import { getCurrentCitizen, recordCitizenActivity } from "../../../lib/citizen-state";
+import { createCitizenAlert } from "../../../lib/citizen-alerts";
 import { buyStock, getEconomyStore, getWallet, sellStock, updateStockWatchlist } from "../../../lib/panem-credit";
 
 function redirectTo(request, path) {
@@ -20,12 +21,36 @@ export const POST = safeAction("stock-market/action", "/stock-market", async fun
 
   if (intent === "buy") {
     const result = await buyStock({ walletId: wallet.id, ticker: formData.get("ticker"), shares: formData.get("shares"), actor: citizen.unionSecurityId });
-    if (result.ok) await recordCitizenActivity(citizen.id, "stock purchase", `${result.shares} ${result.company.ticker}`);
+    if (result.ok) {
+      await recordCitizenActivity(citizen.id, "stock purchase", `${result.shares} ${result.company.ticker}`);
+      await createCitizenAlert({
+        citizenId: citizen.id,
+        type: "Stock Market Notice",
+        issuingAuthority: "Panem Stock Exchange",
+        message: `Stock purchase recorded: ${result.shares} ${result.company.ticker}.`,
+        actionTaken: "Stock purchase recorded",
+        amount: result.total || 0,
+        linkedRecordType: "stock_transaction",
+        transactionId: result.store?.transactions?.[0]?.id || ""
+      }).catch(() => null);
+    }
     return redirectTo(request, `/stock-market?${result.ok ? "saved=buy" : "error=buy"}`);
   }
   if (intent === "sell") {
     const result = await sellStock({ walletId: wallet.id, ticker: formData.get("ticker"), shares: formData.get("shares"), actor: citizen.unionSecurityId });
-    if (result.ok) await recordCitizenActivity(citizen.id, "stock sale", `${result.shares} ${result.company.ticker}`);
+    if (result.ok) {
+      await recordCitizenActivity(citizen.id, "stock sale", `${result.shares} ${result.company.ticker}`);
+      await createCitizenAlert({
+        citizenId: citizen.id,
+        type: "Stock Market Notice",
+        issuingAuthority: "Panem Stock Exchange",
+        message: `Stock sale recorded: ${result.shares} ${result.company.ticker}.`,
+        actionTaken: "Stock sale recorded",
+        amount: result.proceeds || 0,
+        linkedRecordType: "stock_transaction",
+        transactionId: result.store?.transactions?.[0]?.id || ""
+      }).catch(() => null);
+    }
     return redirectTo(request, `/stock-market?${result.ok ? "saved=sell" : "error=sell"}`);
   }
   if (intent === "watch") {

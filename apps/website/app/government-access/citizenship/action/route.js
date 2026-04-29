@@ -13,6 +13,7 @@ import {
   assertTrustedPostOrigin,
   requireGovernmentUser
 } from "../../../../lib/government-auth";
+import { createCitizenAlert } from "../../../../lib/citizen-alerts";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
@@ -63,6 +64,18 @@ export const POST = safeAction("government-access/citizenship/action", "/governm
         `${id} / citizen=${result?.citizenRecord?.id || "provisioned"}`,
         "success"
       );
+      if (result?.citizenRecord?.id) {
+        await createCitizenAlert({
+          citizenId: result.citizenRecord.id,
+          type: "Citizenship Notice",
+          issuingAuthority: "Citizen Services",
+          message: fields.decisionNote || "Your citizen application has been approved.",
+          actionTaken: "Application approved",
+          linkedRecordType: "citizen_application",
+          linkedRecordId: id,
+          discordDeliveryRequested: true
+        }, user).catch(() => null);
+      }
       return redirectTo(request, "/government-access/citizenship?saved=approved");
     }
 
@@ -90,6 +103,18 @@ export const POST = safeAction("government-access/citizenship/action", "/governm
         `${id} / citizen=${result?.citizenRecord?.id || "provisioned"}`,
         "success"
       );
+      if (result?.citizenRecord?.id) {
+        await createCitizenAlert({
+          citizenId: result.citizenRecord.id,
+          type: "Citizenship Notice",
+          issuingAuthority: "Citizen Services",
+          message: fields.decisionNote || "Your citizen application has been approved.",
+          actionTaken: "Application approved",
+          linkedRecordType: "citizen_application",
+          linkedRecordId: id,
+          discordDeliveryRequested: true
+        }, user).catch(() => null);
+      }
       return redirectTo(request, "/government-access/citizenship?saved=approved");
     }
 
