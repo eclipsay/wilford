@@ -19,6 +19,7 @@ const commands = {
     `cd ${appDir}`,
     "git pull",
     "pm2 restart wilford-api",
+    "pm2 restart wilford-discord-bot",
     "pm2 restart wilford-panel",
     "pm2 save"
   ].join(" && ")
@@ -32,7 +33,7 @@ Usage:
   npm.cmd run remote:panel        Run: bash deploypanel
   npm.cmd run remote:panel:full   Pull, install, build panel workspace, restart panel
   npm.cmd run remote:all          Pull and restart all PM2 processes
-  npm.cmd run remote:services     Pull, restart API + panel, and save PM2
+  npm.cmd run remote:services     Pull, restart API + Discord bot + panel, and save PM2
 
 Environment overrides:
   WILFORD_SSH_HOST=${host}
