@@ -1236,8 +1236,12 @@ export async function playGambleGame({ walletId, gameId, amount, actor = "citize
   const wallet = getWallet(store, walletId);
   const game = economyGambleDefaults.find((entry) => entry.id === gameId) || economyGambleDefaults[0];
   const bet = clampNumber(amount, game.minBet, game.maxBet);
-  if (!wallet || wallet.status !== "active" || Number(wallet.balance || 0) < bet) return { ok: false, store };
-  if (!isCooldownReady(store, wallet.id, "gamble", game.id, game.cooldownHours)) return { ok: false, store, reason: "cooldown" };
+  if (!wallet) return { ok: false, store, reason: "wallet-missing" };
+  if (wallet.status !== "active") return { ok: false, store, reason: "wallet-status" };
+  if (Number(wallet.balance || 0) < bet) return { ok: false, store, reason: "insufficient-balance", bet, game };
+  if (!isCooldownReady(store, wallet.id, "gamble", game.id, game.cooldownHours)) {
+    return { ok: false, store, reason: "gamble-cooldown", game };
+  }
   const won = Math.random() < Number(game.winChance || 0);
   const taxRate = Number(store.taxRates.gambling_winnings_tax || 0.08);
   const grossPayout = won ? Math.round(bet * Number(game.payoutMultiplier || 1)) : 0;

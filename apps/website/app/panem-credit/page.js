@@ -132,14 +132,40 @@ export default async function PanemCreditPage({ searchParams }) {
       .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))[0];
     return { district, champion };
   }).filter((entry) => entry.champion).slice(0, 6);
-  const transferRecipients = citizenState.citizenRecords
+  const citizenRecipientRows = citizenState.citizenRecords
     .filter((record) =>
       record.id !== citizen.id &&
       record.verificationStatus === "Verified" &&
       !record.lostOrStolen &&
-      getWallet(store, record.walletId || record.userId || record.discordId)
+      getWallet(store, record.walletId || record.userId || record.discordId || record.id)
     )
-    .sort((a, b) => String(a.citizenHandle || a.name).localeCompare(String(b.citizenHandle || b.name)))
+    .map((record) => {
+      const wallet = getWallet(store, record.walletId || record.userId || record.discordId || record.id);
+      return {
+        id: record.id,
+        label: record.name,
+        handle: record.citizenHandle || record.portalUsername || record.userId,
+        district: record.district,
+        walletId: wallet?.id || ""
+      };
+    });
+  const linkedWalletIds = new Set(citizenRecipientRows.map((record) => record.walletId).filter(Boolean));
+  const walletRecipientRows = store.wallets
+    .filter((wallet) => wallet.id !== selectedWallet.id && !linkedWalletIds.has(wallet.id))
+    .map((wallet) => ({
+      id: wallet.id,
+      label: wallet.displayName,
+      handle: String(wallet.citizenHandle || wallet.userId || wallet.discordUsername || wallet.displayName || "citizen")
+        .replace(/^@+/, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/^-+|-+$/g, ""),
+      district: wallet.district || "Unassigned",
+      walletId: wallet.id
+    }));
+  const transferRecipients = [...citizenRecipientRows, ...walletRecipientRows]
+    .filter((record) => record.handle)
+    .sort((a, b) => String(a.handle || a.label).localeCompare(String(b.handle || b.label)))
     .slice(0, 200);
 
   return (
@@ -171,6 +197,14 @@ export default async function PanemCreditPage({ searchParams }) {
                   ? "That work permit request could not be filed. Choose a foreign district and valid job."
                 : params.error === "restricted-job"
                   ? "This restricted role requires special government or MSS permission."
+                : params.error === "gamble-cooldown" || params.error === "cooldown"
+                  ? "That Capitol Games table is cooling down for your wallet. Try another game or return after its cooldown."
+                : params.error === "insufficient-balance"
+                  ? "Your wallet does not have enough Panem Credits for that wager."
+                : params.error === "wallet-status"
+                  ? "This wallet is not active, so wagers cannot be accepted."
+                : params.error === "wallet-missing"
+                  ? "No linked wallet could be found for this citizen session."
                 : params.error === "session"
                   ? "Your citizen banking session has expired. Please identify yourself again."
                 : "The wallet, balance, stock, or account status could not support that request."}
@@ -230,8 +264,8 @@ export default async function PanemCreditPage({ searchParams }) {
                 </label>
                 <datalist id="transfer-recipients">
                   {transferRecipients.map((record) => (
-                    <option key={record.id} value={`@${record.citizenHandle || record.portalUsername || record.userId}`}>
-                      {record.name} / {record.district}
+                    <option key={`${record.id}-${record.walletId}`} value={`@${record.handle}`}>
+                      {record.label} / {record.district}
                     </option>
                   ))}
                 </datalist>

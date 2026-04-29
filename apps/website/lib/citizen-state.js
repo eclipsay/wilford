@@ -753,7 +753,7 @@ export function findCitizenForTransfer(state, economy, selector) {
   const value = raw.replace(/[<@!>]/g, "").replace(/^@+/, "").trim().toLowerCase();
   if (!value) return null;
   const matches = (state.citizenRecords || []).filter((record) => {
-    const wallet = getWallet(economy, record.walletId || record.userId || record.discordId);
+    const wallet = getWallet(economy, record.walletId || record.userId || record.discordId || record.id);
     if (!wallet || record.verificationStatus !== "Verified" || record.lostOrStolen) return false;
     const handle = String(record.citizenHandle || "").replace(/^@+/, "").toLowerCase();
     const transferCode = String(record.transferCode || "").toLowerCase();
@@ -768,10 +768,25 @@ export function findCitizenForTransfer(state, economy, selector) {
       name === value
     );
   });
-  if (matches.length !== 1) return null;
-  const citizen = matches[0];
-  const wallet = getWallet(economy, citizen.walletId || citizen.userId || citizen.discordId);
-  return wallet ? { citizen, wallet } : null;
+  if (matches.length === 1) {
+    const citizen = matches[0];
+    const wallet = getWallet(economy, citizen.walletId || citizen.userId || citizen.discordId || citizen.id);
+    return wallet ? { citizen, wallet } : null;
+  }
+  if (matches.length > 1) return null;
+
+  const walletMatches = (economy.wallets || []).filter((wallet) => {
+    const publicHandle = String(wallet.citizenHandle || wallet.userId || wallet.discordUsername || wallet.displayName || "")
+      .replace(/^@+/, "")
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+    const displayName = String(wallet.displayName || "").toLowerCase();
+    const userId = String(wallet.userId || "").replace(/^discord-/, "").toLowerCase();
+    const discordId = String(wallet.discordId || "").toLowerCase();
+    return publicHandle === value || displayName === value || userId === value || discordId === value;
+  });
+  if (walletMatches.length !== 1) return null;
+  return { citizen: null, wallet: walletMatches[0] };
 }
 
 export function findCitizenForLogin(state, name, unionSecurityId, password = "") {

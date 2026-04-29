@@ -581,6 +581,9 @@ app.get("/api/admin/economy-store", requireAdmin, async (_req, res) => {
 
 app.post("/api/admin/economy-store", requireAdmin, async (req, res) => {
   const economy = await updateEconomyStore(req.body?.economy || req.body || {});
+  if (req.query?.minimal === "1" || req.get("x-minimal-response") === "1") {
+    return res.json({ ok: true });
+  }
   res.json({ economy });
 });
 

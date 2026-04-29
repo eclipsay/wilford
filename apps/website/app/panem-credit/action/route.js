@@ -62,7 +62,7 @@ export const POST = safeAction("panem-credit/action", "/panem-credit", async fun
       actor: citizen.unionSecurityId
     });
     if (result.ok) {
-      await recordCitizenActivity(citizen.id, "panem credit transfer", `${recipient?.citizen?.citizenHandle ? `@${recipient.citizen.citizenHandle}` : recipient?.citizen?.name || "Unknown recipient"} / ${amount || 0} PC`);
+      await recordCitizenActivity(citizen.id, "panem credit transfer", `${recipient?.citizen?.citizenHandle ? `@${recipient.citizen.citizenHandle}` : recipient?.citizen?.name || recipient?.wallet?.displayName || "Unknown recipient"} / ${amount || 0} PC`);
     }
     return redirectTo(request, `/panem-credit?${result.ok ? "saved=transfer" : "error=transfer"}`);
   }

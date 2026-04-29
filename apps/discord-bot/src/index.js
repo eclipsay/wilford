@@ -207,11 +207,12 @@ async function writeEconomyStore(economy) {
   const payloadSize = Buffer.byteLength(payload, "utf8");
   let response;
   try {
-    response = await fetch(`${apiUrl}/api/admin/economy-store`, {
+    response = await fetch(`${apiUrl}/api/admin/economy-store?minimal=1`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-admin-key": adminApiKey
+        "x-admin-key": adminApiKey,
+        "x-minimal-response": "1"
       },
       body: payload,
       cache: "no-store"
@@ -236,7 +237,7 @@ async function writeEconomyStore(economy) {
     console.error("[economy-write-parse]", { payloadSize, message: error?.message || String(error) });
     return { economy: compactEconomy };
   });
-  return parsed.economy || parsed;
+  return parsed.economy || compactEconomy;
 }
 
 async function readGovernmentAccessStore() {
@@ -302,7 +303,7 @@ function getVerifiedDiscordCitizen(governmentStore, economy, user) {
     return null;
   }
 
-  const wallet = getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId);
+  const wallet = getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId || citizen.id);
   if (!wallet) {
     return { citizen, wallet: null };
   }
@@ -1482,7 +1483,17 @@ function findCitizenForDashboardTransfer(governmentStore, economy, input) {
     String(record.discordUsername || "").toLowerCase() === needle ||
     String(record.citizenName || record.name || "").toLowerCase() === needle
   );
-  if (!citizen) return null;
+  if (!citizen) {
+    const walletMatches = (economy.wallets || []).filter((wallet) => {
+      const publicHandle = publicCitizenHandle(wallet);
+      return publicHandle === needle.replace(/^@+/, "") ||
+        String(wallet.userId || "").replace(/^discord-/, "").toLowerCase() === needle ||
+        String(wallet.discordId || "").toLowerCase() === needle ||
+        String(wallet.discordUsername || "").toLowerCase() === needle ||
+        String(wallet.displayName || "").toLowerCase() === needle;
+    });
+    return walletMatches.length === 1 ? { citizen: null, wallet: walletMatches[0] } : null;
+  }
   const wallet = getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId || citizen.id);
   return wallet ? { citizen, wallet } : null;
 }
@@ -1490,7 +1501,7 @@ function findCitizenForDashboardTransfer(governmentStore, economy, input) {
 function searchCitizens(governmentStore, economy, input) {
   const needle = String(input || "").trim().replace(/[<@!>]/g, "").replace(/^@+/, "").toLowerCase();
   if (!needle) return [];
-  return (governmentStore.citizenRecords || [])
+  const citizenRows = (governmentStore.citizenRecords || [])
     .filter((record) => {
       const wallet = getEconomyWallet(economy, record.walletId || record.userId || record.discordId || record.id);
       if (!wallet || record.verificationStatus !== "Verified" || record.lostOrStolen) return false;
@@ -1503,8 +1514,19 @@ function searchCitizens(governmentStore, economy, input) {
         record.transferCode
       ].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle));
     })
-    .slice(0, 8)
     .map((citizen) => ({ citizen, wallet: getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId || citizen.id) }));
+  const linkedWalletIds = new Set(citizenRows.map(({ wallet }) => wallet?.id).filter(Boolean));
+  const walletRows = (economy.wallets || [])
+    .filter((wallet) => !linkedWalletIds.has(wallet.id))
+    .filter((wallet) => [
+      wallet.citizenHandle,
+      wallet.userId,
+      wallet.discordId,
+      wallet.discordUsername,
+      wallet.displayName
+    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle)))
+    .map((wallet) => ({ citizen: null, wallet }));
+  return [...citizenRows, ...walletRows].slice(0, 8);
 }
 
 function dashboardReplyEmbed(title, message) {
@@ -1726,7 +1748,7 @@ async function handleCitizenDashboardModal(interaction) {
     recipient.wallet.updatedAt = now;
     pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: recipient.wallet.id, amount, type: "transfer", reason: note, taxAmount, createdBy: interaction.user.id });
     await writeEconomyStore(economy);
-    await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Complete", `${formatCredits(amount)} sent to @${publicCitizenHandle(recipient.citizen)}. Tax: ${formatCredits(taxAmount)}.`)], components: dashboardComponents("wallet"), ephemeral: true });
+    await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Complete", `${formatCredits(amount)} sent to @${publicCitizenHandle(recipient.citizen || recipient.wallet)}. Tax: ${formatCredits(taxAmount)}.`)], components: dashboardComponents("wallet"), ephemeral: true });
     return true;
   }
 
@@ -2093,12 +2115,12 @@ async function handleEconomySlashCommand(interaction) {
       toWalletId: recipient.id,
       amount,
       type: "discord_pay",
-      reason: `Discord payment to @${publicCitizenHandle(recipientIdentity.citizen || {})}`,
+      reason: `Discord payment to @${publicCitizenHandle(recipientIdentity.citizen || recipientIdentity.wallet || {})}`,
       taxAmount,
       createdBy: interaction.user.id
     });
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed("Payment Recorded", `${formatCredits(amount)} sent to @${publicCitizenHandle(recipientIdentity.citizen || {})}.\nTrade tax: ${formatCredits(taxAmount)}.`));
+    await replyEconomy(interaction, ministryEmbed("Payment Recorded", `${formatCredits(amount)} sent to @${publicCitizenHandle(recipientIdentity.citizen || recipientIdentity.wallet || {})}.\nTrade tax: ${formatCredits(taxAmount)}.`));
     return true;
   }
 
@@ -2308,7 +2330,7 @@ async function handleEconomySlashCommand(interaction) {
 
   if (name === "search") {
     const rows = searchCitizens(governmentStore, economy, interaction.options.getString("user", true))
-      .map(({ citizen, wallet }) => `@${publicCitizenHandle(citizen)} - ${citizen.name || citizen.citizenName || wallet.displayName} / ${citizen.district || wallet.district}`)
+      .map(({ citizen, wallet }) => `@${citizen ? publicCitizenHandle(citizen) : publicCitizenHandle(wallet)} - ${citizen?.name || citizen?.citizenName || wallet.displayName} / ${citizen?.district || wallet.district || "Unassigned"}`)
       .join("\n") || "No verified citizens matched that search.";
     await replyEconomy(interaction, ministryEmbed("Citizen Search", rows), true);
     return true;
