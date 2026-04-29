@@ -306,6 +306,8 @@ function cleanRecordText(value, maxLength = 800) {
     .slice(0, maxLength);
 }
 
+const cleanText = cleanRecordText;
+
 function createId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
 }
