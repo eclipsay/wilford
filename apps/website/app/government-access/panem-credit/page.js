@@ -29,6 +29,29 @@ export default async function PanemCreditControlPage({ searchParams }) {
   const frozenAssets = store.wallets
     .filter((wallet) => wallet.status === "frozen")
     .reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
+  const selectedWalletId = String(params?.wallet || "").trim();
+  const selectedWallet = store.wallets.find((wallet) => wallet.id === selectedWalletId) || null;
+  const selectedCitizen = selectedWallet
+    ? citizenState.citizenRecords.find((citizen) =>
+      citizen.walletId === selectedWallet.id ||
+      citizen.discordId === selectedWallet.discordId ||
+      citizen.userId === selectedWallet.userId
+    )
+    : null;
+  const selectedTransactions = selectedWallet
+    ? store.transactions.filter((transaction) =>
+      transaction.fromWalletId === selectedWallet.id ||
+      transaction.toWalletId === selectedWallet.id
+    )
+    : [];
+  const selectedTaxes = selectedWallet
+    ? store.taxRecords.filter((tax) => tax.walletId === selectedWallet.id)
+    : [];
+  const walletLabel = (walletId) => {
+    if (!walletId) return "Treasury";
+    const wallet = store.wallets.find((entry) => entry.id === walletId);
+    return wallet?.displayName || walletId;
+  };
 
   return (
     <SiteLayout>
@@ -169,6 +192,9 @@ export default async function PanemCreditControlPage({ searchParams }) {
                   </div>
                   <span className="court-role-badge">{wallet.status}</span>
                 </div>
+                <div className="bulletin-editor-card__actions">
+                  <Link className="button" href={`/government-access/panem-credit?wallet=${encodeURIComponent(wallet.id)}#wallet-records`}>View Records</Link>
+                </div>
                 <div className="metric-grid">
                   <span><strong>{formatCredits(wallet.balance)}</strong> Balance</span>
                   <span><strong>{formatCredits(wallet.salary ?? 125)}</strong> Daily salary</span>
@@ -257,6 +283,79 @@ export default async function PanemCreditControlPage({ searchParams }) {
                   <button className="button button--solid-site" type="submit">{title}</button>
                 </form>
               ))}
+            </div>
+          </section>
+        ) : null}
+
+        {selectedWallet ? (
+          <section className="state-section" id="wallet-records">
+            <p className="eyebrow">Citizen Ledger</p>
+            <h2>{selectedWallet.displayName} Records</h2>
+            <div className="government-dashboard-grid">
+              <article className="government-status-panel">
+                <p className="eyebrow">Wallet</p>
+                <h2>{formatCredits(selectedWallet.balance)}</h2>
+                <p>{selectedWallet.district || "Unassigned"} / {selectedWallet.status}</p>
+              </article>
+              <article className="government-status-panel">
+                <p className="eyebrow">Citizen</p>
+                <h2>{selectedCitizen?.name || selectedCitizen?.citizenName || "Unlinked"}</h2>
+                <p>{selectedCitizen?.unionSecurityId || selectedWallet.userId || selectedWallet.discordId || selectedWallet.id}</p>
+              </article>
+              <article className="government-status-panel">
+                <p className="eyebrow">Transactions</p>
+                <h2>{selectedTransactions.length}</h2>
+                <p>{formatCredits(selectedTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0))} recorded movement.</p>
+              </article>
+              <article className="government-status-panel">
+                <p className="eyebrow">Tax Records</p>
+                <h2>{selectedTaxes.length}</h2>
+                <p>{formatCredits(selectedTaxes.reduce((sum, tax) => sum + Number(tax.amount || 0), 0))} assessed.</p>
+              </article>
+            </div>
+            <div className="panem-ledger-layout">
+              <article className="panel">
+                <h3>Transaction Record</h3>
+                <ul className="government-mini-list">
+                  {selectedTransactions.slice(0, 50).map((transaction) => (
+                    <li key={transaction.id}>
+                      <span>
+                        {transaction.type} / {transaction.reason}
+                        <br />
+                        {walletLabel(transaction.fromWalletId)} → {walletLabel(transaction.toWalletId)}
+                        {transaction.createdAt ? ` / ${new Date(transaction.createdAt).toLocaleString("en-GB")}` : ""}
+                      </span>
+                      <strong>{formatCredits(transaction.amount)}{transaction.taxAmount ? ` / tax ${formatCredits(transaction.taxAmount)}` : ""} {transaction.reversedAt ? "/ reversed" : ""}</strong>
+                      {fullAccess && !transaction.reversedAt ? (
+                        <form action="/government-access/panem-credit/action" method="post">
+                          <input name="intent" type="hidden" value="reverse" />
+                          <input name="transactionId" type="hidden" value={transaction.id} />
+                          <input name="returnWalletId" type="hidden" value={selectedWallet.id} />
+                          <button className="button" type="submit">Reverse</button>
+                        </form>
+                      ) : null}
+                    </li>
+                  ))}
+                  {!selectedTransactions.length ? <li><span>No transaction records for this wallet.</span><strong>0</strong></li> : null}
+                </ul>
+              </article>
+              <article className="panel">
+                <h3>Tax Record</h3>
+                <ul className="government-mini-list">
+                  {selectedTaxes.slice(0, 50).map((tax) => (
+                    <li key={tax.id}>
+                      <span>
+                        {taxLabel(tax.taxType)} / {tax.status}
+                        <br />
+                        {tax.reason || tax.createdBy || "Treasury record"}
+                        {tax.createdAt ? ` / ${new Date(tax.createdAt).toLocaleString("en-GB")}` : ""}
+                      </span>
+                      <strong>{formatCredits(tax.amount)}</strong>
+                    </li>
+                  ))}
+                  {!selectedTaxes.length ? <li><span>No tax records for this wallet.</span><strong>0</strong></li> : null}
+                </ul>
+              </article>
             </div>
           </section>
         ) : null}

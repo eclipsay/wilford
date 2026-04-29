@@ -196,6 +196,10 @@ export const POST = safeAction("government-access/panem-credit/action", "/govern
 
   if (intent === "reverse") {
     await reverseTransaction(String(formData.get("transactionId") || "").trim(), actorName);
+    const returnWalletId = String(formData.get("returnWalletId") || "").trim();
+    if (returnWalletId) {
+      return redirectTo(request, `/government-access/panem-credit?saved=1&wallet=${encodeURIComponent(returnWalletId)}#wallet-records`);
+    }
   }
 
   return redirectTo(request, "/government-access/panem-credit?saved=1");
