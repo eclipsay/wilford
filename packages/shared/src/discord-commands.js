@@ -48,10 +48,10 @@ export const publicBotCommands = [
     usage: "-userinfo @user"
   },
   {
-    name: "/balance, /pay, /transactions, /daily",
+    name: "/citizen, /balance, /pay, /transactions, /daily",
     access: "Citizens",
-    description: "Use the Panem Credit wallet for balances, payments, ledger history, daily stipends, and streak rewards.",
-    usage: "/pay @user 50"
+    description: "Open the simple Citizen Hub, then use the Panem Credit wallet for balances, payments, ledger history, daily stipends, and streak rewards.",
+    usage: "/citizen"
   },
   {
     name: "/work, /overtime, /crime, /rob, /gamble, /lottery, /invest",

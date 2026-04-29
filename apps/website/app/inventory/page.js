@@ -64,6 +64,7 @@ export default async function InventoryPage({ searchParams }) {
               <span><strong>{wallet?.inventoryFlags?.length || 0}</strong> MSS flags</span>
               <span><strong>{formatCredits(wallet?.debt || 0)}</strong> Resource debt</span>
             </div>
+            <p>Holding items can increase value, but rare stockpiles and contraband raise MSS raid risk. Selling to the state uses 5% inventory tax; marketplace sales are safer for storage but taxed at 15-25%.</p>
           </article>
           <article className="finance-panel">
             <p className="eyebrow">Lucky Crate</p>

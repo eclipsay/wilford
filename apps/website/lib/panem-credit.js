@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   calculateMarketPrice,
+  blackMarketGoodsDefaults,
+  craftingQualityTiers,
+  craftingRecipeDefaults,
   dynamicEconomyEventDefaults,
   districtMarketEventDefaults,
   districtEconomyDefaults,
@@ -141,7 +144,74 @@ function ensureWalletCollections(wallet) {
   wallet.inventoryFlags = Array.isArray(wallet.inventoryFlags) ? wallet.inventoryFlags : [];
   wallet.actionBans = Array.isArray(wallet.actionBans) ? wallet.actionBans : [];
   wallet.achievements = Array.isArray(wallet.achievements) ? wallet.achievements : [];
+  wallet.craftingXp = Math.max(0, Number(wallet.craftingXp || 0));
+  wallet.craftingLevel = Math.max(1, Number(wallet.craftingLevel || levelForXp(wallet.craftingXp)));
+  wallet.jobXp = Math.max(0, Number(wallet.jobXp || 0));
+  wallet.jobLevel = Math.max(1, Number(wallet.jobLevel || levelForXp(wallet.jobXp)));
+  wallet.unlockedRecipes = Array.isArray(wallet.unlockedRecipes) ? wallet.unlockedRecipes : [];
+  wallet.suspicionLevel = Math.max(0, Math.min(100, Number(wallet.suspicionLevel || 0)));
+  wallet.securityStatus = cleanText(wallet.securityStatus || "Clear", 80);
+  wallet.raidCooldownUntil = cleanText(wallet.raidCooldownUntil || "", 80);
   wallet.collectionScore = Math.max(0, Number(wallet.collectionScore || 0));
+}
+
+function suspicionBand(score) {
+  if (score >= 80) return "Critical";
+  if (score >= 60) return "High";
+  if (score >= 35) return "Elevated";
+  return "Clear";
+}
+
+function itemRaidWeight(item) {
+  if (item?.contraband) return 1;
+  return { common: 0.08, uncommon: 0.14, rare: 0.28, epic: 0.48, legendary: 0.72 }[itemRarity(item)] || 0.12;
+}
+
+export function calculateWalletSuspicion(store, wallet) {
+  if (!wallet) return { score: 0, status: "Clear", reasons: [] };
+  ensureWalletCollections(wallet);
+  const inventoryValue = wallet.holdings.reduce((sum, holding) => {
+    const item = getInventoryItem(holding.itemId);
+    return sum + itemValue(item, store) * Number(holding.quantity || 0);
+  }, 0);
+  const contrabandCount = wallet.holdings.reduce((sum, holding) => {
+    const item = getInventoryItem(holding.itemId);
+    return sum + (item?.contraband ? Number(holding.quantity || 0) : 0);
+  }, 0);
+  const recent = (store.transactions || []).filter((transaction) =>
+    (transaction.fromWalletId === wallet.id || transaction.toWalletId === wallet.id) &&
+    Date.now() - Date.parse(transaction.createdAt || 0) < 7 * 24 * 60 * 60 * 1000
+  );
+  const rapidGain = recent.filter((transaction) => transaction.toWalletId === wallet.id).reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const risky = recent.filter((transaction) => ["crime", "gamble", "lootbox", "black-market", "rob"].includes(transaction.type)).length;
+  const reasons = [];
+  let score = Number(wallet.suspicionLevel || 0);
+  if (inventoryValue > 5000) {
+    score += Math.min(25, Math.floor(inventoryValue / 1200));
+    reasons.push("large inventory stockpile");
+  }
+  if (contrabandCount) {
+    score += Math.min(40, contrabandCount * 16);
+    reasons.push("restricted inventory");
+  }
+  if (Number(wallet.balance || 0) > 25000) {
+    score += Math.min(20, Math.floor(Number(wallet.balance || 0) / 10000));
+    reasons.push("large balance");
+  }
+  if (risky) {
+    score += Math.min(25, risky * 4);
+    reasons.push("risky actions");
+  }
+  if (rapidGain > 8000) {
+    score += Math.min(20, Math.floor(rapidGain / 4000));
+    reasons.push("rapid wealth increase");
+  }
+  if (wallet.taxStatus && wallet.taxStatus !== "compliant") {
+    score += 12;
+    reasons.push("tax irregularity");
+  }
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return { score, status: suspicionBand(score), reasons };
 }
 
 function getHolding(wallet, itemId) {
@@ -152,6 +222,62 @@ function getHolding(wallet, itemId) {
     wallet.holdings.push(holding);
   }
   return holding;
+}
+
+function levelForXp(xp) {
+  return Math.max(1, Math.floor(Math.sqrt(Math.max(0, Number(xp || 0)) / 100)) + 1);
+}
+
+function jobAccessForWallet(wallet, job) {
+  if (!job || job.district === "Any" || job.district === wallet?.district) {
+    return { native: true, rewardMultiplier: 1, riskModifier: 0, label: "Native assignment" };
+  }
+  const permit = (wallet?.holdings || []).some((holding) => holding.itemId === "work-permit" && Number(holding.quantity || 0) > 0);
+  return {
+    native: false,
+    rewardMultiplier: permit ? 0.6 : 0.5,
+    riskModifier: permit ? 0.08 : 0.15,
+    label: permit ? "Foreign work permit" : "Foreign assignment"
+  };
+}
+
+function recipeDistrictMatch(wallet, recipe) {
+  const district = wallet?.district || "";
+  return recipe?.district === district || (recipe?.secondaryDistricts || []).includes(district);
+}
+
+function rollCraftQuality(level = 1, specialist = false) {
+  const bonus = Math.max(0, Number(level || 1) - 1) * 0.4 + (specialist ? 3 : 0);
+  const tiers = craftingQualityTiers.map((tier, index) => ({
+    ...tier,
+    weight: Math.max(0.1, Number(tier.weight || 1) + (index * bonus) - (index === 0 ? bonus : 0))
+  }));
+  const total = tiers.reduce((sum, tier) => sum + tier.weight, 0);
+  let roll = Math.random() * total;
+  for (const tier of tiers) {
+    roll -= tier.weight;
+    if (roll <= 0) return tier;
+  }
+  return tiers[0];
+}
+
+function hasMaterials(wallet, materials = []) {
+  ensureWalletCollections(wallet);
+  return materials.every((material) => {
+    const holding = wallet.holdings.find((entry) => entry.itemId === material.itemId);
+    return Number(holding?.quantity || 0) >= Number(material.quantity || 0);
+  });
+}
+
+function consumeMaterials(wallet, materials = [], fail = false) {
+  const consumed = [];
+  for (const material of materials) {
+    const quantity = fail ? Math.max(1, Math.ceil(Number(material.quantity || 1) / 2)) : Number(material.quantity || 1);
+    if (removeHolding(wallet, material.itemId, quantity)) {
+      consumed.push({ itemId: material.itemId, quantity });
+    }
+  }
+  return consumed;
 }
 
 function getInventoryItem(itemId) {
@@ -341,8 +467,16 @@ export function normalizeEconomyStore(economy = {}) {
       inventoryFlags: Array.isArray(wallet.inventoryFlags) ? wallet.inventoryFlags : [],
       actionBans: Array.isArray(wallet.actionBans) ? wallet.actionBans : [],
       achievements: Array.isArray(wallet.achievements) ? wallet.achievements : [],
+      craftingXp: Math.max(0, Number(wallet.craftingXp || 0)),
+      craftingLevel: Math.max(1, Number(wallet.craftingLevel || levelForXp(wallet.craftingXp))),
+      jobXp: Math.max(0, Number(wallet.jobXp || 0)),
+      jobLevel: Math.max(1, Number(wallet.jobLevel || levelForXp(wallet.jobXp))),
+      unlockedRecipes: Array.isArray(wallet.unlockedRecipes) ? wallet.unlockedRecipes : [],
       selectedJobId: cleanText(wallet.selectedJobId || "", 120),
       jobChangedAt: cleanText(wallet.jobChangedAt || "", 80),
+      suspicionLevel: Math.max(0, Math.min(100, Number(wallet.suspicionLevel || 0))),
+      securityStatus: cleanText(wallet.securityStatus || "Clear", 80),
+      raidCooldownUntil: cleanText(wallet.raidCooldownUntil || "", 80),
       collectionScore: Math.max(0, Number(wallet.collectionScore || 0))
     })),
     transactions: Array.isArray(economy.transactions) ? economy.transactions : [],
@@ -352,6 +486,8 @@ export function normalizeEconomyStore(economy = {}) {
     taxRates: { ...defaultTaxRates(), ...(economy.taxRates || {}) },
     districts,
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
+    raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs : [],
+    gamblingJackpot: Math.max(500, Number(economy.gamblingJackpot || 2500)),
     categories: Array.isArray(economy.categories) && economy.categories.length
       ? economy.categories
       : [...new Set(marketItemDefaults.map((item) => item.category))],
@@ -366,12 +502,15 @@ export function normalizeEconomyStore(economy = {}) {
     jobs: economyJobDefaults,
     crimes: economyCrimeDefaults,
     games: economyGambleDefaults,
+    blackMarketGoods: Array.isArray(economy.blackMarketGoods) && economy.blackMarketGoods.length ? economy.blackMarketGoods : blackMarketGoodsDefaults,
     funds: investmentFundDefaults,
     prestigeItems: prestigeItemDefaults,
     marketEvents: Array.isArray(economy.marketEvents) ? economy.marketEvents : districtMarketEventDefaults,
     inventoryItems: Array.isArray(economy.inventoryItems) && economy.inventoryItems.length ? economy.inventoryItems : inventoryItemDefaults,
     rarityTiers: inventoryRarityTiers,
     gatheringActions: gatheringActionDefaults,
+    craftingRecipes: Array.isArray(economy.craftingRecipes) && economy.craftingRecipes.length ? economy.craftingRecipes : craftingRecipeDefaults,
+    craftingQualityTiers,
     inventoryChallenges: Array.isArray(economy.inventoryChallenges) && economy.inventoryChallenges.length
       ? economy.inventoryChallenges
       : [
@@ -636,7 +775,7 @@ export async function transferCredits({ fromWalletId, toWalletId, amount, reason
   const toWallet = getWallet(store, toWalletId);
   const numericAmount = Math.max(0, Number(amount || 0));
 
-  if (!fromWallet || !toWallet || numericAmount <= 0 || fromWallet.status !== "active" || toWallet.status === "frozen") {
+  if (!fromWallet || !toWallet || fromWallet.id === toWallet.id || numericAmount <= 0 || fromWallet.status !== "active" || toWallet.status === "frozen") {
     return { ok: false, store };
   }
 
@@ -738,16 +877,17 @@ export async function performEconomyJob({ walletId, jobId, actor = "citizen" }) 
   const selectedJobId = jobId || wallet?.selectedJobId || "work-shift";
   const job = economyJobDefaults.find((entry) => entry.id === selectedJobId) || economyJobDefaults[0];
   if (!wallet || wallet.status !== "active") return { ok: false, store };
-  if (job.district !== "Any" && job.district !== wallet.district) return { ok: false, store, reason: "district-job" };
   if (!isCooldownReady(store, wallet.id, "work", job.id, job.cooldownHours)) return { ok: false, store, reason: "cooldown" };
-  const district = store.districts.find((entry) => entry.name === wallet.district);
-  const districtFit = job.district === "Any" || job.district === wallet.district ? 1.18 : 1;
+  ensureWalletCollections(wallet);
+  const jobAccess = jobAccessForWallet(wallet, job);
+  const district = store.districts.find((entry) => entry.name === (jobAccess.native ? wallet.district : job.district)) || store.districts.find((entry) => entry.name === wallet.district);
+  const districtFit = jobAccess.native ? 1.18 : jobAccess.rewardMultiplier;
   const prosperity = 1 + (Number(district?.prosperityRating || 70) - 70) / 300;
   const event = activeEvent(store);
   const eventBoost = event?.boostedDistricts?.includes(wallet.district) ? 1.2 : 1;
   const jobEventBoost = 1 + activeModifierSum(store, (entry) => eventAffectsDistrict(entry, job.district), "jobPayoutPercent");
   const riskEventBoost = activeModifierSum(store, (entry) => eventAffectsDistrict(entry, job.district), "riskPercent");
-  const failed = Math.random() < clampNumber(Number(job.failureChance || 0) + riskEventBoost, 0, 0.75);
+  const failed = Math.random() < clampNumber(Number(job.failureChance || 0) + riskEventBoost + jobAccess.riskModifier, 0, 0.85);
   const illegalOffer = Math.random() < Number(job.illegalOpportunityChance || 0);
   let amount = Math.round(randomInt(job.minReward, job.maxReward) * districtFit * prosperity * eventBoost * eventMultiplier(store, "workMultiplier", 1) * jobEventBoost);
   let penalty = 0;
@@ -768,6 +908,8 @@ export async function performEconomyJob({ walletId, jobId, actor = "citizen" }) 
     }
   } else {
     wallet.balance += amount;
+    wallet.jobXp = Math.max(0, Number(wallet.jobXp || 0) + Math.max(8, Math.round(amount / 12)));
+    wallet.jobLevel = levelForXp(wallet.jobXp);
     if (Array.isArray(job.itemRewards) && job.itemRewards.length && Math.random() < 0.22) {
       itemReward = getInventoryItem(job.itemRewards[Math.floor(Math.random() * job.itemRewards.length)]);
       if (itemReward) addHolding(wallet, itemReward.id, 1, itemValue(itemReward, store), job.name);
@@ -795,11 +937,11 @@ export async function performEconomyJob({ walletId, jobId, actor = "citizen" }) 
     toWalletId: failed ? "treasury" : wallet.id,
     amount: failed ? penalty : amount,
     type: "work",
-    reason: `${job.name}: ${failed ? "failed assignment" : job.description}${itemReward ? ` / item: ${itemReward.name}` : ""}`,
+    reason: `${job.name}: ${failed ? "failed assignment" : job.description}${itemReward ? ` / item: ${itemReward.name}` : ""}${jobAccess.native ? "" : " / foreign work penalty applied"}`,
     createdBy: actor,
-    meta: { key: job.id, district: wallet.district, eventId: event?.id, failed, riskLevel: job.riskLevel, illegalOffer, itemRewardId: itemReward?.id || "" }
+    meta: { key: job.id, district: wallet.district, jobDistrict: job.district, eventId: event?.id, failed, riskLevel: job.riskLevel, illegalOffer, itemRewardId: itemReward?.id || "", nativeDistrict: jobAccess.native, rewardMultiplier: jobAccess.rewardMultiplier, riskModifier: jobAccess.riskModifier }
   });
-  return { ok: true, amount, penalty, failed, job, itemReward, illegalOffer, store: await saveEconomyStore(store) };
+  return { ok: true, amount, penalty, failed, job, itemReward, illegalOffer, jobAccess, store: await saveEconomyStore(store) };
 }
 
 export async function setCitizenJob({ walletId, jobId, actor = "citizen" }) {
@@ -807,7 +949,6 @@ export async function setCitizenJob({ walletId, jobId, actor = "citizen" }) {
   const wallet = getWallet(store, walletId);
   const job = economyJobDefaults.find((entry) => entry.id === jobId);
   if (!wallet || !job || wallet.status !== "active") return { ok: false, store, reason: "job" };
-  if (job.district !== "Any" && job.district !== wallet.district) return { ok: false, store, reason: "district-job" };
   if (wallet.jobChangedAt && Date.now() - Date.parse(wallet.jobChangedAt) < Number(job.switchCooldownHours || 24) * 60 * 60 * 1000) {
     return { ok: false, store, reason: "job-cooldown" };
   }
@@ -839,6 +980,7 @@ export async function performCrimeAction({ walletId, crimeId, targetWalletId = "
   const detected = !success || Math.random() < detectionChance;
   let amount = 0;
   let penalty = 0;
+  let stolenItem = null;
 
   if (success) {
     amount = randomInt(crime.minReward, crime.maxReward);
@@ -848,22 +990,36 @@ export async function performCrimeAction({ walletId, crimeId, targetWalletId = "
       amount = stolen;
       target.updatedAt = new Date().toISOString();
     }
+    if (target && Array.isArray(target.holdings) && target.holdings.length && Math.random() < 0.35) {
+      const candidates = target.holdings.filter((holding) => Number(holding.quantity || 0) > 0);
+      const holding = candidates[randomInt(0, Math.max(0, candidates.length - 1))];
+      if (holding && removeHolding(target, holding.itemId, 1)) {
+        stolenItem = getInventoryItem(holding.itemId);
+        addHolding(wallet, holding.itemId, 1, itemValue(stolenItem, store), "Robbery");
+      }
+    }
     wallet.balance += amount;
   } else {
     penalty = Math.round(Number(crime.penalty || 0) * Number(event?.crimePenaltyMultiplier || 1));
     wallet.balance = Math.max(0, Number(wallet.balance || 0) - penalty);
     wallet.seizedCredits = Number(wallet.seizedCredits || 0) + penalty;
+    if (Math.random() < 0.25) {
+      const lostItemId = loseRandomHolding(wallet);
+      stolenItem = lostItemId ? getInventoryItem(lostItemId) : null;
+    }
   }
 
+  wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + (detected ? 16 : 7));
+  wallet.securityStatus = calculateWalletSuspicion(store, wallet).status;
   wallet.updatedAt = new Date().toISOString();
   pushTransaction(store, {
     fromWalletId: success ? (target?.id || "black-market") : wallet.id,
     toWalletId: success ? wallet.id : "treasury",
     amount: success ? amount : penalty,
     type: "crime",
-    reason: `${crime.name}: ${success ? "successful" : "failed"} fictional operation.`,
+    reason: `${crime.name}: ${success ? "successful" : "failed"} fictional operation${stolenItem ? ` / item: ${stolenItem.name}` : ""}.`,
     createdBy: actor,
-    meta: { key: crime.id, success, detected, targetWalletId: target?.id || "", eventId: event?.id }
+    meta: { key: crime.id, success, detected, targetWalletId: target?.id || "", eventId: event?.id, stolenItemId: stolenItem?.id || "" }
   });
 
   if (detected) {
@@ -878,7 +1034,112 @@ export async function performCrimeAction({ walletId, crimeId, targetWalletId = "
     });
   }
 
-  return { ok: true, amount, penalty, success, detected, crime, store: await saveEconomyStore(store) };
+  return { ok: true, amount, penalty, success, detected, crime, stolenItem, store: await saveEconomyStore(store) };
+}
+
+function districtEnforcementProfile(districtName = "") {
+  if (districtName === "The Capitol" || districtName === "Capitol") return { taxModifier: 0.06, detectionModifier: 0.16, activityModifier: -0.08, label: "Capitol enforcement" };
+  const districtNumber = Number(String(districtName).replace(/\D/g, "")) || 0;
+  if (districtNumber && districtNumber <= 3) return { taxModifier: 0.03, detectionModifier: 0.08, activityModifier: 0.02, label: "Priority district watch" };
+  return { taxModifier: -0.02, detectionModifier: -0.06, activityModifier: 0.12, label: "District underground" };
+}
+
+export function getBlackMarketDashboard(store, wallet) {
+  const profile = districtEnforcementProfile(wallet?.district || "");
+  const goods = (store.blackMarketGoods || blackMarketGoodsDefaults).map((good) => ({
+    ...good,
+    detectionChance: clampNumber(Number(good.detectionChance || 0.35) + profile.detectionModifier, 0.08, 0.88),
+    price: Math.max(1, Math.round(Number(good.price || 1) * (1 + (profile.activityModifier * -0.6)))),
+    enforcementLabel: profile.label
+  }));
+  return {
+    goods,
+    profile,
+    smugglingRoutes: (store.districts || []).filter((district) => district.name !== wallet?.district).slice(0, 8),
+    suspicion: wallet ? calculateWalletSuspicion(store, wallet) : { score: 0, status: "Unknown", reasons: [] }
+  };
+}
+
+export async function buyBlackMarketGood({ walletId, goodId, quantity = 1, actor = "citizen" }) {
+  const store = await getEconomyStore();
+  const wallet = getWallet(store, walletId);
+  const good = (store.blackMarketGoods || blackMarketGoodsDefaults).find((entry) => entry.id === goodId);
+  const count = Math.max(1, Number.parseInt(quantity || "1", 10));
+  if (!wallet || wallet.status !== "active" || !good || Number(good.stock || 0) < count) return { ok: false, store };
+  const profile = districtEnforcementProfile(wallet.district);
+  const price = Math.max(1, Math.round(Number(good.price || 1) * count * (1 + (profile.activityModifier * -0.6))));
+  if (Number(wallet.balance || 0) < price) return { ok: false, store };
+  const detected = Math.random() < clampNumber(Number(good.detectionChance || 0.35) + profile.detectionModifier, 0.08, 0.88);
+  wallet.balance -= price;
+  addHolding(wallet, good.id, count, Math.round(price / count), "Black Market");
+  good.stock = Math.max(0, Number(good.stock || 0) - count);
+  wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + (detected ? 22 : 10));
+  wallet.securityStatus = calculateWalletSuspicion(store, wallet).status;
+  wallet.updatedAt = new Date().toISOString();
+  pushTransaction(store, {
+    fromWalletId: wallet.id,
+    toWalletId: "black-market",
+    amount: price,
+    type: "black-market",
+    reason: `${count} x ${good.name}`,
+    createdBy: actor,
+    meta: { key: good.id, detected, detectionChance: good.detectionChance, district: wallet.district }
+  });
+  if (detected) {
+    postMssAlert(store, wallet, {
+      severity: "critical",
+      type: "black_market_trade",
+      fine: Math.round(price * 0.55),
+      bounty: Math.round(price * 0.35),
+      summary: `MSS Black Market Alert: ${wallet.displayName} bought ${good.name}.`
+    });
+  }
+  return { ok: true, good, quantity: count, price, detected, store: await saveEconomyStore(store) };
+}
+
+export async function runSmugglingDeal({ walletId, itemId, quantity = 1, destinationDistrict = "", actor = "citizen" }) {
+  const store = await getEconomyStore();
+  const wallet = getWallet(store, walletId);
+  const item = getInventoryItem(itemId);
+  const count = Math.max(1, Number.parseInt(quantity || "1", 10));
+  if (!wallet || wallet.status !== "active" || !item || !destinationDistrict || !removeHolding(wallet, item.id, count)) return { ok: false, store };
+  const originProfile = districtEnforcementProfile(wallet.district);
+  const destinationProfile = districtEnforcementProfile(destinationDistrict);
+  const risk = clampNumber(0.24 + originProfile.detectionModifier + destinationProfile.detectionModifier + (item.contraband ? 0.2 : 0), 0.08, 0.9);
+  const success = Math.random() >= risk;
+  const reward = Math.round(itemValue(item, store) * count * (success ? 1.8 : 0));
+  const fine = success ? 0 : Math.round(itemValue(item, store) * count * 0.85);
+  if (success) {
+    wallet.balance += reward;
+    const district = store.districts.find((entry) => entry.name === destinationDistrict);
+    if (district) {
+      district.demandLevel = clampNumber(Number(district.demandLevel || 0) + 4, 0, 140);
+      district.tradeVolume = Math.round(Number(district.tradeVolume || 0) + reward);
+    }
+  } else {
+    wallet.balance = Math.max(0, Number(wallet.balance || 0) - fine);
+    wallet.seizedCredits = Number(wallet.seizedCredits || 0) + fine;
+    postMssAlert(store, wallet, {
+      severity: "critical",
+      type: "smuggling",
+      fine,
+      bounty: Math.round(fine * 0.45),
+      summary: `MSS Smuggling Intercept: ${wallet.displayName} lost ${count} x ${item.name} en route to ${destinationDistrict}.`
+    });
+  }
+  wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + (success ? 12 : 24));
+  wallet.securityStatus = calculateWalletSuspicion(store, wallet).status;
+  wallet.updatedAt = new Date().toISOString();
+  pushTransaction(store, {
+    fromWalletId: wallet.id,
+    toWalletId: success ? "black-market-buyer" : "mss-seizure",
+    amount: success ? reward : fine,
+    type: "smuggling",
+    reason: `${success ? "Delivered" : "Intercepted"} ${count} x ${item.name} to ${destinationDistrict}`,
+    createdBy: actor,
+    meta: { key: item.id, destinationDistrict, success, risk }
+  });
+  return { ok: true, item, quantity: count, success, reward, fine, risk, store: await saveEconomyStore(store) };
 }
 
 export async function playGambleGame({ walletId, gameId, amount, actor = "citizen" }) {
@@ -889,18 +1150,37 @@ export async function playGambleGame({ walletId, gameId, amount, actor = "citize
   if (!wallet || wallet.status !== "active" || Number(wallet.balance || 0) < bet) return { ok: false, store };
   if (!isCooldownReady(store, wallet.id, "gamble", game.id, game.cooldownHours)) return { ok: false, store, reason: "cooldown" };
   const won = Math.random() < Number(game.winChance || 0);
-  const payout = won ? Math.round(bet * Number(game.payoutMultiplier || 1)) : 0;
+  const taxRate = Number(store.taxRates.gambling_winnings_tax || 0.08);
+  const grossPayout = won ? Math.round(bet * Number(game.payoutMultiplier || 1)) : 0;
+  const winningsTax = won ? Math.round(Math.max(0, grossPayout - bet) * taxRate * 100) / 100 : 0;
+  const payout = Math.max(0, grossPayout - winningsTax);
   wallet.balance = Math.max(0, Number(wallet.balance || 0) - bet + payout);
+  if (bet >= 750 || (won && grossPayout >= 1500)) {
+    wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + (won ? 5 : 3));
+  }
+  const suspicion = calculateWalletSuspicion(store, wallet);
+  wallet.suspicionLevel = suspicion.score;
+  wallet.securityStatus = suspicion.status;
   wallet.updatedAt = new Date().toISOString();
+  store.gamblingJackpot = Math.max(500, Number(store.gamblingJackpot || 2500) + Math.round(bet * 0.08) - (game.id === "district-lottery" && won ? Math.round(grossPayout * 0.2) : 0));
   pushTransaction(store, {
     fromWalletId: won ? "capitol-games" : wallet.id,
     toWalletId: won ? wallet.id : "capitol-games",
     amount: won ? payout : bet,
     type: "gamble",
     reason: `${game.name}: ${won ? "payout" : "loss"} on ${bet} PC bet.`,
+    taxAmount: winningsTax,
     createdBy: actor,
-    meta: { key: game.id, bet, won }
+    meta: { key: game.id, bet, won, grossPayout, winningsTax, suspicion: suspicion.score }
   });
+  if (wallet.suspicionLevel >= 70) {
+    postMssAlert(store, wallet, {
+      severity: wallet.suspicionLevel >= 85 ? "critical" : "high",
+      type: "excessive_gambling",
+      summary: `${wallet.displayName} reached ${wallet.securityStatus} gambling suspicion after ${game.name}.`,
+      action: "monitor"
+    });
+  }
   return { ok: true, won, bet, payout, game, store: await saveEconomyStore(store) };
 }
 
@@ -994,6 +1274,7 @@ export async function gatherInventoryItem({ walletId, actionId, actor = "citizen
     }
     if (risk.loseItem) lostItemId = loseRandomHolding(wallet) || "";
     if (risk.mssAlert) {
+      wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + 10);
       postMssAlert(store, wallet, {
         severity: "high",
         type: "inventory_risk",
@@ -1021,6 +1302,7 @@ export async function gatherInventoryItem({ walletId, actionId, actor = "citizen
       ].slice(0, 20);
     }
     if (item.contraband) {
+      wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + 18);
       postMssAlert(store, wallet, {
         severity: "critical",
         type: "contraband_inventory",
@@ -1032,6 +1314,9 @@ export async function gatherInventoryItem({ walletId, actionId, actor = "citizen
     }
   }
 
+  const suspicion = calculateWalletSuspicion(store, wallet);
+  wallet.suspicionLevel = suspicion.score;
+  wallet.securityStatus = suspicion.status;
   wallet.updatedAt = new Date().toISOString();
   pushTransaction(store, {
     fromWalletId: action.district,
@@ -1053,17 +1338,33 @@ export async function sellInventoryToState({ walletId, itemId, quantity, actor =
   const count = Math.max(1, Number.parseInt(quantity || "1", 10));
   if (!wallet || !item || wallet.status !== "active" || !removeHolding(wallet, item.id, count)) return { ok: false, store };
   const value = itemValue(item, store) * count;
-  wallet.balance += value;
+  const taxRate = 0.05;
+  const taxAmount = Math.round(value * taxRate * 100) / 100;
+  wallet.balance += Math.max(0, value - taxAmount);
+  wallet.suspicionLevel = Math.max(0, Number(wallet.suspicionLevel || 0) - 2);
+  wallet.securityStatus = calculateWalletSuspicion(store, wallet).status;
   wallet.updatedAt = new Date().toISOString();
   pushTransaction(store, {
     fromWalletId: "state-procurement",
     toWalletId: wallet.id,
-    amount: value,
+    amount: Math.max(0, value - taxAmount),
     type: "inventory_sell",
-    reason: `${count} x ${item.name} sold to state`,
+    reason: `${count} x ${item.name} sold to state. Inventory tax ${Math.round(taxRate * 100)}%.`,
+    taxAmount,
     createdBy: actor,
     meta: { key: item.id, quantity: count, rarity: itemRarity(item) }
   });
+  if (taxAmount) {
+    store.taxRecords.unshift({
+      id: createId("tax"),
+      walletId: wallet.id,
+      taxType: "inventory_tax",
+      amount: taxAmount,
+      rate: taxRate,
+      status: "paid",
+      createdAt: new Date().toISOString()
+    });
+  }
   return { ok: true, item, quantity: count, value, store: await saveEconomyStore(store) };
 }
 
@@ -1093,17 +1394,115 @@ export async function openInventoryCrate({ walletId, actor = "citizen" }) {
   return { ok: true, item, quantity, cost, store: await saveEconomyStore(store) };
 }
 
+export async function craftInventoryItem({ walletId, recipeId, actor = "citizen" }) {
+  const store = await getEconomyStore();
+  const wallet = getWallet(store, walletId);
+  const recipe = (store.craftingRecipes || craftingRecipeDefaults).find((entry) => entry.id === recipeId || entry.outputItemId === recipeId);
+  if (!wallet || wallet.status !== "active" || !recipe) return { ok: false, store, reason: "recipe" };
+  ensureWalletCollections(wallet);
+  if (Number(wallet.craftingLevel || 1) < Number(recipe.unlockLevel || 1)) return { ok: false, store, reason: "level" };
+  if (!hasMaterials(wallet, recipe.materials)) return { ok: false, store, reason: "materials" };
+
+  const specialist = recipeDistrictMatch(wallet, recipe);
+  const levelBonus = Math.min(0.16, (Number(wallet.craftingLevel || 1) - 1) * 0.018);
+  const successChance = clampNumber(Number(recipe.successChance || 0.7) + levelBonus + (specialist ? 0.2 : -0.15), 0.12, 0.96);
+  const critical = Math.random() < Math.max(0.02, Number(wallet.craftingLevel || 1) * 0.006 + (specialist ? 0.03 : 0));
+  const success = Math.random() < successChance;
+  const outputItem = getInventoryItem(recipe.outputItemId);
+  const consumed = consumeMaterials(wallet, recipe.materials, !success);
+  let quality = null;
+  let outputQuantity = 0;
+
+  wallet.craftingXp = Math.max(0, Number(wallet.craftingXp || 0) + Number(recipe.xpReward || 35));
+  wallet.craftingLevel = levelForXp(wallet.craftingXp);
+  if (success && outputItem) {
+    quality = rollCraftQuality(wallet.craftingLevel, specialist);
+    outputQuantity = Math.max(1, Number(recipe.outputQuantity || 1) + (critical ? 1 : 0));
+    addHolding(wallet, outputItem.id, outputQuantity, Math.round(itemValue(outputItem, store) * Number(quality.valueMultiplier || 1)), `Crafting: ${recipe.name}`);
+    const holding = wallet.holdings.find((entry) => entry.itemId === outputItem.id);
+    if (holding) {
+      holding.quality = quality.label;
+      holding.qualityMultiplier = quality.valueMultiplier;
+      holding.craftedAt = new Date().toISOString();
+    }
+  }
+
+  const district = store.districts.find((entry) => entry.name === recipe.district);
+  if (district) {
+    district.demandLevel = clampNumber(Number(district.demandLevel || 0) + recipe.materials.length + (success ? 1 : 2), 0, 140);
+    district.supplyLevel = clampNumber(Number(district.supplyLevel || 0) + (success ? outputQuantity : -1), 0, 140);
+    district.tradeVolume = Math.round(Number(district.tradeVolume || 0) + (outputItem ? itemValue(outputItem, store) * Math.max(1, outputQuantity) : 100));
+  }
+  for (const material of recipe.materials || []) {
+    const marketItem = store.marketItems.find((entry) => entry.id === material.itemId);
+    if (marketItem) marketItem.stock = Math.max(0, Number(marketItem.stock || 0) - Number(material.quantity || 1));
+  }
+  if (recipe.restricted || outputItem?.contraband) {
+    wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + 18);
+    wallet.securityStatus = calculateWalletSuspicion(store, wallet).status;
+    postMssAlert(store, wallet, {
+      severity: "critical",
+      type: "restricted_crafting",
+      summary: `MSS Crafting Alert: ${wallet.displayName} attempted ${recipe.name}.`
+    });
+  }
+  wallet.updatedAt = new Date().toISOString();
+  pushTransaction(store, {
+    fromWalletId: wallet.id,
+    toWalletId: success ? wallet.id : "crafting-loss",
+    amount: success && outputItem ? itemValue(outputItem, store) * Math.max(1, outputQuantity) : 0,
+    type: "crafting",
+    reason: `${recipe.name}: ${success ? `crafted ${outputQuantity} ${outputItem?.name || "item"} (${quality?.label || "Standard"})` : "craft failed; materials lost"}`,
+    createdBy: actor,
+    meta: { key: recipe.id, outputItemId: recipe.outputItemId, success, critical, quality: quality?.id || "", specialist, consumed }
+  });
+  return { ok: true, recipe, outputItem, success, critical, quality, outputQuantity, successChance, specialist, store: await saveEconomyStore(store) };
+}
+
+export function getCraftingDashboard(store, wallet) {
+  const normalizedWallet = wallet ? { ...wallet, holdings: Array.isArray(wallet.holdings) ? wallet.holdings.map((entry) => ({ ...entry })) : [] } : null;
+  if (normalizedWallet) ensureWalletCollections(normalizedWallet);
+  const recipes = (store.craftingRecipes || craftingRecipeDefaults).map((recipe) => {
+    const specialist = recipeDistrictMatch(normalizedWallet, recipe);
+    const level = Number(normalizedWallet?.craftingLevel || 1);
+    const successChance = clampNumber(Number(recipe.successChance || 0.7) + Math.min(0.16, (level - 1) * 0.018) + (specialist ? 0.2 : -0.15), 0.12, 0.96);
+    return {
+      ...recipe,
+      outputItem: getInventoryItem(recipe.outputItemId),
+      specialist,
+      successChance,
+      unlocked: level >= Number(recipe.unlockLevel || 1),
+      canCraft: Boolean(normalizedWallet && level >= Number(recipe.unlockLevel || 1) && hasMaterials(normalizedWallet, recipe.materials)),
+      materials: (recipe.materials || []).map((material) => {
+        const held = normalizedWallet?.holdings?.find((holding) => holding.itemId === material.itemId);
+        return { ...material, item: getInventoryItem(material.itemId), held: Number(held?.quantity || 0) };
+      })
+    };
+  });
+  return {
+    wallet: normalizedWallet,
+    recipes,
+    qualityTiers: craftingQualityTiers,
+    craftingLevel: Number(normalizedWallet?.craftingLevel || 1),
+    craftingXp: Number(normalizedWallet?.craftingXp || 0),
+    jobLevel: Number(normalizedWallet?.jobLevel || 1),
+    jobXp: Number(normalizedWallet?.jobXp || 0)
+  };
+}
+
 export function getInventoryDashboard(store, wallet) {
   const normalizedWallet = wallet ? { ...wallet } : null;
   if (normalizedWallet) ensureWalletCollections(normalizedWallet);
   const holdings = (normalizedWallet?.holdings || []).map((holding) => {
     const item = getInventoryItem(holding.itemId) || { id: holding.itemId, name: holding.itemId, rarity: holding.rarity || "common", type: holding.type || "goods", baseValue: holding.averageCost || 1 };
+    const qualityMultiplier = Number(holding.qualityMultiplier || 1);
+    const value = Math.round(itemValue(item, store) * qualityMultiplier);
     return {
       ...holding,
       item,
       rarity: holding.rarity || itemRarity(item),
-      value: itemValue(item, store),
-      totalValue: itemValue(item, store) * Number(holding.quantity || 0)
+      value,
+      totalValue: value * Number(holding.quantity || 0)
     };
   }).sort((a, b) => b.totalValue - a.totalValue);
   const totalWorth = holdings.reduce((sum, holding) => sum + holding.totalValue, 0);
@@ -1123,6 +1522,140 @@ export function getInventoryDashboard(store, wallet) {
     rareLeaderboard,
     actions: gatheringActionDefaults,
     itemCatalog: inventoryItemDefaults
+  };
+}
+
+function raidTargetWallets(store, { mode = "target", walletId = "", district = "" } = {}) {
+  if (mode === "district") return (store.wallets || []).filter((wallet) => wallet.district === district);
+  if (mode === "random") {
+    const ranked = [...(store.wallets || [])].sort((a, b) => calculateWalletSuspicion(store, b).score - calculateWalletSuspicion(store, a).score);
+    return ranked.length ? [ranked[0]] : [];
+  }
+  const wallet = getWallet(store, walletId);
+  return wallet ? [wallet] : [];
+}
+
+export async function conductMssRaid({
+  mode = "target",
+  walletId = "",
+  district = "",
+  raidType = "Inventory Inspection",
+  reason = "Suspicious activity",
+  itemSeizurePercent = 25,
+  fineAmount = 0,
+  restrictHours = 0,
+  actor = "mss"
+}) {
+  const store = await getEconomyStore();
+  const targets = raidTargetWallets(store, { mode, walletId, district });
+  const now = new Date().toISOString();
+  const raidId = createId("raid");
+  const logs = [];
+
+  for (const wallet of targets) {
+    ensureWalletCollections(wallet);
+    const suspicion = calculateWalletSuspicion(store, wallet);
+    wallet.suspicionLevel = suspicion.score;
+    wallet.securityStatus = suspicion.status;
+    const seizedItems = [];
+    const basePercent = Math.max(0, Math.min(100, Number(itemSeizurePercent || 0))) / 100;
+
+    for (const holding of [...wallet.holdings]) {
+      const item = getInventoryItem(holding.itemId);
+      const quantity = Number(holding.quantity || 0);
+      if (!item || quantity <= 0) continue;
+      const raidWeight = raidType === "Full Asset Raid" ? Math.max(basePercent, itemRaidWeight(item)) : Math.max(basePercent * itemRaidWeight(item), item?.contraband ? 1 : 0);
+      const seizedQuantity = item?.contraband ? quantity : Math.min(quantity, Math.floor(quantity * raidWeight + (Math.random() < raidWeight ? 1 : 0)));
+      if (seizedQuantity <= 0) continue;
+      holding.quantity -= seizedQuantity;
+      seizedItems.push({
+        itemId: item.id,
+        name: item.name,
+        rarity: itemRarity(item),
+        quantity: seizedQuantity,
+        value: itemValue(item, store) * seizedQuantity,
+        contraband: Boolean(item.contraband)
+      });
+    }
+
+    wallet.holdings = wallet.holdings.filter((holding) => Number(holding.quantity || 0) > 0);
+    const seizedValue = seizedItems.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    const fine = Math.max(0, Number(fineAmount || 0));
+    if (fine) {
+      wallet.balance = Math.max(0, Number(wallet.balance || 0) - fine);
+      wallet.seizedCredits = Number(wallet.seizedCredits || 0) + fine;
+      pushTransaction(store, {
+        fromWalletId: wallet.id,
+        toWalletId: "mss",
+        amount: fine,
+        type: "raid_fine",
+        reason,
+        createdBy: actor,
+        meta: { raidId }
+      });
+    }
+    if (restrictHours) {
+      wallet.actionBans.unshift({
+        actionId: "market",
+        reason: `MSS raid restriction: ${reason}`,
+        until: new Date(Date.now() + Number(restrictHours) * 60 * 60 * 1000).toISOString()
+      });
+    }
+    wallet.suspicionLevel = Math.min(100, Math.max(0, wallet.suspicionLevel + (seizedItems.some((item) => item.contraband) ? 18 : 6)));
+    wallet.securityStatus = calculateWalletSuspicion(store, wallet).status;
+    wallet.raidCooldownUntil = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    wallet.updatedAt = now;
+
+    const log = {
+      id: createId("raid-log"),
+      raidId,
+      walletId: wallet.id,
+      displayName: wallet.displayName,
+      district: wallet.district,
+      raidType,
+      reason: cleanText(reason, 500),
+      suspicionBefore: suspicion.score,
+      suspicionAfter: wallet.suspicionLevel,
+      securityStatus: wallet.securityStatus,
+      seizedItems,
+      seizedValue,
+      fineAmount: fine,
+      restrictHours: Math.max(0, Number(restrictHours || 0)),
+      createdAt: now,
+      createdBy: actor
+    };
+    logs.push(log);
+    postMssAlert(store, wallet, {
+      severity: wallet.securityStatus === "Critical" ? "critical" : "high",
+      type: "mss_raid",
+      fine,
+      summary: `MSS raid completed for ${wallet.displayName}. Seized ${seizedItems.length} item type(s), ${seizedValue} PC value.`,
+      action: "raid"
+    });
+    pushTransaction(store, {
+      fromWalletId: wallet.id,
+      toWalletId: "mss-evidence-locker",
+      amount: seizedValue,
+      type: "mss_raid",
+      reason: `${raidType}: ${reason}`,
+      createdBy: actor,
+      meta: { raidId, seizedItems: seizedItems.length }
+    });
+  }
+
+  store.raidLogs = [...logs, ...(store.raidLogs || [])].slice(0, 500);
+  return { ok: Boolean(logs.length), raidId, logs, store: await saveEconomyStore(store) };
+}
+
+export function getSecurityDashboard(store, wallet = null) {
+  const scored = (store.wallets || []).map((entry) => {
+    const suspicion = calculateWalletSuspicion(store, entry);
+    return { wallet: entry, ...suspicion };
+  }).sort((a, b) => b.score - a.score);
+  return {
+    current: wallet ? calculateWalletSuspicion(store, wallet) : null,
+    flagged: scored.filter((entry) => entry.score >= 35).slice(0, 12),
+    raidLogs: (store.raidLogs || []).slice(0, 30)
   };
 }
 
@@ -1332,6 +1865,96 @@ export async function debitWallet({ walletId, amount, reason, type = "fine", act
   return { ok: true, store: await saveEconomyStore(store) };
 }
 
+export async function executeWalletEnforcement({
+  walletId,
+  action = "none",
+  amount = 0,
+  reason = "State enforcement action",
+  actor = "treasury",
+  authority = "Government"
+}) {
+  const store = await getEconomyStore();
+  const wallet = getWallet(store, walletId);
+  const numericAmount = Math.max(0, Number(amount || 0));
+  const cleanReason = cleanText(reason || "State enforcement action", 500);
+  const now = new Date().toISOString();
+
+  if (!wallet) {
+    return { ok: false, store, reason: "wallet-not-found" };
+  }
+
+  let transaction = null;
+  const baseTransaction = {
+    fromWalletId: wallet.id,
+    toWalletId: "treasury",
+    amount: numericAmount,
+    type: action,
+    reason: `${authority}: ${cleanReason}`,
+    createdBy: actor,
+    meta: { authority }
+  };
+
+  if (action === "emergency_taxation") {
+    if (wallet.exempt || numericAmount <= 0) return { ok: false, store, reason: "invalid-tax" };
+    wallet.balance = Math.max(0, Number(wallet.balance || 0) - numericAmount);
+    wallet.taxStatus = "emergency taxation issued";
+    store.taxRecords.unshift({
+      id: createId("tax"),
+      walletId: wallet.id,
+      taxType: "emergency_state_levy",
+      amount: numericAmount,
+      rate: 0,
+      status: "paid",
+      reason: cleanReason,
+      createdAt: now,
+      createdBy: actor
+    });
+    transaction = baseTransaction;
+  } else if (action === "fine") {
+    if (numericAmount <= 0) return { ok: false, store, reason: "invalid-fine" };
+    wallet.balance = Math.max(0, Number(wallet.balance || 0) - numericAmount);
+    wallet.taxStatus = "penalty issued";
+    transaction = { ...baseTransaction, type: "fine" };
+  } else if (action === "asset_seizure") {
+    if (numericAmount <= 0) return { ok: false, store, reason: "invalid-seizure" };
+    wallet.balance = Math.max(0, Number(wallet.balance || 0) - numericAmount);
+    wallet.seizedCredits = Number(wallet.seizedCredits || 0) + numericAmount;
+    wallet.underReview = true;
+    transaction = { ...baseTransaction, type: "asset_seizure", toWalletId: "mss" };
+  } else if (action === "wallet_freeze" || action === "wallet_unfreeze") {
+    wallet.status = action === "wallet_freeze" ? "frozen" : "active";
+    transaction = {
+      ...baseTransaction,
+      amount: 0,
+      type: action,
+      toWalletId: wallet.id,
+      reason: `${authority}: wallet ${wallet.status}. ${cleanReason}`
+    };
+  } else if (action === "tax_rebate" || action === "grant_payment") {
+    if (numericAmount <= 0) return { ok: false, store, reason: "invalid-payment" };
+    wallet.balance = Number(wallet.balance || 0) + numericAmount;
+    transaction = {
+      ...baseTransaction,
+      fromWalletId: "treasury",
+      toWalletId: wallet.id,
+      type: action,
+      reason: `${authority}: ${cleanReason}`
+    };
+  } else {
+    transaction = {
+      ...baseTransaction,
+      amount: 0,
+      type: "citizen_notice",
+      toWalletId: wallet.id
+    };
+  }
+
+  wallet.updatedAt = now;
+  pushTransaction(store, transaction);
+  const saved = await saveEconomyStore(store);
+  return { ok: true, store: saved, wallet, transaction: saved.transactions[0] };
+}
+
 export async function applyTax({ walletId, taxType, amount, actor = "treasury", status = "paid" }) {
   const store = await getEconomyStore();
   const wallet = getWallet(store, walletId);
@@ -1484,8 +2107,12 @@ export async function buyCitizenListing({ buyerWalletId, listingId, quantity, ac
   const taxType = item.category === "Luxury Goods" || item.type === "luxury" ? "luxury_goods_tax" : "trade_tax";
   const taxAmount = buyer.exempt ? 0 : Math.round(subtotal * Number(store.taxRates[taxType] || 0) * 100) / 100;
   if (Number(buyer.balance || 0) < subtotal + taxAmount) return { ok: false, store };
+  const sellerTaxRate = item.contraband ? 0.25 : itemRarity(item) === "legendary" || itemRarity(item) === "epic" ? 0.2 : 0.15;
+  const sellerTax = seller.exempt ? 0 : Math.round(subtotal * sellerTaxRate * 100) / 100;
   buyer.balance -= subtotal + taxAmount;
-  seller.balance += subtotal;
+  seller.balance += Math.max(0, subtotal - sellerTax);
+  seller.suspicionLevel = Math.max(0, Number(seller.suspicionLevel || 0) - 3);
+  seller.securityStatus = calculateWalletSuspicion(store, seller).status;
   listing.quantity -= count;
   listing.status = listing.quantity > 0 ? "active" : "sold";
   listing.updatedAt = new Date().toISOString();
@@ -1498,9 +2125,9 @@ export async function buyCitizenListing({ buyerWalletId, listingId, quantity, ac
     amount: subtotal,
     type: "listing_buy",
     reason: `${count} x ${item.name} from ${seller.displayName}`,
-    taxAmount,
+    taxAmount: taxAmount + sellerTax,
     createdBy: actor,
-    meta: { key: listing.id, itemId: item.id }
+    meta: { key: listing.id, itemId: item.id, buyerTax: taxAmount, sellerTax, sellerTaxRate }
   });
   if (taxAmount) {
     store.taxRecords.unshift({
@@ -1509,6 +2136,17 @@ export async function buyCitizenListing({ buyerWalletId, listingId, quantity, ac
       taxType,
       amount: taxAmount,
       rate: Number(store.taxRates[taxType] || 0),
+      status: "paid",
+      createdAt: new Date().toISOString()
+    });
+  }
+  if (sellerTax) {
+    store.taxRecords.unshift({
+      id: createId("tax"),
+      walletId: seller.id,
+      taxType: "market_sale_tax",
+      amount: sellerTax,
+      rate: sellerTaxRate,
       status: "paid",
       createdAt: new Date().toISOString()
     });

@@ -15,6 +15,8 @@ import {
   enemyVisibilityLevels,
   getAllEnemyEntries
 } from "../../../lib/enemies-of-state";
+import { getCitizenState } from "../../../lib/citizen-state";
+import { getEconomyStore, getSecurityDashboard } from "../../../lib/panem-credit";
 
 export const metadata = {
   title: "MSS Console | Government Access"
@@ -26,7 +28,8 @@ export const revalidate = 0;
 export default async function MssConsolePage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("enemyRegistryDraft");
-  const entries = await getAllEnemyEntries();
+  const [entries, state, economy] = await Promise.all([getAllEnemyEntries(), getCitizenState(), getEconomyStore()]);
+  const security = getSecurityDashboard(economy);
   const canIssuePublic = canAccess(user, "enemyRegistryPublic");
   const canCreateAlerts = canAccess(user, "mssTools");
   const visiblePingOptions = ["Supreme Chairman", "Executive Director", "MSS Command", "Security Command"].includes(user.role)
@@ -57,12 +60,116 @@ export default async function MssConsolePage({ searchParams }) {
             <p>The Enemy of the State Registry has been recorded for authorised review.</p>
           </section>
         ) : null}
+        {params?.raidSaved ? (
+          <section className="application-notice">
+            <strong>MSS Raid Complete</strong>
+            <p>{params.count || "0"} citizen inventory record{params.count === "1" ? "" : "s"} inspected.</p>
+          </section>
+        ) : null}
         {params?.error ? (
           <section className="application-notice application-notice--error">
             <strong>Security Alert Not Sent</strong>
             <p>{params.detail || "The directive could not be queued."}</p>
           </section>
         ) : null}
+        <section className="panel government-user-panel">
+          <p className="eyebrow">MSS Raid System</p>
+          <h2>Inventory Enforcement Raid</h2>
+          <form action="/government-access/mss-console/action" className="public-application-form" method="post">
+            <input name="intent" type="hidden" value="mss-raid" />
+            <div className="public-application-grid public-application-grid--three">
+              <label className="public-application-field">
+                <span>Raid mode</span>
+                <select name="mode">
+                  <option value="target">Targeted Raid</option>
+                  <option value="district">District Sweep</option>
+                  <option value="random">Random Enforcement Action</option>
+                </select>
+              </label>
+              <label className="public-application-field">
+                <span>Citizen target</span>
+                <select name="walletId">
+                  {economy.wallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.displayName} / {wallet.district}</option>)}
+                </select>
+              </label>
+              <label className="public-application-field">
+                <span>District</span>
+                <select name="district">
+                  {[...new Set(economy.wallets.map((wallet) => wallet.district).filter(Boolean))].map((district) => <option key={district} value={district}>{district}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="public-application-grid public-application-grid--three">
+              <label className="public-application-field">
+                <span>Raid type</span>
+                <select name="raidType">
+                  <option>Inventory Inspection</option>
+                  <option>Contraband Seizure</option>
+                  <option>Full Asset Raid</option>
+                  <option>Financial Investigation</option>
+                </select>
+              </label>
+              <label className="public-application-field">
+                <span>Item seizure %</span>
+                <input defaultValue="25" min="0" max="100" name="itemSeizurePercent" type="number" />
+              </label>
+              <label className="public-application-field">
+                <span>Emergency fine</span>
+                <input defaultValue="0" min="0" name="fineAmount" type="number" />
+              </label>
+            </div>
+            <div className="public-application-grid public-application-grid--two">
+              <label className="public-application-field">
+                <span>Trading restriction hours</span>
+                <input defaultValue="0" min="0" max="168" name="restrictHours" type="number" />
+              </label>
+              <label className="public-application-field">
+                <span>Reason</span>
+                <input defaultValue="Suspicious activity" name="reason" />
+              </label>
+            </div>
+            <button className="button button--danger-site" disabled={!canAccess(user, "mssTools")} type="submit">Execute Raid</button>
+          </form>
+        </section>
+
+        <section className="state-section">
+          <p className="eyebrow">Suspicion Ledger</p>
+          <h2>Flagged Citizens</h2>
+          <div className="government-user-list">
+            {security.flagged.map((entry) => (
+              <article className="panel government-user-card" key={entry.wallet.id}>
+                <div className="panel__header">
+                  <div>
+                    <p className="eyebrow">{entry.status}</p>
+                    <h3>{entry.wallet.displayName}</h3>
+                  </div>
+                  <span className="court-role-badge">{entry.score}</span>
+                </div>
+                <p>{entry.reasons.join(", ") || "MSS monitoring"}</p>
+                <dl className="panem-ledger">
+                  <div><dt>District</dt><dd>{entry.wallet.district}</dd></div>
+                  <div><dt>Inventory</dt><dd>{entry.wallet.holdings?.length || 0} item types</dd></div>
+                  <div><dt>Balance</dt><dd>{entry.wallet.balance || 0} PC</dd></div>
+                </dl>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="state-section">
+          <p className="eyebrow">Raid Logs</p>
+          <h2>Recent MSS Raids</h2>
+          <div className="government-audit-list">
+            {security.raidLogs.length ? security.raidLogs.map((raid) => (
+              <article className="government-audit-row government-audit-row--warning" key={raid.id}>
+                <span>{raid.createdAt}</span>
+                <strong>{raid.raidType} / {raid.displayName}</strong>
+                <p>{raid.reason} / seized {raid.seizedItems.length} item type(s) / fine {raid.fineAmount || 0} PC</p>
+              </article>
+            )) : <p className="court-empty">No raid logs recorded.</p>}
+          </div>
+        </section>
+
         <section className="panel government-user-panel">
           <p className="eyebrow">Enemy of the State Registry</p>
           <h2>Create Registry Entry</h2>

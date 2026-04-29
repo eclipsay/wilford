@@ -76,6 +76,20 @@ export const permissions = {
     "MSS Agent",
     "Judicial Officer"
   ],
+  citizenAlerts: [
+    "Supreme Chairman",
+    "Executive Director",
+    "Executive Command",
+    "Ministry of Credit & Records",
+    "MSS Command",
+    "Minister of State Security",
+    "MSS Agent",
+    "Judicial Officer",
+    "Government Official",
+    "Minister",
+    "District Governor",
+    "Citizen Clerk"
+  ],
   identityRegistry: [
     "Supreme Chairman",
     "Executive Director",

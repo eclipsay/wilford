@@ -4,6 +4,9 @@ export const currencySymbol = "PC";
 export const taxTypes = [
   { id: "income_tax", label: "Income Tax", defaultRate: 0.08 },
   { id: "trade_tax", label: "Trade Tax", defaultRate: 0.05 },
+  { id: "inventory_tax", label: "Inventory Tax", defaultRate: 0.05 },
+  { id: "market_sale_tax", label: "Market Sale Tax", defaultRate: 0.18 },
+  { id: "gambling_winnings_tax", label: "Gambling Winnings Tax", defaultRate: 0.08 },
   { id: "district_levy", label: "District Levy", defaultRate: 0.03 },
   { id: "emergency_state_levy", label: "Emergency State Levy", defaultRate: 0.02 },
   { id: "luxury_goods_tax", label: "Luxury Goods Tax", defaultRate: 0.12 }
@@ -226,6 +229,14 @@ export const inventoryRarityTiers = [
   { id: "legendary", label: "Legendary", multiplier: 15, color: "gold" }
 ];
 
+export const craftingQualityTiers = [
+  { id: "standard", label: "Standard", valueMultiplier: 1, weight: 62 },
+  { id: "refined", label: "Refined", valueMultiplier: 1.35, weight: 24 },
+  { id: "advanced", label: "Advanced", valueMultiplier: 1.8, weight: 10 },
+  { id: "elite", label: "Elite", valueMultiplier: 2.5, weight: 3.5 },
+  { id: "legendary", label: "Legendary", valueMultiplier: 4, weight: 0.5 }
+];
+
 export const inventoryItemDefaults = [
   ["fish-crate", "District Fish Crate", "resources", "common", "District 4", 80, 100, false, "Salted catch ready for civic kitchens."],
   ["rare-pearlfish", "Rare Pearlfish", "rare items", "rare", "District 4", 420, 92, false, "A prized coastal catch with collector value."],
@@ -245,6 +256,17 @@ export const inventoryItemDefaults = [
   ["capitol-medallion-fragment", "Capitol Medallion Fragment", "artifacts", "epic", "District 1", 1800, 95, false, "A luxury fragment with prestige applications."],
   ["capitol-silk", "Capitol Silk", "luxury", "uncommon", "District 1", 420, 98, false, "Ceremonial textile for citizens in good standing."],
   ["energy-cell", "Energy Cell", "energy", "common", "District 5", 230, 90, false, "Grid reserve cell for approved exchange."],
+  ["industrial-tool", "Industrial Tool", "crafted goods", "uncommon", "District 2", 520, 92, false, "A durable tool kit assembled from lumber and metal."],
+  ["luxury-package", "Luxury Package", "crafted goods", "rare", "District 1", 1100, 96, false, "Prestige exports prepared for elite Capitol demand."],
+  ["food-supply-crate", "Food Supply Crate", "crafted goods", "uncommon", "District 11", 460, 100, false, "Processed ration stores made from grain and livestock vouchers."],
+  ["electronics-module", "Electronics Module", "crafted goods", "uncommon", "District 3", 620, 86, false, "A practical module built from recovered circuitry."],
+  ["work-permit", "Foreign Work Permit", "permit", "rare", "The Capitol", 900, 100, false, "Administrative authorization that improves foreign work efficiency."],
+  ["contraband-electronics", "Contraband Electronics", "contraband", "rare", "District 3", 980, 55, true, "Unregistered circuit boards and comms parts for underground buyers."],
+  ["forged-documents", "Forged Documents", "contraband", "epic", "The Capitol", 1800, 60, true, "Counterfeit permits, badges, and routing papers."],
+  ["illegal-energy-cells", "Illegal Energy Cells", "contraband", "rare", "District 5", 1250, 50, true, "Bypassed grid cells sold outside Ministry supervision."],
+  ["luxury-black-market-cache", "Luxury Black-Market Cache", "contraband", "epic", "District 1", 2400, 70, true, "Prestige goods routed around Capitol tax offices."],
+  ["rare-artifact-cache", "Rare Artifact Cache", "contraband", "legendary", "District 12", 4200, 80, true, "A dangerous relic lot that attracts collectors and MSS attention."],
+  ["smuggler-route-pass", "Smuggler Route Pass", "contraband", "rare", "District 6", 1500, 65, true, "A clandestine route marker used to move goods between districts."],
   ["unstable-power-core", "Unstable Power Core", "contraband", "epic", "District 5", 2100, 45, true, "Restricted energy component requiring MSS review."],
   ["restricted-prototype", "Restricted Prototype", "contraband", "legendary", "District 13", 5000, 55, true, "Strategic item under direct state control."]
 ].map(([id, name, type, rarity, district, baseValue, durability, contraband, description]) => ({
@@ -258,6 +280,112 @@ export const inventoryItemDefaults = [
   contraband,
   description
 }));
+
+export const craftingRecipeDefaults = [
+  {
+    id: "energy-cell",
+    name: "Energy Cell",
+    district: "District 5",
+    category: "Energy",
+    outputItemId: "energy-cell",
+    outputQuantity: 1,
+    materials: [
+      { itemId: "coal-load", quantity: 3 },
+      { itemId: "circuit-board", quantity: 1 }
+    ],
+    successChance: 0.78,
+    xpReward: 45,
+    unlockLevel: 1,
+    specialtyBonus: "+20% success chance in District 5",
+    description: "Coal and circuitry become portable grid reserve value."
+  },
+  {
+    id: "industrial-tool",
+    name: "Industrial Tool",
+    district: "District 2",
+    secondaryDistricts: ["District 7"],
+    category: "Industrial",
+    outputItemId: "industrial-tool",
+    outputQuantity: 1,
+    materials: [
+      { itemId: "timber-bundle", quantity: 2 },
+      { itemId: "ore-cluster", quantity: 2 }
+    ],
+    successChance: 0.74,
+    xpReward: 55,
+    unlockLevel: 2,
+    specialtyBonus: "+20% success chance in District 2 or 7",
+    description: "Lumber and metal are assembled into higher-value work gear."
+  },
+  {
+    id: "luxury-package",
+    name: "Luxury Package",
+    district: "District 1",
+    category: "Luxury",
+    outputItemId: "luxury-package",
+    outputQuantity: 1,
+    materials: [
+      { itemId: "capitol-silk", quantity: 2 },
+      { itemId: "capitol-medallion-fragment", quantity: 1 }
+    ],
+    successChance: 0.68,
+    xpReward: 70,
+    unlockLevel: 3,
+    specialtyBonus: "+20% success chance in District 1",
+    description: "Rare textiles and prestige pieces become elite export bundles."
+  },
+  {
+    id: "food-supply-crate",
+    name: "Food Supply Crate",
+    district: "District 11",
+    category: "Food",
+    outputItemId: "food-supply-crate",
+    outputQuantity: 1,
+    materials: [
+      { itemId: "grain-sack", quantity: 3 },
+      { itemId: "livestock-voucher", quantity: 1 }
+    ],
+    successChance: 0.82,
+    xpReward: 45,
+    unlockLevel: 1,
+    specialtyBonus: "+20% success chance in District 11",
+    description: "Grain and livestock supply are processed into stable ration crates."
+  },
+  {
+    id: "electronics-module",
+    name: "Electronics Module",
+    district: "District 3",
+    category: "Technology",
+    outputItemId: "electronics-module",
+    outputQuantity: 1,
+    materials: [
+      { itemId: "circuit-board", quantity: 3 }
+    ],
+    successChance: 0.76,
+    xpReward: 55,
+    unlockLevel: 1,
+    specialtyBonus: "+20% success chance in District 3",
+    description: "Recovered technology becomes a compact industrial module."
+  },
+  {
+    id: "unstable-power-core",
+    name: "Unstable Power Core",
+    district: "District 5",
+    category: "Restricted",
+    outputItemId: "unstable-power-core",
+    outputQuantity: 1,
+    materials: [
+      { itemId: "energy-cell", quantity: 2 },
+      { itemId: "signal-core", quantity: 1 }
+    ],
+    successChance: 0.42,
+    xpReward: 110,
+    unlockLevel: 6,
+    restricted: true,
+    specialtyBonus: "Restricted craft. MSS monitoring active.",
+    description: "A dangerous black-market power core that can trigger MSS review."
+  }
+];
 
 export const gatheringActionDefaults = [
   {
@@ -563,6 +691,26 @@ export const economyCrimeDefaults = [
   penalty,
   detectionChance,
   cooldownHours
+}));
+
+export const blackMarketGoodsDefaults = [
+  ["contraband-electronics", "Contraband Electronics", "District 3", "technology", "rare", 980, 5, 0.32, "Unregistered circuit boards and comms parts for underground buyers."],
+  ["forged-documents", "Forged Documents", "The Capitol", "documents", "epic", 1800, 3, 0.46, "Counterfeit permits, badges, and routing papers. Extremely illegal."],
+  ["illegal-energy-cells", "Illegal Energy Cells", "District 5", "energy", "rare", 1250, 4, 0.38, "Bypassed grid cells sold outside Ministry supervision."],
+  ["luxury-black-market-cache", "Luxury Black-Market Cache", "District 1", "luxury", "epic", 2400, 2, 0.42, "Prestige goods routed around Capitol tax offices."],
+  ["rare-artifact-cache", "Rare Artifact Cache", "District 12", "artifacts", "legendary", 4200, 1, 0.55, "A dangerous relic lot that attracts collectors and MSS attention."],
+  ["smuggler-route-pass", "Smuggler Route Pass", "District 6", "permit", "rare", 1500, 3, 0.36, "A clandestine route marker used to move goods between districts."]
+].map(([id, name, district, category, rarity, price, stock, detectionChance, description]) => ({
+  id,
+  name,
+  district,
+  category,
+  rarity,
+  price,
+  stock,
+  detectionChance,
+  description,
+  restricted: true
 }));
 
 export const economyGambleDefaults = [

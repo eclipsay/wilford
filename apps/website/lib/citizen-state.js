@@ -32,6 +32,38 @@ export const requestCategories = [
 
 export const requestStatuses = ["Submitted", "Under Review", "Approved", "Rejected", "Completed"];
 export const requestPriorities = ["Low", "Normal", "High", "Urgent"];
+export const citizenAlertTypes = [
+  "General Notice",
+  "Tax Notice",
+  "Emergency Taxation",
+  "Fine",
+  "Wallet Freeze",
+  "MSS Warning",
+  "Court Notice",
+  "Citizenship Notice",
+  "Marketplace Notice",
+  "Stock Market Notice"
+];
+export const citizenAlertAuthorities = [
+  "Supreme Chairman",
+  "Executive Director",
+  "Ministry of Credit & Records",
+  "Ministry of State Security",
+  "Supreme Court",
+  "Citizen Services",
+  "Marketplace Authority",
+  "Panem Stock Exchange"
+];
+export const citizenEnforcementActions = [
+  "none",
+  "emergency_taxation",
+  "fine",
+  "asset_seizure",
+  "wallet_freeze",
+  "wallet_unfreeze",
+  "tax_rebate",
+  "grant_payment"
+];
 export const assignedMinistries = [
   "Citizen Services",
   "Ministry of Credit & Records",
@@ -66,6 +98,23 @@ function createSecurityId(districtName = "Capitol") {
     ? "CR"
     : String(districtName).replace(/\D/g, "").padStart(2, "0").slice(-2) || "00";
   return `WPU-${districtCode}-${new Date().getFullYear()}-${randomBytes(2).toString("hex").toUpperCase()}`;
+}
+
+function createCitizenHandle(record = {}) {
+  const base = cleanText(record.citizenHandle || record.portalUsername || record.userId || record.name || "citizen", 80)
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+  return base || `citizen-${randomBytes(2).toString("hex")}`;
+}
+
+function cleanTransferCode(value = "") {
+  return cleanText(value, 32)
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "")
+    .slice(0, 24);
 }
 
 function contentFile() {
@@ -275,6 +324,8 @@ function seedCitizenRecords(store) {
       userId,
       discordUsername: "",
       discordId: wallet?.discordId || "",
+      citizenHandle: userId,
+      transferCode: "",
       district,
       citizenStatus: status,
       securityClassification,
@@ -294,6 +345,7 @@ function seedCitizenRecords(store) {
 
 function normalizeCitizenRecord(record = {}) {
   const district = cleanText(record.district || "Capitol", 80);
+  const citizenHandle = createCitizenHandle(record);
   return {
     id: cleanText(record.id || createId("citizen"), 120),
     name: cleanText(record.name || "Registered Citizen", 160),
@@ -307,6 +359,8 @@ function normalizeCitizenRecord(record = {}) {
     sourceApplicationId: cleanText(record.sourceApplicationId || "", 120),
     discordUsername: cleanText(record.discordUsername || "", 120),
     discordId: cleanText(record.discordId || "", 80),
+    citizenHandle,
+    transferCode: cleanTransferCode(record.transferCode || ""),
     district,
     citizenStatus: citizenStatuses.includes(record.citizenStatus) || ["Supreme Chairman", "Executive Command"].includes(record.citizenStatus)
       ? record.citizenStatus
@@ -324,6 +378,19 @@ function normalizeCitizenRecord(record = {}) {
     createdAt: record.createdAt || new Date().toISOString(),
     updatedAt: record.updatedAt || new Date().toISOString()
   };
+}
+
+function ensureUniqueCitizenHandles(records = []) {
+  const seen = new Map();
+  return records.map((record) => {
+    const base = createCitizenHandle(record);
+    const count = seen.get(base) || 0;
+    seen.set(base, count + 1);
+    return {
+      ...record,
+      citizenHandle: count ? `${base}-${count + 1}`.slice(0, 36) : base
+    };
+  });
 }
 
 function normalizeCitizenRequest(entry = {}) {
@@ -345,6 +412,37 @@ function normalizeCitizenRequest(entry = {}) {
     closedAt: entry.closedAt || "",
     createdAt: entry.createdAt || now,
     updatedAt: entry.updatedAt || now
+  };
+}
+
+function normalizeCitizenAlert(entry = {}) {
+  const now = new Date().toISOString();
+  const type = citizenAlertTypes.includes(entry.type) ? entry.type : "General Notice";
+  const action = citizenEnforcementActions.includes(entry.enforcementAction) ? entry.enforcementAction : "none";
+  return {
+    id: cleanText(entry.id || createId("alert"), 120),
+    citizenId: cleanText(entry.citizenId || "", 120),
+    citizenName: cleanText(entry.citizenName || "", 180),
+    district: cleanText(entry.district || "", 80),
+    type,
+    issuingAuthority: cleanText(entry.issuingAuthority || "Government", 160),
+    message: cleanText(entry.message || "", 1600),
+    enforcementAction: action,
+    actionTaken: cleanText(entry.actionTaken || (action === "none" ? "Notice issued" : action.replace(/_/g, " ")), 500),
+    amount: Math.max(0, Number(entry.amount || 0)),
+    linkedRecordType: cleanText(entry.linkedRecordType || "", 80),
+    linkedRecordId: cleanText(entry.linkedRecordId || "", 160),
+    transactionId: cleanText(entry.transactionId || "", 160),
+    caseId: cleanText(entry.caseId || "", 160),
+    appealEnabled: entry.appealEnabled !== false,
+    websiteOnly: Boolean(entry.websiteOnly),
+    discordDeliveryRequested: Boolean(entry.discordDeliveryRequested),
+    discordDeliveryStatus: cleanText(entry.discordDeliveryStatus || (entry.discordDeliveryRequested ? "pending" : "not_requested"), 80),
+    discordDeliveryError: cleanText(entry.discordDeliveryError || "", 500),
+    readByCitizen: Boolean(entry.readByCitizen),
+    createdBy: cleanText(entry.createdBy || "system", 160),
+    createdAt: entry.createdAt || now,
+    updatedAt: entry.updatedAt || entry.createdAt || now
   };
 }
 
@@ -385,11 +483,12 @@ function normalizeCitizenState(content = {}, economyStore) {
   ].map((district) => normalizeDistrictProfile(district, economyDistricts));
 
   return {
-    citizenRecords: (Array.isArray(content.citizenRecords) && content.citizenRecords.length
+    citizenRecords: ensureUniqueCitizenHandles((Array.isArray(content.citizenRecords) && content.citizenRecords.length
       ? content.citizenRecords
       : seedCitizenRecords(economyStore)
-    ).map(normalizeCitizenRecord),
+    ).map(normalizeCitizenRecord)),
     citizenRequests: (Array.isArray(content.citizenRequests) ? content.citizenRequests : []).map(normalizeCitizenRequest),
+    citizenAlerts: (Array.isArray(content.citizenAlerts) ? content.citizenAlerts : []).map(normalizeCitizenAlert),
     districtProfiles,
     citizenActivity: Array.isArray(content.citizenActivity) ? content.citizenActivity : []
   };
@@ -462,6 +561,7 @@ export async function saveCitizenState(nextState) {
     ...currentLocal,
     citizenRecords: nextState.citizenRecords || [],
     citizenRequests: nextState.citizenRequests || [],
+    citizenAlerts: nextState.citizenAlerts || [],
     districtProfiles: nextState.districtProfiles || [],
     citizenActivity: nextState.citizenActivity || []
   };
@@ -537,6 +637,8 @@ export async function createCitizenRecord(fields) {
   const record = normalizeCitizenRecord({
     name: fields.name,
     userId: fields.userId,
+    citizenHandle: fields.citizenHandle,
+    transferCode: fields.transferCode,
     discordUsername: fields.discordUsername,
     discordId: fields.discordId,
     district: fields.district,
@@ -562,6 +664,8 @@ export async function updateCitizenRecord(id, fields) {
       ...record,
       name: fields.name ?? record.name,
       userId: fields.userId ?? record.userId,
+      citizenHandle: fields.citizenHandle ?? record.citizenHandle,
+      transferCode: fields.transferCode ?? record.transferCode,
       discordUsername: fields.discordUsername ?? record.discordUsername,
       discordId: fields.discordId ?? record.discordId,
       district,
@@ -628,6 +732,32 @@ export function findCitizenBySelector(state, selector) {
       .filter(Boolean)
       .some((item) => String(item).toLowerCase() === value)
   ) || state.citizenRecords[0];
+}
+
+export function findCitizenForTransfer(state, economy, selector) {
+  const raw = cleanText(selector, 160);
+  const value = raw.replace(/[<@!>]/g, "").replace(/^@+/, "").trim().toLowerCase();
+  if (!value) return null;
+  const matches = (state.citizenRecords || []).filter((record) => {
+    const wallet = getWallet(economy, record.walletId || record.userId || record.discordId);
+    if (!wallet || record.verificationStatus !== "Verified" || record.lostOrStolen) return false;
+    const handle = String(record.citizenHandle || "").replace(/^@+/, "").toLowerCase();
+    const transferCode = String(record.transferCode || "").toLowerCase();
+    const discordId = String(record.discordId || "").toLowerCase();
+    const discordUsername = String(record.discordUsername || "").toLowerCase();
+    const name = String(record.name || record.citizenName || "").toLowerCase();
+    return (
+      handle === value ||
+      transferCode === value ||
+      discordId === value ||
+      discordUsername === value ||
+      name === value
+    );
+  });
+  if (matches.length !== 1) return null;
+  const citizen = matches[0];
+  const wallet = getWallet(economy, citizen.walletId || citizen.userId || citizen.discordId);
+  return wallet ? { citizen, wallet } : null;
 }
 
 export function findCitizenForLogin(state, name, unionSecurityId, password = "") {
@@ -727,8 +857,10 @@ export async function getCurrentCitizen() {
 export async function hydrateCitizenProfile(record) {
   const economy = await getEconomyStore();
   const wallet = getWallet(economy, record.walletId || record.userId || record.discordId);
-  const requests = (await getCitizenState()).citizenRequests.filter((request) => request.citizenId === record.id);
+  const state = await getCitizenState();
+  const requests = state.citizenRequests.filter((request) => request.citizenId === record.id);
+  const alerts = state.citizenAlerts.filter((alert) => alert.citizenId === record.id);
   const taxes = wallet ? economy.taxRecords.filter((tax) => tax.walletId === wallet.id) : [];
   const district = economy.districts.find((item) => item.name === record.district || item.name === `The ${record.district}`);
-  return { record, wallet, requests, taxes, district };
+  return { record, wallet, requests, alerts, taxes, district };
 }

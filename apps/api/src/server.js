@@ -178,6 +178,9 @@ app.get("/api/economy", async (_req, res) => {
     events: economy.events,
     inventoryItems: economy.inventoryItems,
     gatheringActions: economy.gatheringActions,
+    craftingRecipes: economy.craftingRecipes,
+    craftingQualityTiers: economy.craftingQualityTiers,
+    blackMarketGoods: economy.blackMarketGoods,
     inventoryChallenges: economy.inventoryChallenges,
     stockCompanies: economy.stockCompanies,
     stockEvents: economy.stockEvents,
@@ -437,7 +440,9 @@ app.post("/api/admin/applications/:id/review-thread", requireAdmin, async (req, 
     reviewGuildId: String(req.body?.reviewGuildId || "").trim(),
     discordChannelId: String(req.body?.discordChannelId || "").trim(),
     discordThreadId: String(req.body?.discordThreadId || req.body?.reviewThreadId || "").trim(),
-    discordMessageId: String(req.body?.discordMessageId || req.body?.reviewMessageId || "").trim()
+    discordMessageId: String(req.body?.discordMessageId || req.body?.reviewMessageId || "").trim(),
+    adminPingSent: Boolean(req.body?.adminPingSent),
+    adminPingMessageId: String(req.body?.adminPingMessageId || "").trim()
   });
 
   if (!application) {
@@ -558,6 +563,7 @@ app.get("/api/admin/government-access-store", requireAdmin, async (_req, res) =>
     publicApplications: content.publicApplications || [],
     citizenRecords: content.citizenRecords || [],
     citizenRequests: content.citizenRequests || [],
+    citizenAlerts: content.citizenAlerts || [],
     citizenActivity: content.citizenActivity || [],
     districtProfiles: content.districtProfiles || []
   });

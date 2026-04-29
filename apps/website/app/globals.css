@@ -1796,6 +1796,18 @@ h3 {
 }
 
 @media (max-width: 900px) {
+  .citizen-hub-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .citizen-hub-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
   .topbar {
     position: static;
     flex-direction: column;
@@ -6702,6 +6714,36 @@ body {
   text-decoration: none;
 }
 
+.citizen-alert-card--unread {
+  border-color: rgba(243, 204, 138, 0.68);
+  background:
+    radial-gradient(circle at 86% 0%, rgba(243, 204, 138, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(94, 14, 16, 0.62), rgba(6, 4, 4, 0.98)),
+    rgba(10, 4, 4, 0.96);
+}
+
+.citizen-alert-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.checkbox-row {
+  align-items: center;
+  border: 1px solid rgba(218, 170, 96, 0.24);
+  border-radius: 8px;
+  color: var(--text-soft);
+  display: flex;
+  gap: 0.65rem;
+  min-height: 3.25rem;
+  padding: 0.85rem 1rem;
+}
+
+.checkbox-row input {
+  accent-color: var(--gold);
+}
+
 .finance-portal {
   display: grid;
   grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1fr);
@@ -7012,6 +7054,64 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 58px;
+}
+
+.citizen-dashboard-page > .citizen-quick-grid {
+  display: none;
+}
+
+.citizen-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.citizen-hub-card {
+  border: 1px solid rgba(215, 168, 95, 0.28);
+  background: rgba(18, 11, 12, 0.9);
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.citizen-hub-card > span {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(215, 168, 95, 0.16);
+  color: var(--gold-bright);
+  font-weight: 800;
+}
+
+.citizen-hub-card h3,
+.citizen-hub-card p {
+  margin: 0;
+}
+
+.citizen-hub-card p {
+  color: rgba(255, 244, 222, 0.78);
+  flex: 1;
+}
+
+.citizen-hub-card__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.citizen-hub-card__links a {
+  color: var(--gold);
+  font-size: 0.9rem;
+}
+
+.citizen-next-step {
+  margin-bottom: 32px;
 }
 
 .citizen-quick-card {

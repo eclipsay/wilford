@@ -10,8 +10,8 @@ import {
 } from "@wilford/shared";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
-import { getEconomyStore, getWallet } from "../../lib/panem-credit";
-import { getCurrentCitizen } from "../../lib/citizen-state";
+import { getEconomyStore, getSecurityDashboard, getWallet } from "../../lib/panem-credit";
+import { getCitizenState, getCurrentCitizen } from "../../lib/citizen-state";
 
 export const metadata = {
   title: "Panem Credit"
@@ -34,26 +34,25 @@ export default async function PanemCreditPage({ searchParams }) {
         <PageHero
           eyebrow="Ministry of Credit & Records"
           title="Panem Credit"
-          description="Secure citizen banking requires Union Security identification."
+          description="Secure citizen banking uses private portal credentials and public-safe transfer handles."
         />
 
         <main className="content content--wide finance-page panem-credit-page">
           {params?.error ? (
             <section className="application-notice application-notice--error">
               <strong>Account Access Required</strong>
-              <p>Enter your citizen name and Union Security ID before opening Panem Credit.</p>
+              <p>Enter your citizen name and private login code before opening Panem Credit.</p>
             </section>
           ) : null}
 
           <section className="portal-intro scroll-fade">
             <div>
               <p className="eyebrow">Secure Banking Access</p>
-              <h2>Union Security ID required.</h2>
+              <h2>Private portal login required.</h2>
               <p>
-                Panem Credit accounts are tied to citizen identity records. Your
-                Union Security ID identifies the wallet, district affiliation,
-                tax status, marketplace actions, and transaction history attached
-                to your account.
+                Panem Credit accounts are tied to citizen identity records, but
+                transfers use Discord mentions, public handles, or search so
+                internal IDs stay private.
               </p>
             </div>
             <form action="/citizen-portal/action" className="portal-status public-application-form citizen-login-form" method="post">
@@ -64,7 +63,7 @@ export default async function PanemCreditPage({ searchParams }) {
                 <input autoComplete="username" name="citizenName" required />
               </label>
               <label className="public-application-field">
-                <span>Union Security ID</span>
+                <span>Private login code</span>
                 <input autoComplete="off" name="unionSecurityId" placeholder="WPU-08-2026-0004" required />
               </label>
               <label className="public-application-field">
@@ -79,7 +78,7 @@ export default async function PanemCreditPage({ searchParams }) {
     );
   }
 
-  const store = await getEconomyStore();
+  const [store, citizenState] = await Promise.all([getEconomyStore(), getCitizenState()]);
   const selectedWallet = getWallet(store, citizen.walletId || citizen.userId || citizen.discordId);
 
   if (!selectedWallet) {
@@ -109,8 +108,13 @@ export default async function PanemCreditPage({ searchParams }) {
   const outstandingTax = sumTaxes(walletTaxes.filter((record) => record.status !== "paid"));
   const activeEvent = store.events.find((event) => event.status === "active") || store.events[0];
   const activeEvents = store.events.filter((event) => event.status === "active").slice(0, 5);
+  const security = getSecurityDashboard(store, selectedWallet);
   const selectedJob = economyJobDefaults.find((job) => job.id === selectedWallet.selectedJobId) || economyJobDefaults.find((job) => job.district === selectedWallet.district) || economyJobDefaults[0];
-  const availableJobs = economyJobDefaults.filter((job) => job.district === "Any" || job.district === selectedWallet.district);
+  const availableJobs = [...economyJobDefaults].sort((a, b) => {
+    const aNative = a.district === "Any" || a.district === selectedWallet.district;
+    const bNative = b.district === "Any" || b.district === selectedWallet.district;
+    return Number(bNative) - Number(aNative);
+  });
   const richest = [...store.wallets].sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0)).slice(0, 6);
   const wanted = store.wallets.filter((wallet) => wallet.wanted || wallet.underReview || Number(wallet.bounty || 0) > 0).slice(0, 6);
   const districtChampions = store.districts.map((district) => {
@@ -119,6 +123,15 @@ export default async function PanemCreditPage({ searchParams }) {
       .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))[0];
     return { district, champion };
   }).filter((entry) => entry.champion).slice(0, 6);
+  const transferRecipients = citizenState.citizenRecords
+    .filter((record) =>
+      record.id !== citizen.id &&
+      record.verificationStatus === "Verified" &&
+      !record.lostOrStolen &&
+      getWallet(store, record.walletId || record.userId || record.discordId)
+    )
+    .sort((a, b) => String(a.citizenHandle || a.name).localeCompare(String(b.citizenHandle || b.name)))
+    .slice(0, 200);
 
   return (
     <SiteLayout>
@@ -141,6 +154,8 @@ export default async function PanemCreditPage({ searchParams }) {
             <p>
               {params.error === "daily-limit"
                 ? "This wallet has already received its daily civic salary today."
+                : params.error === "confirm-transfer"
+                  ? "Large public-handle transfers require the confirmation checkbox before execution."
                 : params.error === "session"
                   ? "Your citizen banking session has expired. Please identify yourself again."
                 : "The wallet, balance, stock, or account status could not support that request."}
@@ -156,7 +171,7 @@ export default async function PanemCreditPage({ searchParams }) {
             </div>
             <div className="wallet-card__balance">{formatCredits(selectedWallet.balance)}</div>
             <span>{selectedWallet.title || titleForBalance(selectedWallet.balance)} / {selectedWallet.status.toUpperCase()}</span>
-            <p>{citizen.name} / {citizen.unionSecurityId}</p>
+            <p>{citizen.name} / @{citizen.citizenHandle || citizen.portalUsername || citizen.userId}</p>
           </article>
 
           <article className="finance-panel panem-event-panel">
@@ -195,9 +210,16 @@ export default async function PanemCreditPage({ searchParams }) {
               <form action="/panem-credit/action" className="public-application-form" method="post">
                 <input name="intent" type="hidden" value="send" />
                 <label className="public-application-field">
-                  <span>Recipient Union Security ID</span>
-                  <input autoComplete="off" name="recipientSecurityId" placeholder="WPU-03-2026-0002" required />
+                  <span>Recipient handle, transfer code, or Discord mention</span>
+                  <input autoComplete="off" list="transfer-recipients" name="recipientQuery" placeholder="@citizen-handle" required />
                 </label>
+                <datalist id="transfer-recipients">
+                  {transferRecipients.map((record) => (
+                    <option key={record.id} value={`@${record.citizenHandle || record.portalUsername || record.userId}`}>
+                      {record.name} / {record.district}
+                    </option>
+                  ))}
+                </datalist>
                 <label className="public-application-field">
                   <span>Amount</span>
                   <input min="1" name="amount" required type="number" />
@@ -205,6 +227,10 @@ export default async function PanemCreditPage({ searchParams }) {
                 <label className="public-application-field">
                   <span>Reason</span>
                   <input name="reason" placeholder="Civic payment" type="text" />
+                </label>
+                <label className="public-application-field public-application-field--checkbox">
+                  <input name="confirmTransfer" type="checkbox" />
+                  <span>Confirm if this payment is unusually large.</span>
                 </label>
                 <button className="button button--solid-site" type="submit">Send Credits</button>
               </form>
@@ -216,7 +242,7 @@ export default async function PanemCreditPage({ searchParams }) {
           </article>
         </section>
 
-        <section className="state-section scroll-fade">
+        <section className="state-section scroll-fade" id="jobs-work">
           <p className="eyebrow">Civic Earnings</p>
           <h2>Job Desk</h2>
           <article className="finance-panel">
@@ -236,15 +262,18 @@ export default async function PanemCreditPage({ searchParams }) {
             </form>
           </article>
           <div className="panem-market-grid">
-            {availableJobs.map((job) => (
+            {availableJobs.map((job) => {
+              const nativeJob = job.district === "Any" || job.district === selectedWallet.district;
+              return (
               <article className="premium-card panem-market-card" key={job.id}>
-                <span className="court-role-badge">{job.district}</span>
+                <span className="court-role-badge">{nativeJob ? "Native" : "Foreign"} / {job.district}</span>
                 <h3>{job.name}</h3>
                 <p>{job.description}</p>
                 <dl className="panem-ledger">
                   <div><dt>Payout</dt><dd>{formatCredits(job.minReward)} - {formatCredits(job.maxReward)}</dd></div>
                   <div><dt>Cooldown</dt><dd>{job.cooldownHours}h</dd></div>
                   <div><dt>Risk</dt><dd>{job.riskLevel} / {(Number(job.failureChance || 0) * 100).toFixed(0)}% failure</dd></div>
+                  <div><dt>District rule</dt><dd>{nativeJob ? "100% reward" : "40-60% reward, +15% risk"}</dd></div>
                 </dl>
                 <form action="/panem-credit/action" method="post">
                   <input name="intent" type="hidden" value="set-job" />
@@ -252,13 +281,17 @@ export default async function PanemCreditPage({ searchParams }) {
                   <button className="button button--solid-site" type="submit">{selectedJob.id === job.id ? "Selected" : "Select Job"}</button>
                 </form>
               </article>
-            ))}
+            )})}
           </div>
         </section>
 
         <section className="state-section scroll-fade">
           <p className="eyebrow">Risk Office</p>
           <h2>Fictional Crime and State Games</h2>
+          <div className="application-notice">
+            <strong>Strategic Loop</strong>
+            <p>Daily pay, work, gather items, choose whether to hold for value or sell for safer taxed credits, then compete through games, markets, and leaderboards. Current lottery jackpot: {formatCredits(store.gamblingJackpot || 2500)}. MSS suspicion: {security.current?.status || "Clear"} ({security.current?.score || 0}).</p>
+          </div>
           <div className="panem-ledger-layout">
             <form action="/panem-credit/action" className="panel public-application-form" method="post">
               <input name="intent" type="hidden" value="crime" />
@@ -272,14 +305,15 @@ export default async function PanemCreditPage({ searchParams }) {
                 </select>
               </label>
               <label className="public-application-field">
-                <span>Optional target Union Security ID</span>
-                <input autoComplete="off" name="targetSecurityId" placeholder="Required for rob citizen" />
+                <span>Optional target handle</span>
+                <input autoComplete="off" name="targetSecurityId" placeholder="@handle, Discord name, or citizen name" />
               </label>
               <button className="button button--danger-site" type="submit">Take Risk</button>
             </form>
             <form action="/panem-credit/action" className="panel public-application-form" method="post">
               <input name="intent" type="hidden" value="gamble" />
               <h3>Capitol Games</h3>
+              <p>Winnings are taxed. Heavy wagering can raise MSS suspicion and trigger monitoring.</p>
               <label className="public-application-field">
                 <span>Game</span>
                 <select name="gameId">
@@ -412,7 +446,7 @@ export default async function PanemCreditPage({ searchParams }) {
           </div>
         </section>
 
-        <section className="state-section scroll-fade">
+        <section className="state-section scroll-fade" id="ledger">
           <p className="eyebrow">Ledger</p>
           <h2>Transactions, Taxes, Rankings, and MSS Watch</h2>
           <div className="panem-ledger-layout">
@@ -441,7 +475,7 @@ export default async function PanemCreditPage({ searchParams }) {
             <article className="panel">
               <h3>Account Security</h3>
               <ul className="government-mini-list">
-                <li><span>Union Security ID</span><strong>{citizen.unionSecurityId}</strong></li>
+                <li><span>Public handle</span><strong>@{citizen.citizenHandle || citizen.portalUsername || citizen.userId}</strong></li>
                 <li><span>District</span><strong>{citizen.district}</strong></li>
                 <li><span>Verification</span><strong>{citizen.verificationStatus}</strong></li>
                 <li><span>Security classification</span><strong>{citizen.securityClassification}</strong></li>

@@ -21,7 +21,10 @@ import {
 } from "discord.js";
 import {
   applicationQuestions,
+  blackMarketGoodsDefaults,
   brand,
+  craftingQualityTiers,
+  craftingRecipeDefaults,
   dynamicEconomyEventDefaults,
   economyCrimeDefaults,
   economyEventDefaults,
@@ -293,6 +296,158 @@ function pushEconomyTransaction(economy, transaction) {
   ].slice(0, 1000);
 }
 
+const alertEmojiByType = {
+  "Emergency Taxation": "🚨",
+  "Tax Notice": "📜",
+  "MSS Warning": "🛡",
+  "Court Notice": "⚖",
+  "Wallet Freeze": "💳",
+  Fine: "🚨",
+  "General Notice": "📢",
+  "Citizenship Notice": "🛂",
+  "Marketplace Notice": "🏪",
+  "Stock Market Notice": "📈"
+};
+
+function citizenAlerts(governmentStore, citizenId) {
+  return (governmentStore.citizenAlerts || [])
+    .filter((alert) => alert.citizenId === citizenId)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+function createCitizenAlertRecord(citizen, fields = {}) {
+  const type = String(fields.type || "General Notice").trim();
+  const action = String(fields.enforcementAction || "none").trim();
+  return {
+    id: createId("alert"),
+    citizenId: citizen.id,
+    citizenName: citizen.name || citizen.citizenName || "Citizen",
+    district: citizen.district || "",
+    type,
+    issuingAuthority: String(fields.issuingAuthority || "Government").trim(),
+    message: String(fields.message || "").replace(/[<>]/g, "").trim().slice(0, 1600),
+    enforcementAction: action,
+    actionTaken: String(fields.actionTaken || (action === "none" ? "Notice issued" : action.replace(/_/g, " "))).trim(),
+    amount: Math.max(0, Number(fields.amount || 0)),
+    linkedRecordType: String(fields.linkedRecordType || "").trim(),
+    linkedRecordId: String(fields.linkedRecordId || "").trim(),
+    transactionId: String(fields.transactionId || "").trim(),
+    appealEnabled: fields.appealEnabled !== false,
+    websiteOnly: Boolean(fields.websiteOnly),
+    discordDeliveryRequested: Boolean(fields.discordDeliveryRequested),
+    discordDeliveryStatus: fields.discordDeliveryRequested ? "pending" : "not_requested",
+    discordDeliveryError: "",
+    readByCitizen: false,
+    createdBy: String(fields.createdBy || "discord-bot").trim(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function citizenAlertEmbed(alert, detail = false) {
+  const emoji = alertEmojiByType[alert.type] || "📢";
+  const description = detail
+    ? `${alert.message || "Official notice issued."}\n\nAction: ${alert.actionTaken || "Notice issued"}${alert.amount ? `\nAmount: ${formatCredits(alert.amount)}` : ""}${alert.transactionId ? `\nTransaction: ${alert.transactionId}` : ""}`
+    : `${alert.message || alert.actionTaken || "Official notice issued."}`.slice(0, 300);
+  const fields = detail
+    ? [
+        { name: "Authority", value: alert.issuingAuthority || "Government", inline: true },
+        { name: "Date", value: alert.createdAt || "Unknown", inline: true },
+        { name: "Alert ID", value: alert.id, inline: false }
+      ]
+    : [];
+  return ministryEmbed(`${emoji} ${alert.type}`, description, fields);
+}
+
+async function deliverCitizenAlertDm(userId, alert) {
+  if (!userId) return { status: "not_requested", error: "" };
+  try {
+    const user = await client.users.fetch(userId);
+    await user.send({
+      embeds: [citizenAlertEmbed(alert, true)],
+      components: economyQuickLinks("portal", "transactions")
+    });
+    return { status: "delivered", error: "" };
+  } catch (error) {
+    return { status: "failed", error: error instanceof Error ? error.message : "DM failed." };
+  }
+}
+
+function discordSuspicionBand(score) {
+  if (score >= 80) return "Critical";
+  if (score >= 60) return "High";
+  if (score >= 35) return "Elevated";
+  return "Clear";
+}
+
+function calculateDiscordSuspicion(economy, wallet) {
+  if (!wallet) return { score: 0, status: "Clear", reasons: [] };
+  ensureEconomyHoldings(wallet);
+  const inventoryValue = wallet.holdings.reduce((sum, holding) => {
+    const item = inventoryItemById(holding.itemId, economy);
+    return sum + inventoryItemValue(item, economy) * Number(holding.quantity || 0);
+  }, 0);
+  const contraband = wallet.holdings.reduce((sum, holding) => {
+    const item = inventoryItemById(holding.itemId, economy);
+    return sum + (item?.contraband ? Number(holding.quantity || 0) : 0);
+  }, 0);
+  const recent = (economy.transactions || []).filter((txn) =>
+    (txn.fromWalletId === wallet.id || txn.toWalletId === wallet.id) &&
+    Date.now() - Date.parse(txn.createdAt || 0) < 7 * 24 * 60 * 60 * 1000
+  );
+  let score = Math.max(0, Number(wallet.suspicionLevel || 0));
+  const reasons = [];
+  if (inventoryValue > 5000) { score += Math.min(25, Math.floor(inventoryValue / 1200)); reasons.push("large inventory"); }
+  if (contraband) { score += Math.min(40, contraband * 16); reasons.push("contraband"); }
+  if (Number(wallet.balance || 0) > 25000) { score += Math.min(20, Math.floor(Number(wallet.balance || 0) / 10000)); reasons.push("large balance"); }
+  const risky = recent.filter((txn) => ["crime", "gamble", "lootbox", "rob"].includes(txn.type)).length;
+  if (risky) { score += Math.min(25, risky * 4); reasons.push("risky actions"); }
+  if (wallet.taxStatus && wallet.taxStatus !== "compliant") { score += 12; reasons.push("tax irregularity"); }
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return { score, status: discordSuspicionBand(score), reasons };
+}
+
+function conductDiscordRaid(economy, targets, fields = {}) {
+  const raidId = createId("raid");
+  const raidType = fields.raidType || "Inventory Inspection";
+  const reason = fields.reason || "Suspicious activity";
+  const percent = Math.max(0, Math.min(100, Number(fields.itemSeizurePercent || 25))) / 100;
+  const logs = [];
+  for (const wallet of targets.filter(Boolean)) {
+    ensureEconomyHoldings(wallet);
+    const suspicion = calculateDiscordSuspicion(economy, wallet);
+    const seizedItems = [];
+    for (const holding of [...wallet.holdings]) {
+      const item = inventoryItemById(holding.itemId, economy);
+      const quantity = Number(holding.quantity || 0);
+      if (!item || quantity <= 0) continue;
+      const rarityRisk = item.contraband ? 1 : { common: 0.08, uncommon: 0.14, rare: 0.28, epic: 0.48, legendary: 0.72 }[inventoryRarity(item)] || 0.12;
+      const risk = raidType === "Full Asset Raid" ? Math.max(percent, rarityRisk) : Math.max(percent * rarityRisk, item.contraband ? 1 : 0);
+      const seizedQuantity = item.contraband ? quantity : Math.min(quantity, Math.floor(quantity * risk + (Math.random() < risk ? 1 : 0)));
+      if (seizedQuantity <= 0) continue;
+      holding.quantity -= seizedQuantity;
+      seizedItems.push({ itemId: item.id, name: item.name, rarity: inventoryRarity(item), quantity: seizedQuantity, value: inventoryItemValue(item, economy) * seizedQuantity, contraband: Boolean(item.contraband) });
+    }
+    wallet.holdings = wallet.holdings.filter((holding) => Number(holding.quantity || 0) > 0);
+    const fine = Math.max(0, Number(fields.fineAmount || 0));
+    if (fine) {
+      wallet.balance = Math.max(0, Number(wallet.balance || 0) - fine);
+      pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "mss", amount: fine, type: "raid_fine", reason, createdBy: fields.actor || "discord-raid", meta: { raidId } });
+    }
+    const seizedValue = seizedItems.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    wallet.suspicionLevel = Math.min(100, suspicion.score + (seizedItems.some((item) => item.contraband) ? 18 : 6));
+    wallet.securityStatus = discordSuspicionBand(wallet.suspicionLevel);
+    wallet.raidCooldownUntil = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    wallet.updatedAt = new Date().toISOString();
+    const log = { id: createId("raid-log"), raidId, walletId: wallet.id, displayName: wallet.displayName, district: wallet.district, raidType, reason, suspicionBefore: suspicion.score, suspicionAfter: wallet.suspicionLevel, securityStatus: wallet.securityStatus, seizedItems, seizedValue, fineAmount: fine, createdAt: new Date().toISOString(), createdBy: fields.actor || "discord-raid" };
+    logs.push(log);
+    addEconomyAlert(economy, { severity: wallet.securityStatus === "Critical" ? "critical" : "high", type: "mss_raid", walletId: wallet.id, summary: `MSS raid completed for ${wallet.displayName}.`, action: "raid" });
+    pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "mss-evidence-locker", amount: seizedValue, type: "mss_raid", reason: `${raidType}: ${reason}`, createdBy: fields.actor || "discord-raid", meta: { raidId, seizedItems: seizedItems.length } });
+  }
+  economy.raidLogs = [...logs, ...(economy.raidLogs || [])].slice(0, 500);
+  return { raidId, logs };
+}
+
 function randomEconomyAmount(min, max) {
   return Math.floor(Math.random() * (Number(max || min) - Number(min || 0) + 1)) + Number(min || 0);
 }
@@ -380,6 +535,15 @@ function ensureEconomyHoldings(wallet) {
   wallet.actionBans = Array.isArray(wallet.actionBans) ? wallet.actionBans : [];
   wallet.achievements = Array.isArray(wallet.achievements) ? wallet.achievements : [];
   wallet.collectionScore = Math.max(0, Number(wallet.collectionScore || 0));
+  wallet.craftingXp = Math.max(0, Number(wallet.craftingXp || 0));
+  wallet.craftingLevel = Math.max(1, Number(wallet.craftingLevel || economyLevelForXp(wallet.craftingXp)));
+  wallet.jobXp = Math.max(0, Number(wallet.jobXp || 0));
+  wallet.jobLevel = Math.max(1, Number(wallet.jobLevel || economyLevelForXp(wallet.jobXp)));
+  wallet.unlockedRecipes = Array.isArray(wallet.unlockedRecipes) ? wallet.unlockedRecipes : [];
+}
+
+function economyLevelForXp(xp) {
+  return Math.max(1, Math.floor(Math.sqrt(Math.max(0, Number(xp || 0)) / 100)) + 1);
 }
 
 function inventoryItemById(itemId, economy) {
@@ -629,22 +793,65 @@ function normalizeCitizenDistrict(citizen, wallet = null) {
   return String(citizen?.district || wallet?.district || "Capitol").trim() || "Capitol";
 }
 
+function economyHasMaterials(wallet, materials = []) {
+  ensureEconomyHoldings(wallet);
+  return materials.every((material) => Number(wallet.holdings.find((entry) => entry.itemId === material.itemId)?.quantity || 0) >= Number(material.quantity || 0));
+}
+
+function consumeEconomyMaterials(wallet, materials = [], fail = false) {
+  const consumed = [];
+  for (const material of materials) {
+    const quantity = fail ? Math.max(1, Math.ceil(Number(material.quantity || 1) / 2)) : Number(material.quantity || 1);
+    if (removeEconomyHolding(wallet, material.itemId, quantity)) consumed.push({ itemId: material.itemId, quantity });
+  }
+  return consumed;
+}
+
+function discordRecipeDistrictMatch(wallet, recipe) {
+  return recipe?.district === wallet?.district || (recipe?.secondaryDistricts || []).includes(wallet?.district);
+}
+
+function rollDiscordCraftQuality(level = 1, specialist = false) {
+  const bonus = Math.max(0, Number(level || 1) - 1) * 0.4 + (specialist ? 3 : 0);
+  const tiers = craftingQualityTiers.map((tier, index) => ({
+    ...tier,
+    weight: Math.max(0.1, Number(tier.weight || 1) + index * bonus - (index === 0 ? bonus : 0))
+  }));
+  const total = tiers.reduce((sum, tier) => sum + Number(tier.weight || 0), 0);
+  let roll = Math.random() * total;
+  for (const tier of tiers) {
+    roll -= Number(tier.weight || 0);
+    if (roll <= 0) return tier;
+  }
+  return tiers[0];
+}
+
 function availableJobsForDistrict(district) {
   return economyJobDefaults.filter((job) => job.district === "Any" || job.district === district);
 }
 
 function availableJobsForWallet(wallet, district = "") {
   const resolvedDistrict = district || wallet?.district || "Capitol";
-  return availableJobsForDistrict(resolvedDistrict);
+  return [...economyJobDefaults].sort((a, b) => {
+    const aNative = a.district === "Any" || a.district === resolvedDistrict;
+    const bNative = b.district === "Any" || b.district === resolvedDistrict;
+    return Number(bNative) - Number(aNative);
+  });
+}
+
+function discordJobAccess(wallet, job, district = "") {
+  const resolvedDistrict = district || wallet?.district || "Capitol";
+  if (!job || job.district === "Any" || job.district === resolvedDistrict) {
+    return { native: true, rewardMultiplier: 1, riskModifier: 0, label: "native" };
+  }
+  const permit = (wallet?.holdings || []).some((holding) => holding.itemId === "work-permit" && Number(holding.quantity || 0) > 0);
+  return { native: false, rewardMultiplier: permit ? 0.6 : 0.5, riskModifier: permit ? 0.08 : 0.15, label: permit ? "foreign permit" : "foreign" };
 }
 
 function findEconomyJob(input, wallet = null, district = "") {
   const value = String(input || "").trim().toLowerCase();
   const job = economyJobDefaults.find((entry) => entry.id === value || entry.name.toLowerCase() === value);
-  if (!job) return null;
-  const resolvedDistrict = district || wallet?.district || "";
-  if (resolvedDistrict && job.district !== "Any" && job.district !== resolvedDistrict) return null;
-  return job;
+  return job || null;
 }
 
 async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "work", districtName = "") {
@@ -658,21 +865,19 @@ async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "w
         : jobId || wallet.selectedJobId || "work-shift";
   const job = economyJobDefaults.find((entry) => entry.id === selectedJobId) || economyJobDefaults[0];
 
-  if (job.district !== "Any" && job.district !== resolvedDistrict) {
-    return { ok: false, title: "Work Desk", message: "That role is not available in your district. Open Jobs and select an available role first." };
-  }
-
   if (wallet.status !== "active" || !economyCooldownReady(economy, wallet.id, "work", job.id, job.cooldownHours)) {
     return { ok: false, title: "Work Desk", message: "This wallet cannot work that assignment yet. Cooldown or account status applies." };
   }
 
-  const district = (economy.districts || []).find((entry) => entry.name === resolvedDistrict);
+  ensureEconomyHoldings(wallet);
+  const jobAccess = discordJobAccess(wallet, job, resolvedDistrict);
+  const district = (economy.districts || []).find((entry) => entry.name === (jobAccess.native ? resolvedDistrict : job.district)) || (economy.districts || []).find((entry) => entry.name === resolvedDistrict);
   const event = economyActiveEvent(economy);
-  const districtFit = job.district === "Any" || job.district === resolvedDistrict ? 1.18 : 1;
+  const districtFit = jobAccess.native ? 1.18 : jobAccess.rewardMultiplier;
   const eventBoost = event.boostedDistricts?.includes(resolvedDistrict) ? 1.2 : 1;
   const prosperity = 1 + (Number(district?.prosperityRating || 70) - 70) / 300;
   const payoutBoost = 1 + discordEventModifier(economy, job.district, "jobPayoutPercent");
-  const riskBoost = discordEventModifier(economy, job.district, "riskPercent") + (mode === "overtime" ? 0.08 : 0);
+  const riskBoost = discordEventModifier(economy, job.district, "riskPercent") + jobAccess.riskModifier + (mode === "overtime" ? 0.08 : 0);
   const failed = Math.random() < Math.min(0.75, Math.max(0, Number(job.failureChance || 0) + riskBoost));
   const illegalOffer = Math.random() < Number(job.illegalOpportunityChance || 0);
   let reward = Math.round(randomEconomyAmount(job.minReward, job.maxReward) * districtFit * eventBoost * prosperity * Number(event.workMultiplier || 1) * payoutBoost * (mode === "overtime" ? 1.35 : 1));
@@ -689,6 +894,8 @@ async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "w
     }
   } else {
     wallet.balance = Number(wallet.balance || 0) + reward;
+    wallet.jobXp = Math.max(0, Number(wallet.jobXp || 0) + Math.max(8, Math.round(reward / 12)));
+    wallet.jobLevel = economyLevelForXp(wallet.jobXp);
     if (Array.isArray(job.itemRewards) && job.itemRewards.length && Math.random() < 0.22) {
       itemReward = inventoryItemById(job.itemRewards[Math.floor(Math.random() * job.itemRewards.length)], economy);
       if (itemReward) addEconomyHolding(wallet, itemReward.id, 1, inventoryItemValue(itemReward, economy));
@@ -707,13 +914,94 @@ async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "w
     type: "work",
     reason: `${job.name}${failed ? " failure" : ""}${itemReward ? ` / ${itemReward.name}` : ""}`,
     createdBy: userId,
-    meta: { key: job.id, eventId: event.id, failed, riskLevel: job.riskLevel, itemRewardId: itemReward?.id || "" }
+    meta: { key: job.id, eventId: event.id, failed, riskLevel: job.riskLevel, itemRewardId: itemReward?.id || "", nativeDistrict: jobAccess.native, rewardMultiplier: jobAccess.rewardMultiplier, riskModifier: jobAccess.riskModifier }
   });
 
   return {
     ok: true,
     title: failed ? "Work Assignment Failed" : "Work Completed",
-    message: `${job.name}\n${failed ? `Penalty: ${formatCredits(penalty)}` : `Reward: ${formatCredits(reward)}`}${itemReward ? `\nItem: ${itemReward.name}` : ""}\nRisk: ${job.riskLevel}\nEvent: ${event.title}`
+    message: `${job.name}\n${failed ? `Penalty: ${formatCredits(penalty)}` : `Reward: ${formatCredits(reward)}`}${itemReward ? `\nItem: ${itemReward.name}` : ""}\nMode: ${jobAccess.label}\nRisk: ${job.riskLevel}\nEvent: ${event.title}`
+  };
+}
+
+async function performDiscordCraft(economy, wallet, userId, recipeInput = "") {
+  ensureEconomyHoldings(wallet);
+  economy.craftingRecipes = Array.isArray(economy.craftingRecipes) && economy.craftingRecipes.length ? economy.craftingRecipes : craftingRecipeDefaults;
+  const query = String(recipeInput || "").trim().toLowerCase();
+  const recipe = economy.craftingRecipes.find((entry) =>
+    entry.id === query ||
+    entry.outputItemId === query ||
+    String(entry.name || "").toLowerCase() === query
+  );
+  if (!recipe) {
+    const lines = economy.craftingRecipes.slice(0, 8).map((entry) => {
+      const output = inventoryItemById(entry.outputItemId, economy);
+      const materials = (entry.materials || []).map((material) => `${inventoryItemById(material.itemId, economy)?.name || material.itemId} x${material.quantity}`).join(", ");
+      return `**${entry.name}** (${entry.id}) -> ${output?.name || entry.outputItemId}; ${materials}`;
+    });
+    return { ok: false, title: "Crafting Recipes", message: lines.join("\n") || "No recipes registered." };
+  }
+  if (Number(wallet.craftingLevel || 1) < Number(recipe.unlockLevel || 1)) {
+    return { ok: false, title: "Crafting Locked", message: `${recipe.name} requires crafting level ${recipe.unlockLevel}.` };
+  }
+  if (!economyHasMaterials(wallet, recipe.materials)) {
+    const missing = (recipe.materials || []).map((material) => {
+      const held = Number(wallet.holdings.find((holding) => holding.itemId === material.itemId)?.quantity || 0);
+      return `${inventoryItemById(material.itemId, economy)?.name || material.itemId}: ${held}/${material.quantity}`;
+    }).join("\n");
+    return { ok: false, title: "Materials Required", message: missing };
+  }
+  const specialist = discordRecipeDistrictMatch(wallet, recipe);
+  const successChance = Math.max(0.12, Math.min(0.96, Number(recipe.successChance || 0.7) + Math.min(0.16, (Number(wallet.craftingLevel || 1) - 1) * 0.018) + (specialist ? 0.2 : -0.15)));
+  const critical = Math.random() < Math.max(0.02, Number(wallet.craftingLevel || 1) * 0.006 + (specialist ? 0.03 : 0));
+  const success = Math.random() < successChance;
+  const outputItem = inventoryItemById(recipe.outputItemId, economy);
+  const consumed = consumeEconomyMaterials(wallet, recipe.materials, !success);
+  wallet.craftingXp = Math.max(0, Number(wallet.craftingXp || 0) + Number(recipe.xpReward || 35));
+  wallet.craftingLevel = economyLevelForXp(wallet.craftingXp);
+  let quality = null;
+  let outputQuantity = 0;
+  if (success && outputItem) {
+    quality = rollDiscordCraftQuality(wallet.craftingLevel, specialist);
+    outputQuantity = Math.max(1, Number(recipe.outputQuantity || 1) + (critical ? 1 : 0));
+    addEconomyHolding(wallet, outputItem.id, outputQuantity, Math.round(inventoryItemValue(outputItem, economy) * Number(quality.valueMultiplier || 1)));
+    const holding = wallet.holdings.find((entry) => entry.itemId === outputItem.id);
+    if (holding) {
+      holding.quality = quality.label;
+      holding.qualityMultiplier = quality.valueMultiplier;
+      holding.craftedAt = new Date().toISOString();
+    }
+  }
+  const district = (economy.districts || []).find((entry) => entry.name === recipe.district);
+  if (district) {
+    district.demandLevel = Math.max(0, Math.min(140, Number(district.demandLevel || 0) + (recipe.materials || []).length + (success ? 1 : 2)));
+    district.supplyLevel = Math.max(0, Math.min(140, Number(district.supplyLevel || 0) + (success ? outputQuantity : -1)));
+    district.tradeVolume = Math.round(Number(district.tradeVolume || 0) + (outputItem ? inventoryItemValue(outputItem, economy) * Math.max(1, outputQuantity) : 100));
+  }
+  for (const material of recipe.materials || []) {
+    const marketItem = (economy.marketItems || []).find((entry) => entry.id === material.itemId);
+    if (marketItem) marketItem.stock = Math.max(0, Number(marketItem.stock || 0) - Number(material.quantity || 1));
+  }
+  if (recipe.restricted || outputItem?.contraband) {
+    wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + 18);
+    wallet.securityStatus = discordSuspicionBand(wallet.suspicionLevel);
+    addEconomyAlert(economy, { severity: "critical", type: "restricted_crafting", walletId: wallet.id, summary: `${wallet.displayName} attempted ${recipe.name}.`, action: "MSS review" });
+    await postMssFinancialAlert({ severity: "critical", summary: `${wallet.displayName} attempted restricted crafting: ${recipe.name}.`, action: "MSS review" });
+  }
+  wallet.updatedAt = new Date().toISOString();
+  pushEconomyTransaction(economy, {
+    fromWalletId: wallet.id,
+    toWalletId: success ? wallet.id : "crafting-loss",
+    amount: success && outputItem ? inventoryItemValue(outputItem, economy) * Math.max(1, outputQuantity) : 0,
+    type: "crafting",
+    reason: `${recipe.name}: ${success ? `crafted ${outputQuantity} ${outputItem?.name || "item"} (${quality?.label || "Standard"})` : "craft failed"}`,
+    createdBy: userId,
+    meta: { key: recipe.id, outputItemId: recipe.outputItemId, success, critical, quality: quality?.id || "", specialist, consumed }
+  });
+  return {
+    ok: true,
+    title: success ? "Crafting Complete" : "Crafting Failed",
+    message: `${recipe.name}\n${success ? `Output: ${outputQuantity} x ${outputItem?.name || recipe.outputItemId}\nQuality: ${quality?.label || "Standard"}${critical ? "\nCritical success: bonus output" : ""}` : "Materials were partially lost."}\nSuccess chance: ${Math.round(successChance * 100)}%\nCrafting level: ${wallet.craftingLevel}`
   };
 }
 
@@ -731,6 +1019,7 @@ function dashboardSelect(section = "overview") {
     ["inventory", "Inventory", "Items, rarity, and value", "🎒"],
     ["stocks", "Stocks", "PSE portfolio and market", "📈"],
     ["taxes", "Taxes", "Tax status and records", "📜"],
+    ["alerts", "Alerts", "Citizen notices and enforcement", "🚨"],
     ["district", "District", "District production profile", "🌍"],
     ["requests", "Requests", "Citizen requests and case files", "🏛"],
     ["union-id", "Union ID", "Identity and verification", "🛂"],
@@ -833,12 +1122,13 @@ function dashboardMetricSummary(economy, governmentStore, identity) {
   ensureEconomyHoldings(wallet);
   ensureStockCollections(wallet);
   const requests = (governmentStore.citizenRequests || []).filter((request) => request.citizenId === identity.citizen.id);
+  const alerts = citizenAlerts(governmentStore, identity.citizen.id);
   const activeRequests = requests.filter((request) => !["Completed", "Rejected"].includes(request.status));
   const inventoryValue = wallet.holdings.reduce((sum, holding) => sum + inventoryItemValue(inventoryItemById(holding.itemId, economy), economy) * Number(holding.quantity || 0), 0);
   const stockValue = discordStockPortfolioValue(wallet, economy);
   const listingsCount = (economy.listings || []).filter((listing) => listing.sellerWalletId === wallet.id && listing.status === "active").length;
   const taxPaid = (economy.taxRecords || []).filter((record) => record.walletId === wallet.id && record.status === "paid").reduce((sum, record) => sum + Number(record.amount || 0), 0);
-  return { requests, activeRequests, inventoryValue, stockValue, listingsCount, taxPaid };
+  return { requests, alerts, activeRequests, inventoryValue, stockValue, listingsCount, taxPaid };
 }
 
 async function getCitizenDashboardContext(user) {
@@ -864,6 +1154,7 @@ function citizenDashboardEmbed(section, context, user) {
     jobs: "Jobs",
     stocks: "Stocks",
     taxes: "Taxes",
+    alerts: "Alerts",
     district: "District",
     requests: "Requests",
     "union-id": "Union ID",
@@ -875,7 +1166,7 @@ function citizenDashboardEmbed(section, context, user) {
     fields.push({ name: "💳 Balance", value: formatCredits(wallet.balance), inline: true }, { name: "Status", value: String(wallet.status || "active"), inline: true }, { name: "Tax", value: String(wallet.taxStatus || "compliant"), inline: true });
   }
   if (section === "overview") {
-    fields.push({ name: "🎒 Inventory", value: `${wallet.holdings.length} types\n${formatCredits(metrics.inventoryValue)}`, inline: true }, { name: "📈 Stocks", value: `${wallet.stockPortfolio.length} positions\n${formatCredits(metrics.stockValue)}`, inline: true }, { name: "🏪 Listings", value: String(metrics.listingsCount), inline: true }, { name: "🏛 Requests", value: `${metrics.activeRequests.length} active`, inline: true }, { name: "🛂 Union ID", value: `${citizen.unionSecurityId}\n${citizen.verificationStatus}`, inline: true }, { name: "🚨 MSS Status", value: wallet.wanted ? "Wanted" : wallet.underReview ? "Under review" : "Clear", inline: true });
+    fields.push({ name: "🎒 Inventory", value: `${wallet.holdings.length} types\n${formatCredits(metrics.inventoryValue)}`, inline: true }, { name: "📈 Stocks", value: `${wallet.stockPortfolio.length} positions\n${formatCredits(metrics.stockValue)}`, inline: true }, { name: "🏪 Listings", value: String(metrics.listingsCount), inline: true }, { name: "🏛 Requests", value: `${metrics.activeRequests.length} active`, inline: true }, { name: "🛂 Public Handle", value: `@${publicCitizenHandle(citizen)}\n${citizen.verificationStatus}`, inline: true }, { name: "🚨 MSS Status", value: wallet.wanted ? "Wanted" : wallet.underReview ? "Under review" : "Clear", inline: true });
   } else if (section === "transactions") {
     const rows = (economy.transactions || []).filter((txn) => txn.fromWalletId === wallet.id || txn.toWalletId === wallet.id).slice(0, 8).map((txn) => `${txn.type}: ${formatCredits(txn.amount)} - ${txn.reason}`).join("\n") || "No recent transactions.";
     description += rows;
@@ -899,13 +1190,16 @@ function citizenDashboardEmbed(section, context, user) {
   } else if (section === "taxes") {
     const rows = (economy.taxRecords || []).filter((record) => record.walletId === wallet.id).slice(0, 8).map((record) => `${taxLabel(record.taxType)}: ${formatCredits(record.amount)} (${record.status})`).join("\n") || "No tax records.";
     description += `Status: ${wallet.taxStatus}\nPaid total: ${formatCredits(metrics.taxPaid)}\n\n${rows}`;
+  } else if (section === "alerts") {
+    const rows = metrics.alerts.slice(0, 8).map((alert) => `${alert.id}: ${alert.type} - ${alert.actionTaken || alert.message}`).join("\n") || "No citizen alerts recorded.";
+    description += `Unread alerts: ${metrics.alerts.filter((alert) => !alert.readByCitizen).length}\n\n${rows}`;
   } else if (section === "district") {
     description += `${district?.name || displayDistrict || "Unassigned"}\n${district?.goodsProduced || "No district production data."}\nSupply ${district?.supplyLevel || 0} / Demand ${district?.demandLevel || 0} / Prosperity ${district?.prosperityRating || 0}`;
   } else if (section === "requests") {
     const rows = metrics.requests.slice(0, 8).map((request) => `${request.category}: ${request.status} (${request.priority})`).join("\n") || "No citizen requests recorded.";
     description += `Active requests: ${metrics.activeRequests.length}\n\n${rows}`;
   } else if (section === "union-id") {
-    description += `Union Security ID: ${citizen.unionSecurityId}\nVerification: ${citizen.verificationStatus}\nSecurity: ${citizen.securityClassification}\nCitizen status: ${citizen.citizenStatus}`;
+    description += `Public handle: @${publicCitizenHandle(citizen)}\nVerification: ${citizen.verificationStatus}\nSecurity: ${citizen.securityClassification}\nCitizen status: ${citizen.citizenStatus}`;
   } else if (section === "help") {
     description += "Start with /daily for credits, /market for goods, /inventory for items, and /stocks for PSE shares. Use the dropdown to view each section.";
   }
@@ -919,6 +1213,87 @@ async function replyCitizenDashboard(interaction, section = "overview", update =
   if (update && interaction.isMessageComponent()) return interaction.update({ embeds: [embed], components });
   const payload = { embeds: [embed], components, ephemeral: true };
   return interaction.reply(payload);
+}
+
+function citizenHubSelect(section = "wallet") {
+  const options = [
+    ["wallet", "Wallet", "Balance, payments, and recent transactions"],
+    ["jobs", "Work", "Earn credits with your current job"],
+    ["inventory", "Inventory", "Items, resources, and selling basics"],
+    ["marketplace", "Marketplace", "Buy, sell, and browse goods"],
+    ["stocks", "Stocks", "Portfolio and market news"],
+    ["requests-alerts", "Requests & Alerts", "Official notices and support requests"],
+    ["help", "Help", "What should I do next?"]
+  ];
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("citizen-hub:section")
+      .setPlaceholder("Choose a citizen section")
+      .addOptions(options.map(([value, label, description]) => ({
+        label,
+        value,
+        description,
+        default: value === section
+      })))
+  );
+}
+
+function citizenHubButtons(section = "wallet") {
+  const openSite = linkButton("Citizen Hub", `${websiteUrl}/citizen-portal`, "🌐");
+  if (section === "jobs") {
+    return [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("citizen-dashboard:work").setLabel("Work").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("citizen-dashboard:district-work").setLabel("District Work").setStyle(ButtonStyle.Secondary),
+      openSite
+    )];
+  }
+  if (section === "wallet") {
+    return [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("citizen-dashboard:send-credits").setLabel("Send Money").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("citizen-dashboard:transactions").setLabel("Transactions").setStyle(ButtonStyle.Secondary),
+      openSite
+    )];
+  }
+  if (section === "requests-alerts") {
+    return [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("citizen-dashboard:submit-request").setLabel("Submit Request").setStyle(ButtonStyle.Primary),
+      openSite
+    )];
+  }
+  return dashboardButtons(section === "requests-alerts" ? "requests" : section);
+}
+
+function citizenHubEmbed(section, context, user) {
+  const { economy, governmentStore, identity } = context;
+  if (!identity) return linkedCitizenPromptEmbed();
+  if (!identity.wallet) return walletLinkRequiredEmbed();
+  const { citizen, wallet } = identity;
+  const metrics = dashboardMetricSummary(economy, governmentStore, identity);
+  const district = normalizeCitizenDistrict(citizen, wallet);
+  const selectedJob = economyJobDefaults.find((job) => job.id === wallet.selectedJobId) || economyJobDefaults.find((job) => job.district === district) || economyJobDefaults[0];
+  const alertsUnread = metrics.alerts.filter((alert) => !alert.readByCitizen).length;
+  const sectionText = {
+    wallet: `Balance: ${formatCredits(wallet.balance)}\nUse Send Money with a mention, username, or public handle.`,
+    jobs: `Current job: ${selectedJob.name}\nWork earns Panem Credits. Native district jobs are safest and most efficient.`,
+    inventory: `Inventory: ${wallet.holdings.length} item types worth about ${formatCredits(metrics.inventoryValue)}.\nGather, craft, sell, or list items when ready.`,
+    marketplace: `Marketplace listings: ${(economy.listings || []).filter((listing) => listing.status === "active").length} active.\nBuy official goods first; advanced trades live on the website.`,
+    stocks: `Portfolio: ${wallet.stockPortfolio.length} positions worth about ${formatCredits(metrics.stockValue)}.\nStocks are optional; start small.`,
+    "requests-alerts": `Unread alerts: ${alertsUnread}\nActive requests: ${metrics.activeRequests.length}\nUse requests for appeals, help, and official support.`,
+    help: "What should I do next? Work for credits, check Inventory, then open Marketplace. Risky actions ask for confirmation before they run."
+  }[section] || "";
+  return ministryEmbed("Citizen Hub", `${citizen.name || citizen.citizenName || wallet.displayName}\nDistrict: ${district}\nJob: ${selectedJob.name}\nAlerts: ${alertsUnread} unread\nStatus: ${wallet.status || "active"} / ${wallet.securityStatus || "Clear"}\n\n${sectionText}`, [
+    { name: "Balance", value: formatCredits(wallet.balance), inline: true },
+    { name: "District", value: district, inline: true },
+    { name: "Current Job", value: selectedJob.name, inline: true }
+  ]).setAuthor({ name: `WPU Citizen Hub - ${user.username}` }).setFooter({ text: "Beginner mode: use the dropdown, then press the main button." });
+}
+
+async function replyCitizenHub(interaction, section = "wallet", update = false) {
+  const context = await getCitizenDashboardContext(interaction.user);
+  const embed = citizenHubEmbed(section, context, interaction.user);
+  const components = context.identity?.wallet ? [citizenHubSelect(section), ...citizenHubButtons(section)] : dashboardButtons("unlinked");
+  if (update && interaction.isMessageComponent()) return interaction.update({ embeds: [embed], components });
+  return interaction.reply({ embeds: [embed], components, ephemeral: true });
 }
 
 async function writeGovernmentAccessStore(store) {
@@ -985,17 +1360,48 @@ function parsePositiveNumberInput(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function publicCitizenHandle(record = {}) {
+  return String(record.citizenHandle || record.portalUsername || record.userId || record.name || "citizen")
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36) || "citizen";
+}
+
 function findCitizenForDashboardTransfer(governmentStore, economy, input) {
   const needle = String(input || "").trim().replace(/[<@!>]/g, "").toLowerCase();
   if (!needle) return null;
   const citizen = (governmentStore.citizenRecords || []).find((record) =>
-    String(record.unionSecurityId || "").toLowerCase() === needle ||
+    publicCitizenHandle(record) === needle.replace(/^@+/, "") ||
+    String(record.transferCode || "").toLowerCase() === needle ||
     String(record.discordId || "").toLowerCase() === needle ||
-    String(record.citizenName || "").toLowerCase() === needle
+    String(record.discordUsername || "").toLowerCase() === needle ||
+    String(record.citizenName || record.name || "").toLowerCase() === needle
   );
   if (!citizen) return null;
-  const wallet = getEconomyWallet(economy, citizen.id) || getEconomyWallet(economy, citizen.discordId);
+  const wallet = getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId || citizen.id);
   return wallet ? { citizen, wallet } : null;
+}
+
+function searchCitizens(governmentStore, economy, input) {
+  const needle = String(input || "").trim().replace(/[<@!>]/g, "").replace(/^@+/, "").toLowerCase();
+  if (!needle) return [];
+  return (governmentStore.citizenRecords || [])
+    .filter((record) => {
+      const wallet = getEconomyWallet(economy, record.walletId || record.userId || record.discordId || record.id);
+      if (!wallet || record.verificationStatus !== "Verified" || record.lostOrStolen) return false;
+      return [
+        publicCitizenHandle(record),
+        record.discordId,
+        record.discordUsername,
+        record.citizenName,
+        record.name,
+        record.transferCode
+      ].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle));
+    })
+    .slice(0, 8)
+    .map((citizen) => ({ citizen, wallet: getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId || citizen.id) }));
 }
 
 function dashboardReplyEmbed(title, message) {
@@ -1003,6 +1409,11 @@ function dashboardReplyEmbed(title, message) {
 }
 
 async function handleCitizenDashboardComponent(interaction) {
+  if (interaction.isStringSelectMenu() && interaction.customId === "citizen-hub:section") {
+    await replyCitizenHub(interaction, interaction.values[0] || "wallet", true);
+    return true;
+  }
+
   if (interaction.isStringSelectMenu() && interaction.customId === "citizen-dashboard:section") {
     await replyCitizenDashboard(interaction, interaction.values[0] || "overview", true);
     return true;
@@ -1095,7 +1506,7 @@ async function handleCitizenDashboardComponent(interaction) {
 
   if (action === "send-credits") {
     await interaction.showModal(dashboardModal("citizen-modal:send-credits", "Send Panem Credits", [
-      shortModalInput("recipient", "Recipient", "Union Security ID, Discord ID, or citizen name"),
+      shortModalInput("recipient", "Recipient", "@handle, @mention, code, or exact name"),
       shortModalInput("amount", "Amount", "50"),
       shortModalInput("note", "Note", "Civic payment", false)
     ]));
@@ -1169,7 +1580,7 @@ async function handleCitizenDashboardModal(interaction) {
       wallet.updatedAt = citizen.updatedAt;
     }
     await Promise.all([writeGovernmentAccessStore(governmentStore), writeEconomyStore(economy)]);
-    await interaction.reply({ embeds: [dashboardReplyEmbed("Citizen Profile Linked", "Your Discord account is now linked to your WPU citizen profile. Use `/citizen-dashboard` to open your synced dashboard.")], ephemeral: true });
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Citizen Profile Linked", "Your Discord account is now linked to your WPU citizen profile. Use `/citizen` to open your synced dashboard.")], ephemeral: true });
     return true;
   }
 
@@ -1187,7 +1598,7 @@ async function handleCitizenDashboardModal(interaction) {
     const recipient = findCitizenForDashboardTransfer(governmentStore, economy, modalValue(interaction, "recipient"));
     const note = modalValue(interaction, "note") || "Discord dashboard transfer";
     if (!recipient || !amount) {
-      await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Needs Details", "Enter a valid recipient and amount, for example recipient `WPU-0000-0000` and amount `50`.")], ephemeral: true });
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Needs Details", "Enter a valid public handle, Discord mention, transfer code, or exact citizen name with amount `50`.")], ephemeral: true });
       return true;
     }
     const taxRate = Number(economy.taxRates?.trade_tax || 0);
@@ -1207,7 +1618,7 @@ async function handleCitizenDashboardModal(interaction) {
     recipient.wallet.updatedAt = now;
     pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: recipient.wallet.id, amount, type: "transfer", reason: note, taxAmount, createdBy: interaction.user.id });
     await writeEconomyStore(economy);
-    await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Complete", `${formatCredits(amount)} sent to ${recipient.citizen.citizenName || recipient.wallet.displayName}. Tax: ${formatCredits(taxAmount)}.`)], components: dashboardComponents("wallet"), ephemeral: true });
+    await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Complete", `${formatCredits(amount)} sent to @${publicCitizenHandle(recipient.citizen)}. Tax: ${formatCredits(taxAmount)}.`)], components: dashboardComponents("wallet"), ephemeral: true });
     return true;
   }
 
@@ -1359,6 +1770,7 @@ async function handleEconomySlashCommand(interaction) {
   const helpCommands = new Set(["help-economy", "help-market", "help-inventory", "help-stocks", "help-citizen", "help-mss"]);
   const citizenEconomyCommands = new Set([
     "balance",
+    "citizen",
     "citizen-dashboard",
     "pay",
     "transactions",
@@ -1366,6 +1778,7 @@ async function handleEconomySlashCommand(interaction) {
     "jobs",
     "setjob",
     "jobinfo",
+    "my-level",
     "work",
     "overtime",
     "special-task",
@@ -1375,10 +1788,16 @@ async function handleEconomySlashCommand(interaction) {
     "crime",
     "rob",
     "gamble",
+    "coinflip",
+    "dice",
+    "roulette",
     "lottery",
+    "jackpot",
     "invest",
     "tax",
     "market",
+    "blackmarket",
+    "search",
     "prices",
     "buy",
     "sell",
@@ -1387,6 +1806,8 @@ async function handleEconomySlashCommand(interaction) {
     "viewholdings",
     "market-alerts",
     "inventory",
+    "craft",
+    "list-recipes",
     "fish",
     "mine",
     "farm",
@@ -1403,6 +1824,9 @@ async function handleEconomySlashCommand(interaction) {
     "watchlist",
     "market-news",
     "dividends",
+    "alerts",
+    "alert-detail",
+    "security-status",
     "district",
     "leaderboard"
   ]);
@@ -1422,7 +1846,11 @@ async function handleEconomySlashCommand(interaction) {
     "issue-dividend",
     "stock-report",
     "run-tax",
-    "economy-report"
+    "economy-report",
+    "admin-alert",
+    "emergency-tax",
+    "raid",
+    "raid-report"
   ]);
   const economyCommands = new Set([...helpCommands, ...citizenEconomyCommands, ...adminEconomyCommands]);
 
@@ -1433,7 +1861,7 @@ async function handleEconomySlashCommand(interaction) {
   if (name === "help-economy") {
     await replyEconomy(interaction, helpEmbed("Economy Help", [
       "💳 `/balance` checks your Panem Credit wallet.",
-      "🪙 `/pay @user 50` sends credits to a verified citizen.",
+      "🪙 `/pay amount:50 user:@citizen` or `/pay amount:50 recipient:@handle` sends credits.",
       "🏪 `/market` and `/prices` show goods and district prices.",
       "🎒 `/inventory` shows gathered items and resources.",
       "📈 `/stocks` opens the Panem Stock Exchange overview.",
@@ -1507,17 +1935,25 @@ async function handleEconomySlashCommand(interaction) {
 
   const wallet = identity?.wallet;
 
+  if (name === "citizen") {
+    await replyCitizenHub(interaction, "wallet");
+    return true;
+  }
+
   if (name === "balance" || name === "citizen-dashboard") {
     await replyCitizenDashboard(interaction, "overview");
     return true;
   }
 
   if (name === "pay") {
-    const target = interaction.options.getUser("user", true);
+    const target = interaction.options.getUser("user");
+    const recipientQuery = interaction.options.getString("recipient");
     const amount = interaction.options.getNumber("amount", true);
-    const recipientIdentity = getVerifiedDiscordCitizen(governmentStore, economy, target);
+    const recipientIdentity = target
+      ? getVerifiedDiscordCitizen(governmentStore, economy, target)
+      : findCitizenForDashboardTransfer(governmentStore, economy, recipientQuery);
     if (!recipientIdentity) {
-      await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "The recipient is not a verified citizen with a registered Discord ID."), true);
+      await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "Use a verified Discord mention, public citizen handle, transfer code, or exact citizen name."), true);
       return true;
     }
     const recipient = recipientIdentity.wallet;
@@ -1525,13 +1961,17 @@ async function handleEconomySlashCommand(interaction) {
       await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "The recipient has no linked Panem Credit wallet."), true);
       return true;
     }
-    if (wallet.status !== "active" || recipient.status === "frozen" || amount <= 0 || wallet.balance < amount) {
+    if (wallet.id === recipient.id || wallet.status !== "active" || recipient.status === "frozen" || amount <= 0 || wallet.balance < amount) {
       await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "The wallet status or balance cannot support this payment."));
       return true;
     }
     const rate = Number(economy.taxRates?.trade_tax || 0.05);
     const taxAmount = Math.round(amount * rate * 100) / 100;
     const total = amount + taxAmount;
+    if (total >= 5000 && interaction.options.getBoolean("confirm") !== true) {
+      await replyEconomy(interaction, ministryEmbed("Confirmation Required", `This transfer totals ${formatCredits(total)} after tax. Run it again with \`confirm: True\`.`), true);
+      return true;
+    }
     if (wallet.balance < total) {
       await replyEconomy(interaction, ministryEmbed("Transfer Rejected", "Insufficient balance after trade tax."));
       return true;
@@ -1543,12 +1983,12 @@ async function handleEconomySlashCommand(interaction) {
       toWalletId: recipient.id,
       amount,
       type: "discord_pay",
-      reason: `Discord payment to ${target.tag}`,
+      reason: `Discord payment to @${publicCitizenHandle(recipientIdentity.citizen || {})}`,
       taxAmount,
       createdBy: interaction.user.id
     });
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed("Payment Recorded", `${formatCredits(amount)} sent to ${target.tag}.\nTrade tax: ${formatCredits(taxAmount)}.`));
+    await replyEconomy(interaction, ministryEmbed("Payment Recorded", `${formatCredits(amount)} sent to @${publicCitizenHandle(recipientIdentity.citizen || {})}.\nTrade tax: ${formatCredits(taxAmount)}.`));
     return true;
   }
 
@@ -1660,18 +2100,126 @@ async function handleEconomySlashCommand(interaction) {
     return true;
   }
 
+  if (name === "alerts") {
+    const rows = citizenAlerts(governmentStore, identity.citizen.id)
+      .slice(0, 10)
+      .map((alert) => `${alert.id}: ${alert.type} - ${alert.actionTaken || alert.message}`)
+      .join("\n") || "No citizen alerts recorded.";
+    await replyEconomy(interaction, ministryEmbed("Citizen Alerts", rows), true, economyQuickLinks("portal"));
+    return true;
+  }
+
+  if (name === "alert-detail") {
+    const alertId = interaction.options.getString("alertid", true);
+    const alert = citizenAlerts(governmentStore, identity.citizen.id).find((entry) => entry.id === alertId);
+    if (!alert) {
+      await replyEconomy(interaction, ministryEmbed("Alert Not Found", "That alert is not attached to your citizen record."), true);
+      return true;
+    }
+    await replyEconomy(interaction, citizenAlertEmbed(alert, true), true, economyQuickLinks("portal"));
+    return true;
+  }
+
+  if (name === "security-status") {
+    const suspicion = calculateDiscordSuspicion(economy, wallet);
+    wallet.suspicionLevel = suspicion.score;
+    wallet.securityStatus = suspicion.status;
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("MSS Security Status", `Status: ${suspicion.status}\nSuspicion Level: ${suspicion.score}/100\nDrivers: ${suspicion.reasons.join(", ") || "normal activity"}\n\nHolding rare or restricted items increases raid risk. Selling inventory is safer but taxed.`), true, economyQuickLinks("portal", "inventory"));
+    return true;
+  }
+
+  if (name === "search") {
+    const rows = searchCitizens(governmentStore, economy, interaction.options.getString("user", true))
+      .map(({ citizen, wallet }) => `@${publicCitizenHandle(citizen)} - ${citizen.name || citizen.citizenName || wallet.displayName} / ${citizen.district || wallet.district}`)
+      .join("\n") || "No verified citizens matched that search.";
+    await replyEconomy(interaction, ministryEmbed("Citizen Search", rows), true);
+    return true;
+  }
+
+  if (name === "blackmarket") {
+    economy.blackMarketGoods = Array.isArray(economy.blackMarketGoods) && economy.blackMarketGoods.length ? economy.blackMarketGoods : blackMarketGoodsDefaults;
+    const itemQuery = interaction.options.getString("item");
+    const quantity = Math.max(1, interaction.options.getInteger("quantity") || 1);
+    if (!itemQuery) {
+      const rows = economy.blackMarketGoods.map((good) => `${good.name} (${good.id}) - ${formatCredits(good.price)} / stock ${good.stock} / MSS ${Math.round(Number(good.detectionChance || 0) * 100)}%`).join("\n");
+      await replyEconomy(interaction, ministryEmbed("Black Market", `${rows}\n\nUse this carefully. Illegal trades increase suspicion and can trigger MSS raids.`), true, economyQuickLinks("inventory"));
+      return true;
+    }
+    const good = economy.blackMarketGoods.find((entry) => entry.id === itemQuery || String(entry.name || "").toLowerCase() === itemQuery.toLowerCase());
+    if (!good || Number(good.stock || 0) < quantity || wallet.status !== "active") {
+      await replyEconomy(interaction, ministryEmbed("Black Market Rejected", "That underground good is unavailable or your wallet cannot trade."), true);
+      return true;
+    }
+    const price = Number(good.price || 1) * quantity;
+    if (wallet.balance < price) {
+      await replyEconomy(interaction, ministryEmbed("Black Market Rejected", "Insufficient Panem Credits for that underground deal."), true);
+      return true;
+    }
+    const detected = Math.random() < Math.min(0.9, Number(good.detectionChance || 0.35) + (wallet.district === "The Capitol" ? 0.16 : -0.04));
+    wallet.balance -= price;
+    addEconomyHolding(wallet, good.id, quantity, Math.round(price / quantity));
+    good.stock = Math.max(0, Number(good.stock || 0) - quantity);
+    wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + (detected ? 22 : 10));
+    wallet.securityStatus = discordSuspicionBand(wallet.suspicionLevel);
+    pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "black-market", amount: price, type: "black-market", reason: `${quantity} x ${good.name}`, createdBy: interaction.user.id, meta: { key: good.id, detected } });
+    if (detected) {
+      const alert = { severity: "critical", type: "black_market_trade", walletId: wallet.id, fine: Math.round(price * 0.55), bounty: Math.round(price * 0.35), summary: `${wallet.displayName} bought ${good.name} through the black market.`, action: "MSS review" };
+      addEconomyAlert(economy, alert);
+      await postMssFinancialAlert(alert);
+    }
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Black Market Deal", `${quantity} x ${good.name} acquired for ${formatCredits(price)}.\nMSS detection: ${detected ? "Triggered" : "Avoided"}\nSuspicion: ${wallet.securityStatus} (${wallet.suspicionLevel}).`), true, economyQuickLinks("inventory"));
+    return true;
+  }
+
+  if (name === "my-level") {
+    ensureEconomyHoldings(wallet);
+    await replyEconomy(interaction, ministryEmbed("Citizen Progression", `Crafting Level: ${wallet.craftingLevel} (${wallet.craftingXp} XP)\nJob Level: ${wallet.jobLevel} (${wallet.jobXp} XP)\nDistrict: ${normalizeCitizenDistrict(identity.citizen, wallet)}\nNative jobs pay full rewards. Foreign jobs pay 40-60% and carry extra risk.`), true, economyQuickLinks("portal", "inventory"));
+    return true;
+  }
+
+  if (name === "list-recipes" || (name === "craft" && !interaction.options.getString("item"))) {
+    economy.craftingRecipes = Array.isArray(economy.craftingRecipes) && economy.craftingRecipes.length ? economy.craftingRecipes : craftingRecipeDefaults;
+    const rows = economy.craftingRecipes.slice(0, 10).map((recipe) => {
+      const materials = (recipe.materials || []).map((material) => `${inventoryItemById(material.itemId, economy)?.name || material.itemId} x${material.quantity}`).join(", ");
+      return `**${recipe.name}** (${recipe.id}) - L${recipe.unlockLevel}, ${Math.round(Number(recipe.successChance || 0) * 100)}% base\n${materials}`;
+    }).join("\n");
+    await replyEconomy(interaction, ministryEmbed("Crafting Recipes", rows || "No recipes registered."), true, economyQuickLinks("inventory"));
+    return true;
+  }
+
+  if (name === "craft") {
+    const result = await performDiscordCraft(economy, wallet, interaction.user.id, interaction.options.getString("item", true));
+    if (!result.ok) {
+      await replyEconomy(interaction, ministryEmbed(result.title, result.message), true, economyQuickLinks("inventory"));
+      return true;
+    }
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed(result.title, result.message), false, economyQuickLinks("inventory", "marketplace"));
+    return true;
+  }
+
   if (name === "crime" || name === "rob") {
     const crime = name === "rob"
       ? economyCrimeDefaults.find((entry) => entry.id === "rob-citizen")
       : economyCrimeDefaults.find((entry) => entry.id === interaction.options.getString("action", true)) || economyCrimeDefaults[0];
-    const targetUser = name === "rob" ? interaction.options.getUser("user", true) : null;
+    const targetUser = name === "rob" ? interaction.options.getUser("user") : null;
     const confirmed = interaction.options.getBoolean("confirm") === true;
     if ((name === "rob" || ["counterfeit-credits", "hack-treasury-terminal", "black-market-trade"].includes(crime.id)) && !confirmed) {
       await replyEconomy(interaction, ministryEmbed("Confirmation Required", `This is a risky action and may trigger MSS review.\nRun the command again with \`confirm: True\` to proceed.`), true);
       return true;
     }
-    const targetIdentity = targetUser ? getVerifiedDiscordCitizen(governmentStore, economy, targetUser) : null;
+    const targetIdentity = targetUser
+      ? getVerifiedDiscordCitizen(governmentStore, economy, targetUser)
+      : name === "rob"
+        ? findCitizenForDashboardTransfer(governmentStore, economy, interaction.options.getString("target"))
+        : null;
     const targetWallet = targetIdentity?.wallet || null;
+    if (name === "rob" && !targetWallet) {
+      await replyEconomy(interaction, ministryEmbed("Robbery Target Needed", "Use a verified Discord mention, public handle, or exact citizen name."), true);
+      return true;
+    }
     if (wallet.status !== "active" || !economyCooldownReady(economy, wallet.id, "crime", crime.id, crime.cooldownHours)) {
       await replyEconomy(interaction, ministryEmbed("Risk Denied", "Cooldown or wallet restrictions prevent that action."));
       return true;
@@ -1680,11 +2228,26 @@ async function handleEconomySlashCommand(interaction) {
     const success = Math.random() < Number(crime.successChance || 0);
     const detected = !success || Math.random() < Math.min(0.95, Number(crime.detectionChance || 0) + Number(event.crimeDetectionBonus || 0));
     let value = success ? randomEconomyAmount(crime.minReward, crime.maxReward) : Math.round(Number(crime.penalty || 0) * Number(event.crimePenaltyMultiplier || 1));
+    let itemLine = "";
     if (success && targetWallet) {
       value = Math.min(value, Number(targetWallet.balance || 0));
       targetWallet.balance -= value;
+      const candidates = (targetWallet.holdings || []).filter((holding) => Number(holding.quantity || 0) > 0);
+      if (candidates.length && Math.random() < 0.35) {
+        const holding = candidates[randomEconomyAmount(0, candidates.length - 1)];
+        if (removeEconomyHolding(targetWallet, holding.itemId, 1)) {
+          const item = inventoryItemById(holding.itemId, economy);
+          addEconomyHolding(wallet, holding.itemId, 1, inventoryItemValue(item, economy));
+          itemLine = `\nItem stolen: ${item?.name || holding.itemId}`;
+        }
+      }
+    } else if (!success && Math.random() < 0.25) {
+      const lost = removeRandomDiscordHolding(wallet);
+      if (lost) itemLine = `\nItem lost: ${inventoryItemById(lost, economy)?.name || lost}`;
     }
     wallet.balance = success ? Number(wallet.balance || 0) + value : Math.max(0, Number(wallet.balance || 0) - value);
+    wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + (detected ? 16 : 7));
+    wallet.securityStatus = discordSuspicionBand(wallet.suspicionLevel);
     pushEconomyTransaction(economy, { fromWalletId: success ? (targetWallet?.id || "black-market") : wallet.id, toWalletId: success ? wallet.id : "treasury", amount: value, type: "crime", reason: `${crime.name}: ${success ? "success" : "failed"}`, createdBy: interaction.user.id, meta: { key: crime.id, success, detected } });
     if (detected) {
       const alert = { severity: success ? "high" : "critical", type: crime.id, walletId: wallet.id, fine: Math.max(25, Math.round(value * 0.8)), bounty: Math.round(value * 0.75), summary: `MSS Financial Crime Alert: ${wallet.displayName} triggered ${crime.name}.`, action: "investigate" };
@@ -1695,14 +2258,19 @@ async function handleEconomySlashCommand(interaction) {
       await postMssFinancialAlert(alert);
     }
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed("Risk Result", `${crime.name}: ${success ? "Success" : "Failed"}\n${success ? "Gained" : "Lost"} ${formatCredits(value)}${detected ? "\nMSS alert generated." : ""}`));
+    await replyEconomy(interaction, ministryEmbed("Risk Result", `${crime.name}: ${success ? "Success" : "Failed"}\nChance: ${Math.round(Number(crime.successChance || 0) * 100)}% success / ${Math.round(Number(crime.detectionChance || 0) * 100)}% detection\n${success ? "Gained" : "Lost"} ${formatCredits(value)}${itemLine}${detected ? "\nMSS alert generated." : ""}`));
     return true;
   }
 
-  if (name === "gamble" || name === "lottery") {
+  if (["gamble", "coinflip", "dice", "roulette", "lottery"].includes(name)) {
+    const aliasGame = {
+      coinflip: "coin-toss",
+      dice: "dice-table",
+      roulette: "capitol-roulette"
+    }[name];
     const game = name === "lottery"
       ? economyGambleDefaults.find((entry) => entry.id === "district-lottery")
-      : economyGambleDefaults.find((entry) => entry.id === interaction.options.getString("game")) || economyGambleDefaults[0];
+      : economyGambleDefaults.find((entry) => entry.id === (aliasGame || interaction.options.getString("game"))) || economyGambleDefaults[0];
     const bet = Math.max(Number(game.minBet || 1), Math.min(Number(game.maxBet || 500), interaction.options.getNumber("amount") || game.minBet));
     if (bet >= 1000 && interaction.options.getBoolean("confirm") !== true) {
       await replyEconomy(interaction, ministryEmbed("Confirmation Required", `That is a large wager: ${formatCredits(bet)}.\nRun again with \`confirm: True\` to place the bet.`), true);
@@ -1713,11 +2281,28 @@ async function handleEconomySlashCommand(interaction) {
       return true;
     }
     const won = Math.random() < Number(game.winChance || 0);
-    const payout = won ? Math.round(bet * Number(game.payoutMultiplier || 1)) : 0;
+    const grossPayout = won ? Math.round(bet * Number(game.payoutMultiplier || 1)) : 0;
+    const winningsTax = won ? Math.round(Math.max(0, grossPayout - bet) * 0.08 * 100) / 100 : 0;
+    const payout = Math.max(0, grossPayout - winningsTax);
     wallet.balance = Math.max(0, Number(wallet.balance || 0) - bet + payout);
-    pushEconomyTransaction(economy, { fromWalletId: won ? "capitol-games" : wallet.id, toWalletId: won ? wallet.id : "capitol-games", amount: won ? payout : bet, type: "gamble", reason: game.name, createdBy: interaction.user.id, meta: { key: game.id, bet, won } });
+    if (bet >= 750 || grossPayout >= 1500) wallet.suspicionLevel = Math.min(100, Number(wallet.suspicionLevel || 0) + (won ? 5 : 3));
+    const suspicion = calculateDiscordSuspicion(economy, wallet);
+    wallet.suspicionLevel = suspicion.score;
+    wallet.securityStatus = suspicion.status;
+    economy.gamblingJackpot = Math.max(500, Number(economy.gamblingJackpot || 2500) + Math.round(bet * 0.08) - (game.id === "district-lottery" && won ? Math.round(grossPayout * 0.2) : 0));
+    pushEconomyTransaction(economy, { fromWalletId: won ? "capitol-games" : wallet.id, toWalletId: won ? wallet.id : "capitol-games", amount: won ? payout : bet, type: "gamble", reason: game.name, taxAmount: winningsTax, createdBy: interaction.user.id, meta: { key: game.id, bet, won, grossPayout, winningsTax, suspicion: suspicion.score } });
+    if (wallet.suspicionLevel >= 70) {
+      const alert = { severity: wallet.suspicionLevel >= 85 ? "critical" : "high", type: "excessive_gambling", walletId: wallet.id, summary: `${wallet.displayName} reached ${wallet.securityStatus} gambling suspicion.`, action: "monitor" };
+      addEconomyAlert(economy, alert);
+      await postMssFinancialAlert(alert);
+    }
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed(game.name, won ? `Winner. Payout: ${formatCredits(payout)}.` : `No payout. Stake lost: ${formatCredits(bet)}.`));
+    await replyEconomy(interaction, ministryEmbed(game.name, won ? `Winner. Payout: ${formatCredits(payout)}.\nWinnings tax: ${formatCredits(winningsTax)}.\nSuspicion: ${wallet.securityStatus} (${wallet.suspicionLevel}).` : `No payout. Stake lost: ${formatCredits(bet)}.\nJackpot pool: ${formatCredits(economy.gamblingJackpot || 0)}.`));
+    return true;
+  }
+
+  if (name === "jackpot") {
+    await replyEconomy(interaction, ministryEmbed("District Lottery Jackpot", `Current pooled reward: ${formatCredits(economy.gamblingJackpot || 2500)}.\nUse /lottery to buy a ticket.`));
     return true;
   }
 
@@ -2118,6 +2703,64 @@ async function handleEconomySlashCommand(interaction) {
   const amount = interaction.options.getNumber("amount") || 0;
   const reason = interaction.options.getString("reason") || "Treasury action";
 
+  if (name === "raid") {
+    const subcommand = interaction.options.getSubcommand();
+    const raidReason = interaction.options.getString("reason") || "Suspicious activity";
+    const raidType = interaction.options.getString("type") || "Inventory Inspection";
+    let targets = [];
+    if (subcommand === "user") {
+      if (!targetWallet) {
+        await replyEconomy(interaction, ministryEmbed("Raid Rejected", "Target must be a verified citizen with a wallet."), true);
+        return true;
+      }
+      targets = [targetWallet];
+    } else if (subcommand === "district") {
+      const district = interaction.options.getString("district", true);
+      targets = (economy.wallets || []).filter((entry) => entry.district === district);
+    } else {
+      targets = [[...(economy.wallets || [])].sort((a, b) => calculateDiscordSuspicion(economy, b).score - calculateDiscordSuspicion(economy, a).score)[0]].filter(Boolean);
+    }
+    const result = conductDiscordRaid(economy, targets, {
+      raidType,
+      reason: raidReason,
+      itemSeizurePercent: raidType === "Full Asset Raid" ? 55 : raidType === "Contraband Seizure" ? 15 : 25,
+      fineAmount: interaction.options.getNumber("fine") || 0,
+      actor: interaction.user.id
+    });
+    await writeEconomyStore(economy);
+    await postMssFinancialAlert({ severity: "critical", summary: `MSS RAID INITIATED: ${raidType}. Targets: ${result.logs.length}. Reason: ${raidReason}`, action: "raid" });
+    for (const log of result.logs) {
+      const citizen = (governmentStore.citizenRecords || []).find((record) => record.walletId === log.walletId);
+      if (citizen?.discordId) {
+        await deliverCitizenAlertDm(citizen.discordId, createCitizenAlertRecord(citizen, {
+          type: "MSS Warning",
+          issuingAuthority: "Ministry of State Security",
+          message: `MSS raid completed. ${log.seizedItems.length} item type(s) seized. Fine: ${formatCredits(log.fineAmount || 0)}.`,
+          enforcementAction: "asset_seizure",
+          actionTaken: `${log.seizedItems.length} item type(s) seized`,
+          amount: log.fineAmount || 0,
+          linkedRecordType: "mss_raid",
+          linkedRecordId: log.raidId,
+          createdBy: interaction.user.id,
+          discordDeliveryRequested: true
+        }));
+      }
+    }
+    await replyEconomy(interaction, ministryEmbed("MSS Raid Initiated", `Target count: ${result.logs.length}\nReason: ${raidReason}\nOutcome: ${result.logs.reduce((sum, log) => sum + log.seizedItems.length, 0)} item type(s) seized.`));
+    return true;
+  }
+
+  if (name === "raid-report") {
+    if (!targetWallet) {
+      await replyEconomy(interaction, ministryEmbed("Raid Report", "Target must be a verified citizen with a wallet."), true);
+      return true;
+    }
+    const suspicion = calculateDiscordSuspicion(economy, targetWallet);
+    const logs = (economy.raidLogs || []).filter((log) => log.walletId === targetWallet.id).slice(0, 5);
+    await replyEconomy(interaction, ministryEmbed("Raid Report", `${target.tag}\nSecurity: ${suspicion.status} (${suspicion.score})\nDrivers: ${suspicion.reasons.join(", ") || "normal activity"}\n\n${logs.map((log) => `${log.raidType}: ${log.seizedItems.length} item type(s), ${formatCredits(log.seizedValue || 0)}`).join("\n") || "No raids recorded."}`), true);
+    return true;
+  }
+
   if (target && !targetIdentity) {
     await replyEconomy(interaction, ministryEmbed("Citizen Required", `${target.tag} does not have a verified citizen record linked to their Discord ID.`), true);
     return true;
@@ -2128,9 +2771,66 @@ async function handleEconomySlashCommand(interaction) {
     return true;
   }
 
+  if (name === "admin-alert" && targetIdentity) {
+    const type = interaction.options.getString("type", true);
+    const message = interaction.options.getString("message", true);
+    const alert = createCitizenAlertRecord(targetIdentity.citizen, {
+      type,
+      message,
+      issuingAuthority: "Government",
+      actionTaken: "Notice issued",
+      discordDeliveryRequested: true,
+      createdBy: interaction.user.id
+    });
+    const delivery = await deliverCitizenAlertDm(target.id, alert);
+    alert.discordDeliveryStatus = delivery.status;
+    alert.discordDeliveryError = delivery.error;
+    governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
+    governmentStore.governmentAuditLog = [{ id: createId("audit"), at: new Date().toISOString(), actor: interaction.user.id, action: "discord citizen alert", detail: `${type} to ${target.tag}`, status: delivery.status === "failed" ? "failed" : "success" }, ...(governmentStore.governmentAuditLog || [])].slice(0, 300);
+    await writeGovernmentAccessStore(governmentStore);
+    await replyEconomy(interaction, ministryEmbed("Citizen Alert Sent", `${type} issued to ${target.tag}.\nDiscord DM: ${delivery.status}`), true);
+    return true;
+  }
+
+  if (name === "emergency-tax" && targetWallet && targetIdentity) {
+    const deduction = Math.max(0, amount);
+    targetWallet.balance = Math.max(0, Number(targetWallet.balance || 0) - deduction);
+    targetWallet.taxStatus = "emergency taxation issued";
+    const reasonText = reason || "Emergency taxation";
+    pushEconomyTransaction(economy, { fromWalletId: targetWallet.id, toWalletId: "treasury", amount: deduction, type: "emergency_taxation", reason: reasonText, taxAmount: deduction, createdBy: interaction.user.id });
+    const transactionId = economy.transactions?.[0]?.id || "";
+    const alert = createCitizenAlertRecord(targetIdentity.citizen, {
+      type: "Emergency Taxation",
+      message: `Emergency taxation issued by Ministry of Credit & Records. ${formatCredits(deduction)} deducted. Reason: ${reasonText}`,
+      issuingAuthority: "Ministry of Credit & Records",
+      enforcementAction: "emergency_taxation",
+      actionTaken: `${formatCredits(deduction)} deducted`,
+      amount: deduction,
+      transactionId,
+      discordDeliveryRequested: true,
+      createdBy: interaction.user.id
+    });
+    const delivery = await deliverCitizenAlertDm(target.id, alert);
+    alert.discordDeliveryStatus = delivery.status;
+    alert.discordDeliveryError = delivery.error;
+    governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
+    governmentStore.governmentAuditLog = [{ id: createId("audit"), at: new Date().toISOString(), actor: interaction.user.id, action: "discord emergency taxation", detail: `${formatCredits(deduction)} from ${target.tag}: ${reasonText}`, status: delivery.status === "failed" ? "failed" : "success" }, ...(governmentStore.governmentAuditLog || [])].slice(0, 300);
+    await Promise.all([writeEconomyStore(economy), writeGovernmentAccessStore(governmentStore)]);
+    await replyEconomy(interaction, ministryEmbed("Emergency Taxation Issued", `${formatCredits(deduction)} deducted from ${target.tag}.\nDiscord DM: ${delivery.status}`));
+    return true;
+  }
+
   if ((name === "grant" || name === "issue-grant") && targetWallet) {
     targetWallet.balance += amount;
     pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: targetWallet.id, amount, type: "grant", reason, createdBy: interaction.user.id });
+    if (targetIdentity) {
+      const alert = createCitizenAlertRecord(targetIdentity.citizen, { type: "General Notice", message: `${formatCredits(amount)} grant payment issued. Reason: ${reason}`, issuingAuthority: "Ministry of Credit & Records", enforcementAction: "grant_payment", actionTaken: `${formatCredits(amount)} paid`, amount, transactionId: economy.transactions?.[0]?.id || "", discordDeliveryRequested: true, createdBy: interaction.user.id });
+      const delivery = await deliverCitizenAlertDm(target.id, alert);
+      alert.discordDeliveryStatus = delivery.status;
+      alert.discordDeliveryError = delivery.error;
+      governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
+      await writeGovernmentAccessStore(governmentStore);
+    }
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Grant Issued", `${formatCredits(amount)} issued to ${target.tag}.`));
     return true;
@@ -2140,6 +2840,14 @@ async function handleEconomySlashCommand(interaction) {
     targetWallet.balance = Math.max(0, targetWallet.balance - amount);
     targetWallet.taxStatus = "penalty issued";
     pushEconomyTransaction(economy, { fromWalletId: targetWallet.id, toWalletId: "treasury", amount, type: "fine", reason, createdBy: interaction.user.id });
+    if (targetIdentity) {
+      const alert = createCitizenAlertRecord(targetIdentity.citizen, { type: "Fine", message: `${formatCredits(amount)} fine issued. Reason: ${reason}`, issuingAuthority: "Ministry of Credit & Records", enforcementAction: "fine", actionTaken: `${formatCredits(amount)} deducted`, amount, transactionId: economy.transactions?.[0]?.id || "", discordDeliveryRequested: true, createdBy: interaction.user.id });
+      const delivery = await deliverCitizenAlertDm(target.id, alert);
+      alert.discordDeliveryStatus = delivery.status;
+      alert.discordDeliveryError = delivery.error;
+      governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
+      await writeGovernmentAccessStore(governmentStore);
+    }
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Fine Issued", `${formatCredits(amount)} fined from ${target.tag}.`));
     return true;
@@ -2148,6 +2856,14 @@ async function handleEconomySlashCommand(interaction) {
   if ((name === "freeze-wallet" || name === "unfreeze-wallet") && targetWallet) {
     targetWallet.status = name === "freeze-wallet" ? "frozen" : "active";
     pushEconomyTransaction(economy, { fromWalletId: targetWallet.id, toWalletId: targetWallet.id, amount: 0, type: name, reason, createdBy: interaction.user.id });
+    if (targetIdentity) {
+      const alert = createCitizenAlertRecord(targetIdentity.citizen, { type: "Wallet Freeze", message: `Wallet ${targetWallet.status}. Reason: ${reason}`, issuingAuthority: "Ministry of State Security", enforcementAction: name === "freeze-wallet" ? "wallet_freeze" : "wallet_unfreeze", actionTaken: `Wallet ${targetWallet.status}`, transactionId: economy.transactions?.[0]?.id || "", discordDeliveryRequested: true, createdBy: interaction.user.id });
+      const delivery = await deliverCitizenAlertDm(target.id, alert);
+      alert.discordDeliveryStatus = delivery.status;
+      alert.discordDeliveryError = delivery.error;
+      governmentStore.citizenAlerts = [alert, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
+      await writeGovernmentAccessStore(governmentStore);
+    }
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Wallet Status Updated", `${target.tag} is now ${targetWallet.status}.`));
     return true;
@@ -2457,6 +3173,111 @@ async function setApplicationStatus(applicationId, nextFields) {
   return updatedApplication;
 }
 
+async function markApplicationAdminPingStarted(applicationId, fields = {}) {
+  let shouldSend = false;
+  let updatedApplication = null;
+
+  await updateState((state) => {
+    state.applications = state.applications.map((application) => {
+      if (application.id !== applicationId) {
+        return application;
+      }
+      if (application.adminPingSent || application.adminPingInProgress) {
+        updatedApplication = application;
+        return application;
+      }
+      shouldSend = true;
+      updatedApplication = {
+        ...application,
+        ...fields,
+        adminPingInProgress: true,
+        adminPingStartedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      return updatedApplication;
+    });
+    return state;
+  });
+
+  return { shouldSend, application: updatedApplication };
+}
+
+async function markApplicationAdminPingFinished(applicationId, fields = {}) {
+  let updatedApplication = null;
+
+  await updateState((state) => {
+    state.applications = state.applications.map((application) => {
+      if (application.id !== applicationId) {
+        return application;
+      }
+      updatedApplication = {
+        ...application,
+        ...fields,
+        adminPingSent: true,
+        adminPingInProgress: false,
+        adminPingSentAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      return updatedApplication;
+    });
+    return state;
+  });
+
+  return updatedApplication;
+}
+
+async function clearApplicationAdminPingInProgress(applicationId, error = "") {
+  await updateState((state) => {
+    state.applications = state.applications.map((application) =>
+      application.id === applicationId
+        ? {
+            ...application,
+            adminPingInProgress: false,
+            adminPingError: error,
+            updatedAt: new Date().toISOString()
+          }
+        : application
+    );
+    return state;
+  });
+}
+
+async function sendApplicationAdminPingOnce(application, thread, applicantLabel, sourceLabel = "citizenship application") {
+  if (!thread?.isTextBased?.()) {
+    return false;
+  }
+
+  const started = await markApplicationAdminPingStarted(application.id, {
+    reviewThreadId: application.reviewThreadId || thread.id,
+    reviewMessageId: application.reviewMessageId || ""
+  });
+
+  if (!started.shouldSend) {
+    console.log(`Application admin ping skipped for ${application.id}: already sent or in progress.`);
+    return false;
+  }
+
+  const pingTarget = applicationReviewRoleId
+    ? `<@&${applicationReviewRoleId}>`
+    : `<@${botOwnerId}>`;
+
+  try {
+    console.log(`Application admin ping sending for ${application.id} in thread ${thread.id}.`);
+    const sent = await thread.send(`${pingTarget} New ${sourceLabel} received from ${applicantLabel}.`);
+    await markApplicationAdminPingFinished(application.id, {
+      adminPingMessageId: sent.id,
+      reviewThreadId: application.reviewThreadId || thread.id,
+      reviewMessageId: application.reviewMessageId || ""
+    });
+    console.log(`Application admin ping sent for ${application.id}: ${sent.id}.`);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Admin ping failed.";
+    await clearApplicationAdminPingInProgress(application.id, message);
+    throw error;
+  }
+}
+
 async function updateRemoteApplication(applicationId, fields) {
   if (!adminApiKey) {
     return null;
@@ -2724,9 +3545,6 @@ async function submitApplication(session) {
   }
 
   const applicantMention = `<@${session.userId}>`;
-  const pingTarget = applicationReviewRoleId
-    ? `<@&${applicationReviewRoleId}>`
-    : `<@${botOwnerId}>`;
   const application = {
     id: session.id,
     applicantId: session.userId,
@@ -2736,12 +3554,15 @@ async function submitApplication(session) {
     answers: session.answers,
     reviewThreadId: "",
     reviewMessageId: "",
+    adminPingSent: false,
+    adminPingInProgress: false,
+    adminPingMessageId: "",
     createdAt: session.createdAt,
     updatedAt: new Date().toISOString()
   };
 
   const intro = await channel.send({
-    content: `${pingTarget} New Wilford application from ${applicantMention}`,
+    content: `New Wilford application from ${applicantMention}`,
     embeds: [
       new EmbedBuilder()
         .setColor(0xd7a85f)
@@ -2786,6 +3607,8 @@ async function submitApplication(session) {
   await thread.send(
     `Application ready for review.\nUse \`-r <message>\`, \`-accept [message]\`, or \`-deny [message]\`.`
   );
+
+  await sendApplicationAdminPingOnce(application, thread, applicantMention, "Wilford application");
 
   return application;
 }
@@ -4230,6 +5053,27 @@ async function postWebsiteApplicationToReview(application) {
     throw new Error("DISCORD_APPLICATIONS_CHANNEL_ID is not configured.");
   }
 
+  const existingState = await readState();
+  const existingApplication = existingState.applications.find((entry) => entry.id === application.id);
+  if (existingApplication?.reviewThreadId) {
+    console.log(`Website application ${application.id} already has review thread ${existingApplication.reviewThreadId}; skipping duplicate thread creation.`);
+    await markWebsiteApplicationThread(application.id, {
+      status: "under_review",
+      reviewThreadId: existingApplication.reviewThreadId,
+      reviewMessageId: existingApplication.reviewMessageId || "",
+      discordThreadId: existingApplication.reviewThreadId,
+      discordMessageId: existingApplication.reviewMessageId || "",
+      adminPingSent: Boolean(existingApplication.adminPingSent),
+      adminPingMessageId: existingApplication.adminPingMessageId || ""
+    });
+    return;
+  }
+
+  await markWebsiteApplicationThread(application.id, {
+    status: "under_review",
+    adminPingSent: Boolean(application.adminPingSent)
+  });
+
   const channel = await client.channels.fetch(applicationsChannelId).catch(() => null);
 
   if (!channel || !channel.isTextBased() || channel.type === ChannelType.DM) {
@@ -4237,14 +5081,11 @@ async function postWebsiteApplicationToReview(application) {
   }
 
   const guildId = application.reviewGuildId || applicationGuildId || "";
-  const pingTarget = applicationReviewRoleId
-    ? `<@&${applicationReviewRoleId}>`
-    : `<@${botOwnerId}>`;
   const applicantLabel = application.discordUserId
     ? `<@${application.discordUserId}>`
     : application.discordHandle || application.applicantName;
   const intro = await channel.send({
-    content: `${pingTarget} New website application from ${applicantLabel}`,
+    content: `New website application from ${applicantLabel}`,
     embeds: [
       new EmbedBuilder()
         .setColor(0xd7a85f)
@@ -4292,8 +5133,7 @@ async function postWebsiteApplicationToReview(application) {
 
   await addReviewMembersToThread(thread, guildId);
 
-  await updateState((state) => {
-    state.applications.unshift({
+  const localApplication = {
       id: application.id,
       applicantId: String(application.discordUserId || "").trim(),
       applicantTag: application.discordHandle || application.applicantName,
@@ -4308,12 +5148,19 @@ async function postWebsiteApplicationToReview(application) {
       ],
       reviewThreadId: thread.id,
       reviewMessageId: intro.id,
+      adminPingSent: false,
+      adminPingInProgress: false,
+      adminPingMessageId: "",
       createdAt: application.submittedAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       source: "website",
       email: application.email || "",
       discordHandle: application.discordHandle || ""
-    });
+  };
+
+  await updateState((state) => {
+    state.applications = state.applications.filter((entry) => entry.id !== application.id);
+    state.applications.unshift(localApplication);
     return state;
   });
 
@@ -4324,12 +5171,30 @@ async function postWebsiteApplicationToReview(application) {
     reviewGuildId: guildId,
     discordChannelId: channel.id,
     discordThreadId: thread.id,
-    discordMessageId: intro.id
+    discordMessageId: intro.id,
+    adminPingSent: false
   });
 
   await thread.send(
     "Website application imported into review.\nUse `-r <message>`, `-accept [message]`, or `-deny [message]`. Discord User ID is linked for DMs and Citizen role assignment."
   );
+
+  const pingSent = await sendApplicationAdminPingOnce(localApplication, thread, applicantLabel, "website application");
+  if (pingSent) {
+    const refreshedState = await readState();
+    const refreshedApplication = refreshedState.applications.find((entry) => entry.id === application.id);
+    await markWebsiteApplicationThread(application.id, {
+      status: "under_review",
+      reviewThreadId: thread.id,
+      reviewMessageId: intro.id,
+      reviewGuildId: guildId,
+      discordChannelId: channel.id,
+      discordThreadId: thread.id,
+      discordMessageId: intro.id,
+      adminPingSent: true,
+      adminPingMessageId: refreshedApplication?.adminPingMessageId || ""
+    });
+  }
 }
 
 async function getCommits() {
@@ -4489,6 +5354,7 @@ async function runWebsiteApplicationsLoop() {
     const applications = await getPendingWebsiteApplications();
 
     for (const application of applications) {
+      console.log(`Website application sync firing for ${application.id}.`);
       await postWebsiteApplicationToReview(application);
     }
   } catch (error) {
@@ -4686,13 +5552,21 @@ function buildSlashCommands() {
         option.setName("user").setDescription("Member to inspect.").setRequired(true)
       ),
     new SlashCommandBuilder().setName("balance").setDescription("Show your Panem Credit balance."),
+    new SlashCommandBuilder().setName("citizen").setDescription("Open the simple WPU Citizen Hub."),
     new SlashCommandBuilder().setName("citizen-dashboard").setDescription("Open your private interactive WPU citizen dashboard."),
     new SlashCommandBuilder()
       .setName("pay")
       .setDescription("Send Panem Credits to another citizen.")
-      .addUserOption((option) => option.setName("user").setDescription("Recipient.").setRequired(true))
-      .addNumberOption((option) => option.setName("amount").setDescription("Amount of Panem Credits.").setRequired(true).setMinValue(1)),
+      .addNumberOption((option) => option.setName("amount").setDescription("Amount of Panem Credits.").setRequired(true).setMinValue(1))
+      .addUserOption((option) => option.setName("user").setDescription("Recipient Discord mention."))
+      .addStringOption((option) => option.setName("recipient").setDescription("Public handle, transfer code, or exact citizen name."))
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm large transfers.")),
     new SlashCommandBuilder().setName("transactions").setDescription("Show recent Panem Credit transactions."),
+    new SlashCommandBuilder().setName("alerts").setDescription("Show your citizen alerts."),
+    new SlashCommandBuilder()
+      .setName("alert-detail")
+      .setDescription("Show a full citizen alert.")
+      .addStringOption((option) => option.setName("alertid").setDescription("Alert ID from /alerts.").setRequired(true)),
     new SlashCommandBuilder().setName("daily").setDescription("Claim the daily civic stipend."),
     new SlashCommandBuilder().setName("jobs").setDescription("Show jobs available to your district."),
     new SlashCommandBuilder()
@@ -4703,6 +5577,7 @@ function buildSlashCommands() {
       .setName("jobinfo")
       .setDescription("Show job risk, payout, cooldown, and item rewards.")
       .addStringOption((option) => option.setName("job").setDescription("Job id or exact job name.").setRequired(true)),
+    new SlashCommandBuilder().setName("my-level").setDescription("Show your job and crafting progression."),
     new SlashCommandBuilder()
       .setName("work")
       .setDescription("Work a Panem Credit job shift.")
@@ -4716,6 +5591,16 @@ function buildSlashCommands() {
     new SlashCommandBuilder().setName("special-task").setDescription("Attempt a higher-risk special government task."),
     new SlashCommandBuilder().setName("district-work").setDescription("Work local district production labour."),
     new SlashCommandBuilder().setName("events").setDescription("Show active Panem economy events."),
+    new SlashCommandBuilder().setName("list-recipes").setDescription("Show craftable recipes and required resources."),
+    new SlashCommandBuilder()
+      .setName("craft")
+      .setDescription("Craft an item from held resources.")
+      .addStringOption((option) =>
+        option
+          .setName("item")
+          .setDescription("Recipe id or item name.")
+          .addChoices(...craftingRecipeDefaults.slice(0, 25).map((recipe) => ({ name: recipe.name, value: recipe.id })))
+      ),
     new SlashCommandBuilder()
       .setName("event")
       .setDescription("Show details for the current or selected economy event.")
@@ -4739,8 +5624,13 @@ function buildSlashCommands() {
     new SlashCommandBuilder()
       .setName("rob")
       .setDescription("Attempt a fictional robbery against another citizen.")
-      .addUserOption((option) => option.setName("user").setDescription("Target citizen.").setRequired(true))
+      .addUserOption((option) => option.setName("user").setDescription("Target Discord mention."))
+      .addStringOption((option) => option.setName("target").setDescription("Public handle or exact citizen name."))
       .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm MSS-risk action.")),
+    new SlashCommandBuilder()
+      .setName("search")
+      .setDescription("Search verified citizens by name, Discord ID, or public handle.")
+      .addStringOption((option) => option.setName("user").setDescription("Name, Discord ID, or handle.").setRequired(true)),
     new SlashCommandBuilder()
       .setName("gamble")
       .setDescription("Play a Panem Credit chance game.")
@@ -4753,9 +5643,26 @@ function buildSlashCommands() {
       )
       .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm large wager.")),
     new SlashCommandBuilder()
+      .setName("coinflip")
+      .setDescription("Bet on a simple Capitol coin flip.")
+      .addNumberOption((option) => option.setName("amount").setDescription("Bet amount.").setRequired(true).setMinValue(1))
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm large wager.")),
+    new SlashCommandBuilder()
+      .setName("dice")
+      .setDescription("Play the District dice table.")
+      .addNumberOption((option) => option.setName("amount").setDescription("Bet amount.").setRequired(true).setMinValue(1))
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm large wager.")),
+    new SlashCommandBuilder()
+      .setName("roulette")
+      .setDescription("Play Capitol roulette.")
+      .addNumberOption((option) => option.setName("amount").setDescription("Bet amount.").setRequired(true).setMinValue(1))
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm large wager.")),
+    new SlashCommandBuilder()
       .setName("lottery")
       .setDescription("Buy a District Lottery ticket.")
       .addNumberOption((option) => option.setName("amount").setDescription("Ticket stake.").setMinValue(1)),
+    new SlashCommandBuilder().setName("jackpot").setDescription("Show the District Lottery jackpot pool."),
+    new SlashCommandBuilder().setName("security-status").setDescription("Show your MSS suspicion and raid risk status."),
     new SlashCommandBuilder()
       .setName("invest")
       .setDescription("Invest Panem Credits in a state fund.")
@@ -4769,6 +5676,16 @@ function buildSlashCommands() {
       .addNumberOption((option) => option.setName("amount").setDescription("Amount to allocate.").setRequired(true).setMinValue(25)),
     new SlashCommandBuilder().setName("tax").setDescription("Show your tax status."),
     new SlashCommandBuilder().setName("market").setDescription("Show marketplace listings."),
+    new SlashCommandBuilder()
+      .setName("blackmarket")
+      .setDescription("Show or buy black-market goods.")
+      .addStringOption((option) =>
+        option
+          .setName("item")
+          .setDescription("Illegal good.")
+          .addChoices(...blackMarketGoodsDefaults.slice(0, 25).map((good) => ({ name: good.name, value: good.id })))
+      )
+      .addIntegerOption((option) => option.setName("quantity").setDescription("Quantity to buy.").setMinValue(1)),
     new SlashCommandBuilder().setName("prices").setDescription("Show district production and price changes."),
     new SlashCommandBuilder()
       .setName("buy")
@@ -4860,6 +5777,34 @@ function buildSlashCommands() {
       .addNumberOption((option) => option.setName("amount").setDescription("Amount.").setRequired(true).setMinValue(1))
       .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
     new SlashCommandBuilder()
+      .setName("admin-alert")
+      .setDescription("Send an official citizen alert.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
+      .addStringOption((option) =>
+        option
+          .setName("type")
+          .setDescription("Alert type.")
+          .setRequired(true)
+          .addChoices(
+            { name: "General Notice", value: "General Notice" },
+            { name: "Tax Notice", value: "Tax Notice" },
+            { name: "MSS Warning", value: "MSS Warning" },
+            { name: "Court Notice", value: "Court Notice" },
+            { name: "Citizenship Notice", value: "Citizenship Notice" },
+            { name: "Marketplace Notice", value: "Marketplace Notice" },
+            { name: "Stock Market Notice", value: "Stock Market Notice" }
+          )
+      )
+      .addStringOption((option) => option.setName("message").setDescription("Official alert message.").setRequired(true).setMaxLength(1000)),
+    new SlashCommandBuilder()
+      .setName("emergency-tax")
+      .setDescription("Deduct emergency taxation from a citizen immediately.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
+      .addNumberOption((option) => option.setName("amount").setDescription("Amount.").setRequired(true).setMinValue(1))
+      .addStringOption((option) => option.setName("reason").setDescription("Reason.").setRequired(true).setMaxLength(300)),
+    new SlashCommandBuilder()
       .setName("freeze-wallet")
       .setDescription("Freeze a user's Panem Credit wallet.")
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
@@ -4908,6 +5853,56 @@ function buildSlashCommands() {
       .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
       .addNumberOption((option) => option.setName("amount").setDescription("Bounty amount.").setMinValue(1))
       .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
+    new SlashCommandBuilder()
+      .setName("raid")
+      .setDescription("Initiate an MSS inventory raid.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("user")
+          .setDescription("Raid a specific citizen.")
+          .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
+          .addStringOption((option) => option.setName("type").setDescription("Raid type.").addChoices(
+            { name: "Inventory Inspection", value: "Inventory Inspection" },
+            { name: "Contraband Seizure", value: "Contraband Seizure" },
+            { name: "Full Asset Raid", value: "Full Asset Raid" },
+            { name: "Financial Investigation", value: "Financial Investigation" }
+          ))
+          .addNumberOption((option) => option.setName("fine").setDescription("Optional emergency fine.").setMinValue(0))
+          .addStringOption((option) => option.setName("reason").setDescription("Raid reason.").setMaxLength(300))
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("district")
+          .setDescription("Sweep a district.")
+          .addStringOption((option) => option.setName("district").setDescription("District name.").setRequired(true))
+          .addStringOption((option) => option.setName("type").setDescription("Raid type.").addChoices(
+            { name: "Inventory Inspection", value: "Inventory Inspection" },
+            { name: "Contraband Seizure", value: "Contraband Seizure" },
+            { name: "Full Asset Raid", value: "Full Asset Raid" },
+            { name: "Financial Investigation", value: "Financial Investigation" }
+          ))
+          .addNumberOption((option) => option.setName("fine").setDescription("Optional emergency fine.").setMinValue(0))
+          .addStringOption((option) => option.setName("reason").setDescription("Sweep reason.").setMaxLength(300))
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("random")
+          .setDescription("Raid the highest-risk current wallet.")
+          .addStringOption((option) => option.setName("type").setDescription("Raid type.").addChoices(
+            { name: "Inventory Inspection", value: "Inventory Inspection" },
+            { name: "Contraband Seizure", value: "Contraband Seizure" },
+            { name: "Full Asset Raid", value: "Full Asset Raid" },
+            { name: "Financial Investigation", value: "Financial Investigation" }
+          ))
+          .addNumberOption((option) => option.setName("fine").setDescription("Optional emergency fine.").setMinValue(0))
+          .addStringOption((option) => option.setName("reason").setDescription("Enforcement reason.").setMaxLength(300))
+      ),
+    new SlashCommandBuilder()
+      .setName("raid-report")
+      .setDescription("Show a citizen raid and suspicion report.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true)),
     new SlashCommandBuilder()
       .setName("clear")
       .setDescription("Clear a user's MSS financial status.")

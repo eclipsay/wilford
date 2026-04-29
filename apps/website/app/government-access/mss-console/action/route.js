@@ -22,6 +22,7 @@ import {
   parseEnemyEntryForm,
   updateEnemyEntry
 } from "../../../../lib/enemies-of-state";
+import { conductMssRaid } from "../../../../lib/panem-credit";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
@@ -109,6 +110,25 @@ export async function POST(request) {
         `/government-access/mss-console?error=storage&detail=${encodeURIComponent(error.message)}`
       );
     }
+  }
+
+  if (intent === "mss-raid") {
+    if (!canAccess(user, "mssTools")) {
+      return redirectTo(request, "/government-access?denied=1");
+    }
+    const result = await conductMssRaid({
+      mode: clean(formData.get("mode"), 40),
+      walletId: clean(formData.get("walletId"), 120),
+      district: clean(formData.get("district"), 80),
+      raidType: clean(formData.get("raidType"), 80),
+      reason: clean(formData.get("reason"), 500),
+      itemSeizurePercent: formData.get("itemSeizurePercent"),
+      fineAmount: formData.get("fineAmount"),
+      restrictHours: formData.get("restrictHours"),
+      actor: user.username
+    });
+    await addAuditEvent(user.username, "mss raid executed", `${result.raidId} / ${result.logs.length} target(s)`, result.ok ? "success" : "failed").catch(() => {});
+    return redirectTo(request, `/government-access/mss-console?raidSaved=1&count=${result.logs.length}`);
   }
 
   if (intent !== "create-security-alert") {

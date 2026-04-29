@@ -69,6 +69,8 @@ function normalizeApplication(entry, index) {
     email: String(entry?.email || "").trim(),
     reviewThreadId: String(entry?.reviewThreadId || "").trim(),
     reviewMessageId: String(entry?.reviewMessageId || "").trim(),
+    adminPingSent: Boolean(entry?.adminPingSent),
+    adminPingMessageId: String(entry?.adminPingMessageId || "").trim(),
     reviewGuildId: String(entry?.reviewGuildId || "").trim(),
     appealThreadId: String(entry?.appealThreadId || "").trim(),
     appealReason: String(entry?.appealReason || "").trim(),

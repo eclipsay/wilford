@@ -8,7 +8,7 @@ import {
   requestCategories,
   requestPriorities
 } from "../../lib/citizen-state";
-import { getEconomyStore } from "../../lib/panem-credit";
+import { getEconomyStore, getSecurityDashboard } from "../../lib/panem-credit";
 
 export const metadata = {
   title: "Citizen Portal"
@@ -43,7 +43,7 @@ export default async function CitizenPortalPage({ searchParams }) {
                   ? "Your citizen session has expired. Please identify yourself again."
                   : params.error === "password"
                     ? "The password change failed. Check the temporary password and use at least 8 characters."
-                    : "The name, Union Security ID, or portal password could not be verified."}
+                    : "The name, private login code, or portal password could not be verified."}
               </p>
             </section>
           ) : null}
@@ -60,7 +60,7 @@ export default async function CitizenPortalPage({ searchParams }) {
               <p className="eyebrow">Secure Civic Access</p>
               <h2>Identify before service.</h2>
               <p>
-                Enter your citizen name or portal username and Union Security ID. The portal
+                Enter your citizen name or portal username and private login code. The portal
                 will only open the matching citizen record and will record civic
                 activity against that identity for future marketplace and Panem
                 Credit services.
@@ -73,7 +73,7 @@ export default async function CitizenPortalPage({ searchParams }) {
                 <input autoComplete="username" name="citizenName" required />
               </label>
               <label className="public-application-field">
-                <span>Union Security ID</span>
+                <span>Private login code</span>
                 <input autoComplete="off" name="unionSecurityId" placeholder="WPU-CR-2026-ABCD" required />
               </label>
               <label className="public-application-field">
@@ -92,6 +92,10 @@ export default async function CitizenPortalPage({ searchParams }) {
   const profile = await hydrateCitizenProfile(record);
   const economy = await getEconomyStore();
   const wallet = profile.wallet;
+  const security = getSecurityDashboard(economy, wallet);
+  const recentRaids = wallet ? economy.raidLogs.filter((raid) => raid.walletId === wallet.id).slice(0, 5) : [];
+  const alerts = profile.alerts || [];
+  const unreadAlerts = alerts.filter((alert) => !alert.readByCitizen);
   const activeRequests = profile.requests.filter((request) => !["Completed", "Rejected"].includes(request.status));
   const paidTax = sum(profile.taxes, (tax) => tax.status === "paid");
   const outstandingTax = sum(profile.taxes, (tax) => tax.status !== "paid");
@@ -150,7 +154,7 @@ export default async function CitizenPortalPage({ searchParams }) {
             <p className="eyebrow">Public Civic Access</p>
             <h2>{record.name}</h2>
             <p>
-              Citizen services are linked to Union Security ID, district assignment,
+              Citizen services are linked to your public handle, district assignment,
               Panem Credit wallet, requests, taxes, and official notices.
             </p>
             <form action="/citizen-portal/action" method="post">
@@ -159,10 +163,36 @@ export default async function CitizenPortalPage({ searchParams }) {
             </form>
           </div>
           <div className="portal-status identity-status-panel">
-            <span>Union Security ID</span>
-            <strong>{record.unionSecurityId}</strong>
+            <span>Public handle</span>
+            <strong>@{record.citizenHandle || record.portalUsername || record.userId}</strong>
             <p>{record.verificationStatus} / {record.securityClassification}</p>
           </div>
+        </section>
+
+        <section className="citizen-hub-grid scroll-fade" aria-label="Citizen dashboard">
+          {[
+            ["PC", "Wallet", "Send money, claim daily pay, and review your Panem Credit balance.", "/panem-credit", "Open Wallet", [["Send Money", "/panem-credit"], ["Transactions", "/panem-credit#ledger"]]],
+            ["WK", "Work", "Earn credits through your district job, overtime, and local production.", "/panem-credit#jobs-work", "Work Now", [["Choose Job", "/panem-credit#jobs-work"], ["Crafting", "/crafting"]]],
+            ["IN", "Inventory", "View resources, rare items, crates, and goods you can sell or craft.", "/inventory", "View Inventory", [["Craft", "/crafting"], ["Sell Items", "/inventory"]]],
+            ["MK", "Marketplace", "Buy official goods, list items, and watch district prices.", "/marketplace", "Open Market", [["Listings", "/marketplace"], ["Black Market", "/black-market"]]],
+            ["ST", "Stocks", "Check your PSE portfolio, buy shares, and follow market news.", "/stock-market", "Check Stocks", [["Portfolio", "/stock-market"], ["Market News", "/stock-market"]]],
+            ["RA", "Requests & Alerts", "Read official notices and submit help, appeal, or support requests.", "#citizen-alert-center", "View Alerts", [["Submit Request", "#citizen-request-form"], ["Court", "/supreme-court"]]]
+          ].map(([icon, title, text, href, action, links]) => (
+            <article className="citizen-hub-card" key={title}>
+              <span aria-hidden="true">{icon}</span>
+              <h3>{title}</h3>
+              <p>{text}</p>
+              <Link className="button button--solid-site" href={href}>{action}</Link>
+              <div className="citizen-hub-card__links">
+                {links.map(([label, link]) => <Link href={link} key={label}>{label}</Link>)}
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <section className="application-notice citizen-next-step">
+          <strong>What should I do next?</strong>
+          <p>Start with Work to earn credits, open Inventory to see what you own, then use Marketplace when you are ready to buy or sell.</p>
         </section>
 
         <section className="citizen-quick-grid scroll-fade" aria-label="Citizen quick dashboard">
@@ -172,8 +202,9 @@ export default async function CitizenPortalPage({ searchParams }) {
             ["🎒", "Inventory", inventoryValue ? formatCredits(inventoryValue) : "Empty", "/inventory", "View Items"],
             ["📈", "Stock Market", stockValue ? formatCredits(stockValue) : "No shares", "/stock-market", "Open PSE"],
             ["🏛", "Requests", `${activeRequests.length} active`, "#citizen-request-form", "Submit Request"],
-            ["🛂", "Union ID", record.unionSecurityId, `/verify-citizen?code=${encodeURIComponent(record.verificationCode)}`, "Verify"],
+            ["ID", "Union ID", `@${record.citizenHandle || record.portalUsername || record.userId}`, `/verify-citizen?code=${encodeURIComponent(record.verificationCode)}`, "Verify"],
             ["📜", "Taxes", wallet?.taxStatus || "Unrecorded", "/panem-credit", "Review Taxes"]
+            ,["AL", "Alerts", `${unreadAlerts.length} unread`, "#citizen-alert-center", "View Alerts"]
           ].map(([icon, title, value, href, action]) => (
             <Link className="citizen-quick-card" href={href} key={title}>
               <span aria-hidden="true">{icon}</span>
@@ -182,6 +213,35 @@ export default async function CitizenPortalPage({ searchParams }) {
               <em>{action}</em>
             </Link>
           ))}
+        </section>
+
+        <section className="citizen-quick-grid scroll-fade" aria-label="System dashboard">
+          {[
+            ["DB", "Dashboard", record.district, "/citizen-portal", "Overview"],
+            ["JW", "Jobs & Work", wallet?.selectedJobId || "Choose job", "/panem-credit#jobs-work", "Work"],
+            ["CR", "Crafting", `Level ${wallet?.craftingLevel || 1}`, "/crafting", "Craft Goods"],
+            ["BM", "Black Market", security.current?.status || "Unknown", "/black-market", "Underground"],
+            ["AL", "Alerts", `${unreadAlerts.length} unread`, "#citizen-alert-center", "View Alerts"]
+          ].map(([icon, title, value, href, action]) => (
+            <Link className="citizen-quick-card" href={href} key={title}>
+              <span aria-hidden="true">{icon}</span>
+              <strong>{title}</strong>
+              <small>{value}</small>
+              <em>{action}</em>
+            </Link>
+          ))}
+        </section>
+
+        <section className="state-section scroll-fade">
+          <p className="eyebrow">Quick Actions</p>
+          <h2>Most Used Services</h2>
+          <div className="market-card-actions">
+            <Link className="button button--solid-site" href="/panem-credit#jobs-work">Work</Link>
+            <Link className="button" href="/inventory">View Inventory</Link>
+            <Link className="button" href="/marketplace">Open Market</Link>
+            <Link className="button" href="/stock-market">Check Stocks</Link>
+            <Link className="button button--solid-site" href="/panem-credit">Send Money</Link>
+          </div>
         </section>
 
         <section className="state-section scroll-fade">
@@ -212,7 +272,7 @@ export default async function CitizenPortalPage({ searchParams }) {
             </div>
             <h2>{record.name}</h2>
             <dl className="panem-ledger">
-              <div><dt>Security ID</dt><dd>{record.unionSecurityId}</dd></div>
+              <div><dt>Public handle</dt><dd>@{record.citizenHandle || record.portalUsername || record.userId}</dd></div>
               <div><dt>Verification Code</dt><dd>{record.verificationCode}</dd></div>
               <div><dt>District</dt><dd>{record.district}</dd></div>
               <div><dt>Status</dt><dd>{record.citizenStatus}</dd></div>
@@ -257,6 +317,81 @@ export default async function CitizenPortalPage({ searchParams }) {
               ))}
             </ul>
           </article>
+        </section>
+
+        <section className="state-section scroll-fade citizen-security-center">
+          <p className="eyebrow">MSS Security Status</p>
+          <h2>{security.current?.status || "Clear"} / Suspicion {security.current?.score || 0}</h2>
+          <div className="metric-grid">
+            <span><strong>{wallet?.securityStatus || security.current?.status || "Clear"}</strong> Security status</span>
+            <span><strong>{wallet?.suspicionLevel || security.current?.score || 0}</strong> Suspicion level</span>
+            <span><strong>{recentRaids.length}</strong> Recent raids</span>
+            <span><strong>{security.current?.reasons?.join(", ") || "normal activity"}</strong> Risk drivers</span>
+          </div>
+          <p>
+            Holding rare or restricted items raises raid risk. Selling goods converts them to safer Panem Credits,
+            but marketplace sales carry heavier taxation than state inventory sale.
+          </p>
+          <div className="government-user-list">
+            {recentRaids.length ? recentRaids.map((raid) => (
+              <article className="panel citizen-alert-card" key={raid.id}>
+                <div className="panel__header">
+                  <div>
+                    <p className="eyebrow">{raid.raidType}</p>
+                    <h3>{raid.reason}</h3>
+                  </div>
+                  <span className="court-role-badge">{raid.securityStatus}</span>
+                </div>
+                <dl className="panem-ledger">
+                  <div><dt>Items seized</dt><dd>{raid.seizedItems.map((item) => `${item.quantity} x ${item.name}`).join(", ") || "None"}</dd></div>
+                  <div><dt>Value seized</dt><dd>{formatCredits(raid.seizedValue || 0)}</dd></div>
+                  <div><dt>Fine</dt><dd>{formatCredits(raid.fineAmount || 0)}</dd></div>
+                  <div><dt>Date</dt><dd>{raid.createdAt}</dd></div>
+                </dl>
+              </article>
+            )) : (
+              <article className="panel">
+                <h3>No raids recorded</h3>
+                <p>MSS raid reports will appear here if your inventory is inspected.</p>
+              </article>
+            )}
+          </div>
+        </section>
+
+        <section className="state-section scroll-fade citizen-alert-center" id="citizen-alert-center">
+          <p className="eyebrow">Citizen Alert Center</p>
+          <h2>{unreadAlerts.length ? `${unreadAlerts.length} Unread Alert${unreadAlerts.length === 1 ? "" : "s"}` : "Alert History"}</h2>
+          <div className="government-user-list">
+            {alerts.length ? alerts.map((alert) => (
+              <article className={`panel citizen-alert-card citizen-alert-card--${alert.readByCitizen ? "read" : "unread"}`} key={alert.id}>
+                <div className="panel__header">
+                  <div>
+                    <p className="eyebrow">{alert.type}</p>
+                    <h3>{alert.issuingAuthority}</h3>
+                  </div>
+                  <span className="court-role-badge">{alert.readByCitizen ? "History" : "Unread"}</span>
+                </div>
+                <p>{alert.message}</p>
+                <dl className="panem-ledger">
+                  <div><dt>Date / time</dt><dd>{alert.createdAt}</dd></div>
+                  <div><dt>Action taken</dt><dd>{alert.actionTaken}</dd></div>
+                  <div><dt>Amount</dt><dd>{alert.amount ? formatCredits(alert.amount) : "None"}</dd></div>
+                  <div><dt>Linked record</dt><dd>{alert.transactionId || alert.linkedRecordId || alert.caseId || "None"}</dd></div>
+                </dl>
+                {alert.appealEnabled ? (
+                  <div className="citizen-alert-card__actions">
+                    <Link className="button" href="#citizen-request-form">Submit Appeal</Link>
+                    <Link className="button" href="/supreme-court">Court Petition</Link>
+                  </div>
+                ) : null}
+              </article>
+            )) : (
+              <article className="panel">
+                <h3>No citizen alerts recorded</h3>
+                <p>Official notices and enforcement actions will appear here.</p>
+              </article>
+            )}
+          </div>
         </section>
 
         <section className="state-section scroll-fade" id="citizen-request-form">

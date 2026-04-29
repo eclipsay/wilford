@@ -2,6 +2,9 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
+  craftingQualityTiers,
+  blackMarketGoodsDefaults,
+  craftingRecipeDefaults,
   districtEconomyDefaults,
   gatheringActionDefaults,
   inventoryItemDefaults,
@@ -60,6 +63,7 @@ const defaultContent = {
   governmentAuditLog: [],
   citizenRecords: [],
   citizenRequests: [],
+  citizenAlerts: [],
   citizenActivity: [],
   districtProfiles: [],
   discordBroadcasts: [],
@@ -76,6 +80,8 @@ const defaultContent = {
     taxRates: Object.fromEntries(taxTypes.map((tax) => [tax.id, tax.defaultRate])),
     districts: districtEconomyDefaults,
     alerts: [],
+    raidLogs: [],
+    gamblingJackpot: 2500,
     categories: [
       "Luxury Goods",
       "Security Equipment",
@@ -223,6 +229,12 @@ function normalizeEconomyStore(economy = {}) {
     taxRates,
     districts,
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
+    raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs : [],
+    gamblingJackpot: Math.max(500, Number(economy.gamblingJackpot || 2500)),
+    blackMarketGoods:
+      Array.isArray(economy.blackMarketGoods) && economy.blackMarketGoods.length
+        ? economy.blackMarketGoods
+        : blackMarketGoodsDefaults,
     categories:
       Array.isArray(economy.categories) && economy.categories.length
         ? economy.categories
@@ -237,14 +249,24 @@ function normalizeEconomyStore(economy = {}) {
       Array.isArray(economy.gatheringActions) && economy.gatheringActions.length
         ? economy.gatheringActions
         : gatheringActionDefaults,
-    inventoryChallenges: Array.isArray(economy.inventoryChallenges) ? economy.inventoryChallenges : [],
+  inventoryChallenges: Array.isArray(economy.inventoryChallenges) ? economy.inventoryChallenges : [],
+    craftingRecipes:
+      Array.isArray(economy.craftingRecipes) && economy.craftingRecipes.length
+        ? economy.craftingRecipes
+        : craftingRecipeDefaults,
+    craftingQualityTiers:
+      Array.isArray(economy.craftingQualityTiers) && economy.craftingQualityTiers.length
+        ? economy.craftingQualityTiers
+        : craftingQualityTiers,
     stockCompanies:
       Array.isArray(economy.stockCompanies) && economy.stockCompanies.length
         ? economy.stockCompanies
         : stockCompanyDefaults,
     stockTrades: Array.isArray(economy.stockTrades) ? economy.stockTrades : [],
     stockEvents: Array.isArray(economy.stockEvents) ? economy.stockEvents : [],
-    stockSettings: { transactionTax: 0.015, transactionFee: 2, ...(economy.stockSettings || {}) }
+    stockSettings: { transactionTax: 0.015, transactionFee: 2, ...(economy.stockSettings || {}) },
+    marketNotices: Array.isArray(economy.marketNotices) ? economy.marketNotices : [],
+    bounties: Array.isArray(economy.bounties) ? economy.bounties : []
   };
 }
 
@@ -314,6 +336,23 @@ function portalUsernameForApplication(application, existingRecords = []) {
   return username;
 }
 
+function defaultCitizenHandle(record = {}) {
+  const handle = cleanRecordText(record.citizenHandle || record.portalUsername || record.userId || record.name || "citizen", 80)
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+  return handle || `citizen-${randomBytes(2).toString("hex")}`;
+}
+
+function cleanTransferCode(value = "") {
+  return cleanRecordText(value, 32)
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "")
+    .slice(0, 24);
+}
+
 function normalizeCitizenForProvisioning(record = {}) {
   const district = cleanRecordText(record.district || "Capitol", 80);
   return {
@@ -329,6 +368,8 @@ function normalizeCitizenForProvisioning(record = {}) {
     sourceApplicationId: cleanRecordText(record.sourceApplicationId || "", 120),
     discordUsername: cleanRecordText(record.discordUsername || "", 120),
     discordId: cleanRecordText(record.discordId || "", 80),
+    citizenHandle: defaultCitizenHandle(record),
+    transferCode: cleanTransferCode(record.transferCode || ""),
     district,
     citizenStatus: cleanRecordText(record.citizenStatus || "Active Citizen", 80),
     securityClassification: cleanRecordText(record.securityClassification || "Clear", 80),
@@ -387,6 +428,7 @@ async function readContentFile() {
       governmentAuditLog: parsed.governmentAuditLog || [],
       citizenRecords: parsed.citizenRecords || [],
       citizenRequests: parsed.citizenRequests || [],
+      citizenAlerts: parsed.citizenAlerts || [],
       citizenActivity: parsed.citizenActivity || [],
       districtProfiles: parsed.districtProfiles || [],
       discordBroadcasts: parsed.discordBroadcasts || [],
@@ -509,6 +551,10 @@ export async function updateGovernmentAccessStore(fields) {
     content.citizenRequests = fields.citizenRequests;
   }
 
+  if (Array.isArray(fields.citizenAlerts)) {
+    content.citizenAlerts = fields.citizenAlerts;
+  }
+
   if (Array.isArray(fields.citizenActivity)) {
     content.citizenActivity = fields.citizenActivity;
   }
@@ -524,6 +570,7 @@ export async function updateGovernmentAccessStore(fields) {
     publicApplications: content.publicApplications || [],
     citizenRecords: content.citizenRecords || [],
     citizenRequests: content.citizenRequests || [],
+    citizenAlerts: content.citizenAlerts || [],
     citizenActivity: content.citizenActivity || [],
     districtProfiles: content.districtProfiles || []
   };
@@ -1258,6 +1305,8 @@ export async function createPublicApplication(entry) {
     email: String(entry.email || "").trim(),
     reviewThreadId: String(entry.reviewThreadId || "").trim(),
     reviewMessageId: String(entry.reviewMessageId || "").trim(),
+    adminPingSent: Boolean(entry.adminPingSent),
+    adminPingMessageId: String(entry.adminPingMessageId || "").trim(),
     reviewGuildId: String(entry.reviewGuildId || "").trim(),
     appealThreadId: String(entry.appealThreadId || "").trim(),
     appealReason: String(entry.appealReason || "").trim(),

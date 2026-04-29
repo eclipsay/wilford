@@ -58,7 +58,7 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
               <span>Citizen</span>
               <select defaultValue={selected.id} name="citizen">
                 {state.citizenRecords.map((record) => (
-                  <option key={record.id} value={record.id}>{record.name} / {record.unionSecurityId}</option>
+                  <option key={record.id} value={record.id}>{record.name} / @{record.citizenHandle || record.portalUsername || record.userId}</option>
                 ))}
               </select>
             </label>
@@ -75,6 +75,8 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
               <div className="public-application-grid public-application-grid--three">
                 <label className="public-application-field"><span>Name</span><input name="name" required /></label>
                 <label className="public-application-field"><span>User ID</span><input name="userId" /></label>
+                <label className="public-application-field"><span>Public handle</span><input name="citizenHandle" placeholder="citizen-handle" /></label>
+                <label className="public-application-field"><span>Transfer code optional</span><input name="transferCode" placeholder="PAYCODE" /></label>
                 <label className="public-application-field"><span>Discord username</span><input name="discordUsername" /></label>
                 <label className="public-application-field"><span>Discord ID</span><input name="discordId" /></label>
                 <label className="public-application-field"><span>District</span><select name="district">{economy.districts.map((district) => <option key={district.id} value={district.name}>{district.name}</option>)}</select></label>
@@ -94,6 +96,8 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
             <h2>{selected.name}</h2>
             <dl className="panem-ledger">
               <div><dt>Union Security ID</dt><dd>{selected.unionSecurityId}</dd></div>
+              <div><dt>Public handle</dt><dd>@{selected.citizenHandle || selected.portalUsername || selected.userId}</dd></div>
+              <div><dt>Transfer code</dt><dd>{selected.transferCode || "Not set"}</dd></div>
               <div><dt>Verification code</dt><dd>{selected.verificationCode}</dd></div>
               <div><dt>District</dt><dd>{selected.district}</dd></div>
               <div><dt>Citizen status</dt><dd>{selected.citizenStatus}</dd></div>
@@ -109,6 +113,8 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
               <input name="citizenId" type="hidden" value={selected.id} />
               <div className="public-application-grid public-application-grid--three">
                 <label className="public-application-field"><span>Name</span><input defaultValue={selected.name} disabled={!identityAccess} name="name" /></label>
+                <label className="public-application-field"><span>Public handle</span><input defaultValue={selected.citizenHandle} disabled={!identityAccess} name="citizenHandle" /></label>
+                <label className="public-application-field"><span>Transfer code optional</span><input defaultValue={selected.transferCode} disabled={!identityAccess} name="transferCode" /></label>
                 <label className="public-application-field"><span>Discord ID</span><input defaultValue={selected.discordId} disabled={!identityAccess} name="discordId" /></label>
                 <label className="public-application-field"><span>Wallet link</span><select defaultValue={selected.walletId} disabled={!identityAccess} name="walletId"><option value="">None</option>{economy.wallets.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
                 <label className="public-application-field"><span>District</span><select defaultValue={selected.district} disabled={!identityAccess} name="district">{economy.districts.map((district) => <option key={district.id} value={district.name}>{district.name}</option>)}</select></label>

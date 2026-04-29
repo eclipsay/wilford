@@ -42,6 +42,14 @@ const systems = [
     permission: "supremeCourtControl"
   },
   {
+    group: "Citizen Services",
+    icon: "AL",
+    title: "Citizen Alerts",
+    text: "Issue official notices, emergency taxation, fines, wallet freezes, grants, and appeal-enabled enforcement alerts.",
+    href: "/government-access/citizen-alerts",
+    permission: "citizenAlerts"
+  },
+  {
     group: "MSS",
     icon: "🚨",
     title: "MSS Console",

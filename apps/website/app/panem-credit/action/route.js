@@ -3,6 +3,7 @@ import { assertTrustedPostOrigin } from "../../../lib/government-auth";
 import {
   getCitizenState,
   getCurrentCitizen,
+  findCitizenForTransfer,
   recordCitizenActivity
 } from "../../../lib/citizen-state";
 import {
@@ -45,22 +46,22 @@ export async function POST(request) {
 
   if (intent === "send") {
     const state = await getCitizenState();
-    const recipientSecurityId = String(formData.get("recipientSecurityId") || "").trim().toLowerCase();
-    const recipient = state.citizenRecords.find((record) =>
-      String(record.unionSecurityId || "").trim().toLowerCase() === recipientSecurityId &&
-      record.verificationStatus === "Verified" &&
-      !record.lostOrStolen
-    );
-    const recipientWallet = recipient ? getWallet(store, recipient.walletId || recipient.userId || recipient.discordId) : null;
+    const recipient = findCitizenForTransfer(state, store, formData.get("recipientQuery"));
+    const amount = Number(formData.get("amount") || 0);
+    const taxAmount = Math.round(amount * Number(store.taxRates?.trade_tax || 0) * 100) / 100;
+    const requiresConfirmation = amount + taxAmount >= 5000;
+    if (requiresConfirmation && formData.get("confirmTransfer") !== "on") {
+      return redirectTo(request, "/panem-credit?error=confirm-transfer");
+    }
     const result = await transferCredits({
       fromWalletId: walletId,
-      toWalletId: recipientWallet?.id || "",
-      amount: formData.get("amount"),
+      toWalletId: recipient?.wallet?.id || "",
+      amount,
       reason: formData.get("reason") || "Citizen payment",
       actor: citizen.unionSecurityId
     });
     if (result.ok) {
-      await recordCitizenActivity(citizen.id, "panem credit transfer", `${recipient?.name || "Unknown recipient"} / ${formData.get("amount") || 0} PC`);
+      await recordCitizenActivity(citizen.id, "panem credit transfer", `${recipient?.citizen?.citizenHandle ? `@${recipient.citizen.citizenHandle}` : recipient?.citizen?.name || "Unknown recipient"} / ${amount || 0} PC`);
     }
     return redirectTo(request, `/panem-credit?${result.ok ? "saved=transfer" : "error=transfer"}`);
   }
@@ -102,15 +103,10 @@ export async function POST(request) {
 
   if (intent === "crime") {
     const state = await getCitizenState();
-    const targetSecurityId = String(formData.get("targetSecurityId") || "").trim().toLowerCase();
-    const targetCitizen = state.citizenRecords.find((record) =>
-      String(record.unionSecurityId || "").trim().toLowerCase() === targetSecurityId &&
-      record.verificationStatus === "Verified"
-    );
-    const targetWallet = targetCitizen ? getWallet(store, targetCitizen.walletId || targetCitizen.userId || targetCitizen.discordId) : null;
+    const target = findCitizenForTransfer(state, store, formData.get("targetSecurityId"));
     const result = await performCrimeAction({
       walletId,
-      targetWalletId: targetWallet?.id || "",
+      targetWalletId: target?.wallet?.id || "",
       crimeId: String(formData.get("crimeId") || "pickpocket").trim(),
       actor: citizen.unionSecurityId
     });
