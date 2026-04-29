@@ -411,6 +411,88 @@ function normalizeWalletForProvisioning(wallet = {}) {
   };
 }
 
+function ensureCitizenEconomyWallets(content) {
+  const now = new Date().toISOString();
+  content.economy = normalizeEconomyStore(content.economy || defaultContent.economy);
+  content.citizenRecords = Array.isArray(content.citizenRecords) ? content.citizenRecords : [];
+  let changed = false;
+
+  for (let index = 0; index < content.citizenRecords.length; index += 1) {
+    const record = normalizeCitizenForProvisioning(content.citizenRecords[index]);
+    if (
+      record.verificationStatus !== "Verified" ||
+      record.lostOrStolen ||
+      ["Revoked", "Enemy of the State"].includes(record.securityClassification)
+    ) {
+      content.citizenRecords[index] = record;
+      continue;
+    }
+
+    const walletIndex = (content.economy.wallets || []).findIndex((wallet) =>
+      (record.walletId && wallet.id === record.walletId) ||
+      (record.discordId && String(wallet.discordId || "") === record.discordId) ||
+      (record.userId && String(wallet.userId || "") === record.userId) ||
+      String(wallet.userId || "") === record.id
+    );
+
+    if (walletIndex >= 0) {
+      const existing = content.economy.wallets[walletIndex];
+      const wallet = normalizeWalletForProvisioning({
+        ...existing,
+        id: existing.id,
+        userId: existing.userId || record.userId || record.id,
+        discordId: existing.discordId || record.discordId,
+        displayName: existing.displayName || record.name,
+        district: existing.district || record.district,
+        status: existing.status || "active",
+        updatedAt: existing.updatedAt || now
+      });
+      content.economy.wallets[walletIndex] = wallet;
+      if (record.walletId !== wallet.id) {
+        content.citizenRecords[index] = { ...record, walletId: wallet.id, updatedAt: now };
+        changed = true;
+      } else {
+        content.citizenRecords[index] = record;
+      }
+      continue;
+    }
+
+    const wallet = normalizeWalletForProvisioning({
+      id: record.walletId || `wallet-${record.id.replace(/^citizen-/, "")}`,
+      userId: record.userId || record.id,
+      discordId: record.discordId,
+      displayName: record.name,
+      balance: 500,
+      district: record.district,
+      title: record.citizenStatus || "Citizen",
+      salary: 125,
+      status: "active",
+      taxStatus: "compliant",
+      createdAt: now,
+      updatedAt: now
+    });
+    content.economy.wallets = [wallet, ...(content.economy.wallets || [])].slice(0, 1000);
+    content.economy.transactions = [
+      {
+        id: createId("txn"),
+        fromWalletId: "treasury",
+        toWalletId: wallet.id,
+        amount: wallet.balance,
+        taxAmount: 0,
+        type: "wallet_repaired",
+        reason: "Wallet repaired from verified citizen registry record",
+        createdBy: "economy-repair",
+        createdAt: now
+      },
+      ...(content.economy.transactions || [])
+    ].slice(0, 1000);
+    content.citizenRecords[index] = { ...record, walletId: wallet.id, updatedAt: now };
+    changed = true;
+  }
+
+  return changed;
+}
+
 async function readContentFile() {
   try {
     const raw = await readFile(config.dataFile, "utf8");
@@ -583,16 +665,23 @@ export async function updateGovernmentAccessStore(fields) {
 
 export async function getEconomyStore() {
   const content = await readContentFile();
+  if (ensureCitizenEconomyWallets(content)) {
+    await writeContentFile(content);
+  }
   return normalizeEconomyStore(content.economy || defaultContent.economy);
 }
 
 export async function getEconomyDebugSnapshot() {
   const content = await readContentFile();
+  if (ensureCitizenEconomyWallets(content)) {
+    await writeContentFile(content);
+  }
   const economy = content.economy || {};
   const wallets = Array.isArray(economy.wallets) ? economy.wallets : [];
   return {
     ok: true,
     dataFile: config.dataFile,
+    citizenCount: Array.isArray(content.citizenRecords) ? content.citizenRecords.length : 0,
     walletCount: wallets.length,
     transactionCount: Array.isArray(economy.transactions) ? economy.transactions.length : 0,
     walletNames: wallets.map((wallet) => wallet.displayName || wallet.userId || wallet.discordId || wallet.id || "Unknown Wallet")
