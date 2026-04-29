@@ -39,7 +39,7 @@ export const POST = safeAction("panem-credit/action", "/panem-credit", async fun
   }
 
   const store = await getEconomyStore();
-  const wallet = getWallet(store, citizen.walletId || citizen.userId || citizen.discordId);
+  const wallet = getWallet(store, citizen.walletId || citizen.userId || citizen.discordId || citizen.id);
   const walletId = wallet?.id || "";
   if (!wallet) {
     return redirectTo(request, "/panem-credit?error=wallet");
@@ -64,7 +64,7 @@ export const POST = safeAction("panem-credit/action", "/panem-credit", async fun
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "panem credit transfer", `${recipient?.citizen?.citizenHandle ? `@${recipient.citizen.citizenHandle}` : recipient?.citizen?.name || recipient?.wallet?.displayName || "Unknown recipient"} / ${amount || 0} PC`);
     }
-    return redirectTo(request, `/panem-credit?${result.ok ? "saved=transfer" : "error=transfer"}`);
+    return redirectTo(request, `/panem-credit?${result.ok ? "saved=transfer" : `error=${result.reason || "transfer"}`}`);
   }
 
   if (intent === "daily") {

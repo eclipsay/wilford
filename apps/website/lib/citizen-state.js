@@ -750,23 +750,37 @@ export function findCitizenBySelector(state, selector) {
 
 export function findCitizenForTransfer(state, economy, selector) {
   const raw = cleanText(selector, 160);
-  const value = raw.replace(/[<@!>]/g, "").replace(/^@+/, "").trim().toLowerCase();
+  const normalizeTransferLookup = (input) => String(input || "")
+    .replace(/[<@!>]/g, "")
+    .replace(/^@+/, "")
+    .replace(/^discord-/, "")
+    .trim()
+    .toLowerCase();
+  const slugTransferLookup = (input) => normalizeTransferLookup(input)
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const value = normalizeTransferLookup(raw);
+  const slugValue = slugTransferLookup(raw);
   if (!value) return null;
   const matches = (state.citizenRecords || []).filter((record) => {
     const wallet = getWallet(economy, record.walletId || record.userId || record.discordId || record.id);
     if (!wallet || record.verificationStatus !== "Verified" || record.lostOrStolen) return false;
-    const handle = String(record.citizenHandle || "").replace(/^@+/, "").toLowerCase();
-    const transferCode = String(record.transferCode || "").toLowerCase();
-    const discordId = String(record.discordId || "").toLowerCase();
-    const discordUsername = String(record.discordUsername || "").toLowerCase();
-    const name = String(record.name || record.citizenName || "").toLowerCase();
-    return (
-      handle === value ||
-      transferCode === value ||
-      discordId === value ||
-      discordUsername === value ||
-      name === value
-    );
+    const values = [
+      record.citizenHandle,
+      record.portalUsername,
+      record.userId,
+      record.transferCode,
+      record.discordId,
+      record.discordUsername,
+      record.name,
+      record.citizenName,
+      wallet.id,
+      wallet.userId,
+      wallet.discordId,
+      wallet.discordUsername,
+      wallet.displayName
+    ].filter(Boolean);
+    return values.some((item) => normalizeTransferLookup(item) === value || slugTransferLookup(item) === slugValue);
   });
   if (matches.length === 1) {
     const citizen = matches[0];
@@ -776,14 +790,16 @@ export function findCitizenForTransfer(state, economy, selector) {
   if (matches.length > 1) return null;
 
   const walletMatches = (economy.wallets || []).filter((wallet) => {
-    const publicHandle = String(wallet.citizenHandle || wallet.userId || wallet.discordUsername || wallet.displayName || "")
-      .replace(/^@+/, "")
-      .toLowerCase()
-      .replace(/\s+/g, "-");
-    const displayName = String(wallet.displayName || "").toLowerCase();
-    const userId = String(wallet.userId || "").replace(/^discord-/, "").toLowerCase();
-    const discordId = String(wallet.discordId || "").toLowerCase();
-    return publicHandle === value || displayName === value || userId === value || discordId === value;
+    const values = [
+      wallet.citizenHandle,
+      wallet.transferCode,
+      wallet.id,
+      wallet.userId,
+      wallet.discordId,
+      wallet.discordUsername,
+      wallet.displayName
+    ].filter(Boolean);
+    return values.some((item) => normalizeTransferLookup(item) === value || slugTransferLookup(item) === slugValue);
   });
   if (walletMatches.length !== 1) return null;
   return { citizen: null, wallet: walletMatches[0] };

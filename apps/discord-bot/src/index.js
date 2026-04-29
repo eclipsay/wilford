@@ -233,11 +233,7 @@ async function writeEconomyStore(economy) {
     throw new Error(`Panem Credit ledger write failed (${response.status}).`);
   }
 
-  const parsed = await response.json().catch((error) => {
-    console.error("[economy-write-parse]", { payloadSize, message: error?.message || String(error) });
-    return { economy: compactEconomy };
-  });
-  return parsed.economy || compactEconomy;
+  return compactEconomy;
 }
 
 async function readGovernmentAccessStore() {

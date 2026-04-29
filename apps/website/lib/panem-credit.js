@@ -805,19 +805,19 @@ export async function transferCredits({ fromWalletId, toWalletId, amount, reason
   const toWallet = getWallet(store, toWalletId);
   const numericAmount = Math.max(0, Number(amount || 0));
 
-  if (!fromWallet || !toWallet || fromWallet.id === toWallet.id || numericAmount <= 0 || fromWallet.status !== "active" || toWallet.status === "frozen") {
-    return { ok: false, store };
-  }
-
-  if (fromWallet.balance < numericAmount) {
-    return { ok: false, store };
-  }
+  if (!fromWallet) return { ok: false, store, reason: "wallet-missing" };
+  if (!toWallet) return { ok: false, store, reason: "recipient-not-found" };
+  if (fromWallet.id === toWallet.id) return { ok: false, store, reason: "same-wallet" };
+  if (numericAmount <= 0) return { ok: false, store, reason: "invalid-amount" };
+  if (fromWallet.status !== "active") return { ok: false, store, reason: "wallet-status" };
+  if (toWallet.status === "frozen") return { ok: false, store, reason: "recipient-frozen" };
+  if (fromWallet.balance < numericAmount) return { ok: false, store, reason: "insufficient-balance" };
 
   const rate = Number(store.taxRates.trade_tax || 0);
   const taxAmount = type === "transfer" && !fromWallet.exempt ? Math.round(numericAmount * rate * 100) / 100 : 0;
   const totalDebit = numericAmount + taxAmount;
   if (fromWallet.balance < totalDebit) {
-    return { ok: false, store };
+    return { ok: false, store, reason: "insufficient-balance" };
   }
 
   fromWallet.balance -= totalDebit;
