@@ -21,6 +21,13 @@ function sum(records, predicate) {
   return records.filter(predicate).reduce((total, record) => total + Number(record.amount || 0), 0);
 }
 
+function publicMssStatus(wallet) {
+  if (!wallet) return "Clear";
+  if (["frozen", "restricted"].includes(wallet.status) || wallet.wanted) return "Restricted";
+  if (wallet.underReview || wallet.mssManualFlag || wallet.mssInvestigationStatus === "Under Investigation") return "Under Review";
+  return "Clear";
+}
+
 export default async function CitizenPortalPage({ searchParams }) {
   const params = await searchParams;
   const record = await getCurrentCitizen();
@@ -325,12 +332,11 @@ export default async function CitizenPortalPage({ searchParams }) {
 
         <section className="state-section scroll-fade citizen-security-center">
           <p className="eyebrow">MSS Security Status</p>
-          <h2>{security.current?.status || "Clear"} / Suspicion {security.current?.score || 0}</h2>
+          <h2>{publicMssStatus(wallet)}</h2>
           <div className="metric-grid">
-            <span><strong>{wallet?.securityStatus || security.current?.status || "Clear"}</strong> Security status</span>
-            <span><strong>{wallet?.suspicionLevel || security.current?.score || 0}</strong> Suspicion level</span>
+            <span><strong>{publicMssStatus(wallet)}</strong> Security status</span>
             <span><strong>{recentRaids.length}</strong> Recent raids</span>
-            <span><strong>{security.current?.reasons?.join(", ") || "normal activity"}</strong> Risk drivers</span>
+            <span><strong>Restricted</strong> Review details</span>
           </div>
           <p>
             Holding rare or restricted items raises raid risk. Selling goods converts them to safer Panem Credits,

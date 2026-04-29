@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatCredits } from "@wilford/shared";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import { canAccess, requireGovernmentUser } from "../../../lib/government-auth";
@@ -16,7 +17,7 @@ import {
   getAllEnemyEntries
 } from "../../../lib/enemies-of-state";
 import { getCitizenState } from "../../../lib/citizen-state";
-import { getEconomyStore, getSecurityDashboard } from "../../../lib/panem-credit";
+import { getEconomyStore, getSecurityDashboard, mssExemptionStatuses } from "../../../lib/panem-credit";
 
 export const metadata = {
   title: "MSS Console | Government Access"
@@ -30,6 +31,22 @@ export default async function MssConsolePage({ searchParams }) {
   const user = await requireGovernmentUser("enemyRegistryDraft");
   const [entries, state, economy] = await Promise.all([getAllEnemyEntries(), getCitizenState(), getEconomyStore()]);
   const security = getSecurityDashboard(economy);
+  const selectedSeverity = String(params?.severity || "").trim();
+  const selectedDistrict = String(params?.district || "").trim();
+  const selectedWallet = String(params?.wallet || "").trim();
+  const canManageFlags = ["Supreme Chairman", "Executive Director", "Minister of State Security", "MSS Command", "Security Command"].includes(user.role);
+  const districtOptions = [...new Set(economy.wallets.map((wallet) => wallet.district).filter(Boolean))];
+  const visibleFlagged = security.flagged.filter((entry) => {
+    const severityMatch = !selectedSeverity ||
+      (selectedSeverity === "Critical" && entry.score >= 80) ||
+      (selectedSeverity === "High" && entry.score >= 60 && entry.score < 80) ||
+      (selectedSeverity === "Medium" && entry.score >= 35 && entry.score < 60) ||
+      (selectedSeverity === "Exempt" && entry.wallet.mssExemptionStatus !== "none") ||
+      (selectedSeverity === "Under Investigation" && (entry.wallet.mssInvestigationStatus === "Under Investigation" || entry.wallet.mssManualFlag));
+    return severityMatch &&
+      (!selectedDistrict || entry.wallet.district === selectedDistrict) &&
+      (!selectedWallet || entry.wallet.id === selectedWallet);
+  });
   const mssCitizenAlerts = (state.citizenAlerts || [])
     .filter((alert) => alert.type === "MSS Warning" || alert.issuingAuthority === "Ministry of State Security")
     .slice(0, 20);
@@ -67,6 +84,12 @@ export default async function MssConsolePage({ searchParams }) {
           <section className="application-notice">
             <strong>MSS Raid Complete</strong>
             <p>{params.detail || `${params.count || "0"} citizen inventory record${params.count === "1" ? "" : "s"} inspected.`}</p>
+          </section>
+        ) : null}
+        {params?.mssFlagSaved ? (
+          <section className="application-notice">
+            <strong>MSS Flag Updated</strong>
+            <p>The flagged citizen record and audit log have been saved.</p>
           </section>
         ) : null}
         {params?.error ? (
@@ -138,24 +161,143 @@ export default async function MssConsolePage({ searchParams }) {
         <section className="state-section">
           <p className="eyebrow">Suspicion Ledger</p>
           <h2>Flagged Citizens</h2>
+          <form action="/government-access/mss-console" className="public-application-form" method="get">
+            <div className="public-application-grid public-application-grid--three">
+              <label className="public-application-field">
+                <span>Severity</span>
+                <select defaultValue={selectedSeverity} name="severity">
+                  <option value="">All</option>
+                  <option value="Critical">Critical</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Exempt">Exempt</option>
+                  <option value="Under Investigation">Under Investigation</option>
+                </select>
+              </label>
+              <label className="public-application-field">
+                <span>District</span>
+                <select defaultValue={selectedDistrict} name="district">
+                  <option value="">All districts</option>
+                  {districtOptions.map((district) => <option key={district} value={district}>{district}</option>)}
+                </select>
+              </label>
+              <label className="public-application-field">
+                <span>Citizen</span>
+                <select defaultValue={selectedWallet} name="wallet">
+                  <option value="">All flagged citizens</option>
+                  {security.flagged.map((entry) => <option key={entry.wallet.id} value={entry.wallet.id}>{entry.wallet.displayName}</option>)}
+                </select>
+              </label>
+            </div>
+            <button className="button" type="submit">Apply Filters</button>
+          </form>
           <div className="government-user-list">
-            {security.flagged.map((entry) => (
-              <article className="panel government-user-card" key={entry.wallet.id}>
+            {visibleFlagged.map((entry) => {
+              const citizen = state.citizenRecords.find((record) =>
+                record.walletId === entry.wallet.id ||
+                (record.discordId && record.discordId === entry.wallet.discordId) ||
+                (record.userId && record.userId === entry.wallet.userId)
+              );
+              const citizenWarnings = citizen
+                ? state.citizenAlerts.filter((alert) => alert.citizenId === citizen.id && (alert.type === "MSS Warning" || alert.issuingAuthority === "MSS" || alert.issuingAuthority === "Ministry of State Security")).slice(0, 8)
+                : [];
+              return (
+              <article className="panel government-user-card" id={`flag-${entry.wallet.id}`} key={entry.wallet.id}>
                 <div className="panel__header">
                   <div>
                     <p className="eyebrow">{entry.status}</p>
                     <h3>{entry.wallet.displayName}</h3>
                   </div>
-                  <span className="court-role-badge">{entry.score}</span>
+                  <span className="court-role-badge">{entry.wallet.mssExemptionStatus !== "none" ? "MSS EXEMPT" : entry.score}</span>
                 </div>
                 <p>{entry.reasons.join(", ") || "MSS monitoring"}</p>
                 <dl className="panem-ledger">
                   <div><dt>District</dt><dd>{entry.wallet.district}</dd></div>
                   <div><dt>Inventory</dt><dd>{entry.wallet.holdings?.length || 0} item types</dd></div>
-                  <div><dt>Balance</dt><dd>{entry.wallet.balance || 0} PC</dd></div>
+                  <div><dt>Balance</dt><dd>{formatCredits(entry.wallet.balance || 0)}</dd></div>
+                  <div><dt>Exemption</dt><dd>{entry.wallet.mssExemptionStatus}</dd></div>
+                  <div><dt>Investigation</dt><dd>{entry.wallet.mssInvestigationStatus || (entry.wallet.underReview ? "Under Review" : "None")}</dd></div>
+                  <div><dt>Last reviewed</dt><dd>{entry.wallet.mssLastReviewedAt || "Not reviewed"}</dd></div>
                 </dl>
+                <details className="public-application-form">
+                  <summary className="button">View Details</summary>
+                  <div className="metric-grid">
+                    <span><strong>{formatCredits(entry.details?.largeBalance || entry.wallet.balance || 0)}</strong> Large balance check</span>
+                    <span><strong>{formatCredits(entry.details?.inventoryValue || 0)}</strong> Inventory value</span>
+                    <span><strong>{entry.details?.contrabandCount || 0}</strong> Restricted inventory count</span>
+                    <span><strong>{entry.details?.riskyActions || 0}</strong> Risky actions</span>
+                    <span><strong>{formatCredits(entry.details?.rapidGain || 0)}</strong> Rapid gain</span>
+                    <span><strong>{entry.raids.length}</strong> Previous raids</span>
+                  </div>
+                  <h4>Triggering Events</h4>
+                  <ul className="government-mini-list">
+                    {entry.recentTransactions.map((transaction) => <li key={transaction.id}><span>{transaction.type} / {transaction.reason}</span><strong>{formatCredits(transaction.amount || 0)}</strong></li>)}
+                    {!entry.recentTransactions.length ? <li><span>No recent transactions.</span><strong>0</strong></li> : null}
+                  </ul>
+                  <h4>Raids and Warnings</h4>
+                  <ul className="government-mini-list">
+                    {entry.raids.map((raid) => <li key={raid.id}><span>{raid.raidType} / {raid.reason}</span><strong>{raid.securityStatus}</strong></li>)}
+                    {[...entry.previousWarnings, ...citizenWarnings].map((warning) => <li key={warning.id}><span>{warning.type} / {warning.summary || warning.message}</span><strong>{warning.status || "open"}</strong></li>)}
+                    {!entry.raids.length && !entry.previousWarnings.length && !citizenWarnings.length ? <li><span>No previous raids or warnings.</span><strong>Clear</strong></li> : null}
+                  </ul>
+                  {entry.wallet.mssNotes?.length ? (
+                    <>
+                      <h4>MSS Notes</h4>
+                      <ul className="government-mini-list">
+                        {entry.wallet.mssNotes.slice(0, 5).map((note) => <li key={note.id}><span>{note.note}</span><strong>{note.by}</strong></li>)}
+                      </ul>
+                    </>
+                  ) : null}
+                </details>
+                <div className="bulletin-editor-card__actions">
+                  {citizen ? <Link className="button" href={`/government-access/union-security-registry?citizen=${encodeURIComponent(citizen.id)}`}>Open Citizen Profile</Link> : null}
+                  <form action="/government-access/mss-console/action" method="post">
+                    <input name="intent" type="hidden" value="mss-issue-warning" />
+                    <input name="walletId" type="hidden" value={entry.wallet.id} />
+                    <input name="reason" type="hidden" value="MSS warning issued from flagged citizen ledger." />
+                    <button className="button" type="submit">Issue Warning</button>
+                  </form>
+                  <form action="/government-access/mss-console/action" method="post">
+                    <input name="intent" type="hidden" value="mss-start-investigation" />
+                    <input name="walletId" type="hidden" value={entry.wallet.id} />
+                    <input name="reason" type="hidden" value="Investigation opened from flagged citizen ledger." />
+                    <button className="button" type="submit">Start Investigation</button>
+                  </form>
+                </div>
+                <form action="/government-access/mss-console/action" className="public-application-form" method="post">
+                  <input name="walletId" type="hidden" value={entry.wallet.id} />
+                  <label className="public-application-field"><span>MSS note / reason</span><input name="reason" required placeholder="Required for flag changes and notes" /></label>
+                  <div className="public-application-grid public-application-grid--three">
+                    <label className="public-application-field"><span>New score</span><input defaultValue={Math.max(0, entry.score - 15)} min="0" max="100" name="newScore" type="number" /></label>
+                    <label className="public-application-field"><span>Exemption status</span><select defaultValue={entry.wallet.mssExemptionStatus || "none"} name="exemptionStatus">{mssExemptionStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+                    <button className="button" name="intent" type="submit" value="mss-add-note">Add MSS Note</button>
+                  </div>
+                  <div className="bulletin-editor-card__actions">
+                    <button className="button" disabled={!canManageFlags} name="intent" type="submit" value="mss-clear-flags">Clear Flags</button>
+                    <button className="button" disabled={!canManageFlags} name="intent" type="submit" value="mss-reduce-suspicion">Reduce Suspicion</button>
+                    <button className="button" disabled={!canManageFlags} name="intent" type="submit" value="mss-mark-exempt">Mark Exempt</button>
+                    <button className="button" disabled={!canManageFlags} name="intent" type="submit" value="mss-remove-exemption">Remove Exemption</button>
+                    <button className="button button--danger-site" disabled={!canManageFlags} name="intent" type="submit" value="mss-manual-flag">Manual Flag Override</button>
+                  </div>
+                </form>
               </article>
-            ))}
+              );
+            })}
+            {visibleFlagged.length ? null : <article className="panel"><h3>No citizens match the current MSS filters.</h3></article>}
+          </div>
+        </section>
+
+        <section className="state-section">
+          <p className="eyebrow">Flag Audit</p>
+          <h2>MSS Flag Change Log</h2>
+          <div className="government-audit-list">
+            {security.auditLog.length ? security.auditLog.map((entry) => (
+              <article className="government-audit-row government-audit-row--warning" key={entry.id}>
+                <span>{entry.at}</span>
+                <strong>{entry.action} / {entry.displayName}</strong>
+                <p>{entry.actor} / {entry.oldScore} to {entry.newScore} / {entry.oldStatus} to {entry.newStatus} / {entry.reason}</p>
+              </article>
+            )) : <p className="court-empty">No MSS flag changes recorded.</p>}
           </div>
         </section>
 

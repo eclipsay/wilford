@@ -27,6 +27,13 @@ function sumTaxes(records) {
   return records.reduce((total, record) => total + Number(record.amount || 0), 0);
 }
 
+function publicMssStatus(wallet) {
+  if (!wallet) return "Clear";
+  if (["frozen", "restricted"].includes(wallet.status) || wallet.wanted) return "Restricted";
+  if (wallet.underReview || wallet.mssManualFlag || wallet.mssInvestigationStatus === "Under Investigation") return "Under Review";
+  return "Clear";
+}
+
 export default async function PanemCreditPage({ searchParams }) {
   const params = await searchParams;
   const citizen = await getCurrentCitizen();
@@ -384,7 +391,7 @@ export default async function PanemCreditPage({ searchParams }) {
           <h2>Fictional Crime and State Games</h2>
           <div className="application-notice">
             <strong>Strategic Loop</strong>
-            <p>Daily pay, work, gather items, choose whether to hold for value or sell for safer taxed credits, then compete through games, markets, and leaderboards. Current lottery jackpot: {formatCredits(store.gamblingJackpot || 2500)}. MSS suspicion: {security.current?.status || "Clear"} ({security.current?.score || 0}).</p>
+            <p>Daily pay, work, gather items, choose whether to hold for value or sell for safer taxed credits, then compete through games, markets, and leaderboards. Current lottery jackpot: {formatCredits(store.gamblingJackpot || 2500)}. MSS status: {publicMssStatus(selectedWallet)}.</p>
           </div>
           <div className="panem-ledger-layout">
             <form action="/panem-credit/action" className="panel public-application-form" method="post">

@@ -24,7 +24,7 @@ import {
   parseEnemyEntryForm,
   updateEnemyEntry
 } from "../../../../lib/enemies-of-state";
-import { conductMssRaid } from "../../../../lib/panem-credit";
+import { conductMssRaid, getEconomyStore, getWallet, mssExemptionStatuses, updateMssFlag } from "../../../../lib/panem-credit";
 
 function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
@@ -56,6 +56,79 @@ export const POST = safeAction("government-access/mss-console/action", "/governm
   const user = await requireGovernmentUser("enemyRegistryDraft");
   const formData = await request.formData();
   const intent = clean(formData.get("intent"), 80);
+  const canManageMssFlags = ["Supreme Chairman", "Executive Director", "Minister of State Security", "MSS Command", "Security Command"].includes(user.role);
+  const flagIntents = new Set([
+    "mss-clear-flags",
+    "mss-reduce-suspicion",
+    "mss-mark-exempt",
+    "mss-remove-exemption",
+    "mss-add-note",
+    "mss-manual-flag",
+    "mss-start-investigation",
+    "mss-issue-warning"
+  ]);
+
+  if (flagIntents.has(intent)) {
+    const walletId = clean(formData.get("walletId"), 120);
+    const reason = clean(formData.get("reason"), 1000);
+    if (!walletId || !reason) {
+      return redirectTo(request, "/government-access/mss-console?error=required&detail=Wallet%20and%20reason%20are%20required.");
+    }
+    if (["mss-clear-flags", "mss-reduce-suspicion", "mss-mark-exempt", "mss-remove-exemption", "mss-manual-flag"].includes(intent) && !canManageMssFlags) {
+      await addAuditEvent(user.username, "mss flag change denied", `${walletId} / ${intent}`, "denied").catch(() => {});
+      return redirectTo(request, "/government-access?denied=1");
+    }
+
+    const action = {
+      "mss-clear-flags": "clear-flags",
+      "mss-reduce-suspicion": "reduce-suspicion",
+      "mss-mark-exempt": "mark-exempt",
+      "mss-remove-exemption": "remove-exemption",
+      "mss-add-note": "add-note",
+      "mss-manual-flag": "manual-flag",
+      "mss-start-investigation": "start-investigation"
+    }[intent];
+
+    if (intent === "mss-issue-warning") {
+      const economy = await getEconomyStore();
+      const wallet = getWallet(economy, walletId);
+      if (!wallet) return redirectTo(request, "/government-access/mss-console?error=required&detail=Wallet%20not%20found.");
+      await createCitizenAlert({
+        walletId: wallet.id,
+        discordId: wallet.discordId,
+        userId: wallet.userId,
+        type: "MSS Warning",
+        issuingAuthority: "MSS",
+        message: reason,
+        actionTaken: "MSS warning issued",
+        linkedRecordType: "mss-flag",
+        linkedRecordId: wallet.id,
+        discordDeliveryRequested: true
+      }, user).catch(() => null);
+      await updateMssFlag({ walletId, action: "add-note", note: `Warning issued: ${reason}`, reason, actor: user.username });
+      await addAuditEvent(user.username, "mss warning issued", `${wallet.displayName} / ${reason}`, "success").catch(() => {});
+      return redirectTo(request, `/government-access/mss-console?mssFlagSaved=1#flag-${encodeURIComponent(walletId)}`);
+    }
+
+    const exemptionStatus = clean(formData.get("exemptionStatus"), 120);
+    if (intent === "mss-mark-exempt" && !mssExemptionStatuses.includes(exemptionStatus)) {
+      return redirectTo(request, "/government-access/mss-console?error=invalid&detail=Invalid%20MSS%20exemption%20status.");
+    }
+    const result = await updateMssFlag({
+      walletId,
+      action,
+      reason,
+      note: reason,
+      newScore: formData.get("newScore"),
+      exemptionStatus,
+      actor: user.username
+    });
+    await addAuditEvent(user.username, `mss ${action}`, `${walletId} / ${reason}`, result.ok ? "success" : "failed").catch(() => {});
+    if (!result.ok) {
+      return redirectTo(request, `/government-access/mss-console?error=flag&detail=${encodeURIComponent(result.reason || "Flag update failed")}`);
+    }
+    return redirectTo(request, `/government-access/mss-console?mssFlagSaved=1#flag-${encodeURIComponent(walletId)}`);
+  }
 
   if (intent === "create-enemy-entry" || intent === "update-enemy-entry") {
     const canApprovePublic = canAccess(user, "enemyRegistryPublic");

@@ -65,6 +65,14 @@ const seedWallets = [
   updatedAt: "2026-04-28T00:00:00.000Z"
 }));
 
+export const mssExemptionStatuses = [
+  "none",
+  "exempt from automatic suspicion",
+  "exempt from raids",
+  "exempt from auto-freeze",
+  "fully protected"
+];
+
 function cleanText(value, maxLength = 300) {
   return String(value || "")
     .replace(/[<>]/g, "")
@@ -156,6 +164,14 @@ function ensureWalletCollections(wallet) {
   wallet.jobXp = Math.max(0, Number(wallet.jobXp || 0));
   wallet.jobLevel = Math.max(1, Number(wallet.jobLevel || levelForXp(wallet.jobXp)));
   wallet.unlockedRecipes = Array.isArray(wallet.unlockedRecipes) ? wallet.unlockedRecipes : [];
+  wallet.mssExemptionStatus = mssExemptionStatuses.includes(wallet.mssExemptionStatus) ? wallet.mssExemptionStatus : "none";
+  wallet.mssManualFlag = Boolean(wallet.mssManualFlag);
+  wallet.mssManualReasons = Array.isArray(wallet.mssManualReasons) ? wallet.mssManualReasons.slice(0, 10) : [];
+  wallet.mssAutomaticReasons = Array.isArray(wallet.mssAutomaticReasons) ? wallet.mssAutomaticReasons.slice(0, 10) : [];
+  wallet.mssNotes = Array.isArray(wallet.mssNotes) ? wallet.mssNotes.slice(0, 50) : [];
+  wallet.mssInvestigationStatus = cleanText(wallet.mssInvestigationStatus || "", 80);
+  wallet.mssLastReviewedAt = cleanText(wallet.mssLastReviewedAt || "", 80);
+  wallet.mssLastReviewedBy = cleanText(wallet.mssLastReviewedBy || "", 120);
   wallet.suspicionLevel = Math.max(0, Math.min(100, Number(wallet.suspicionLevel || 0)));
   wallet.securityStatus = cleanText(wallet.securityStatus || "Clear", 80);
   wallet.raidCooldownUntil = cleanText(wallet.raidCooldownUntil || "", 80);
@@ -177,6 +193,24 @@ function itemRaidWeight(item) {
 export function calculateWalletSuspicion(store, wallet) {
   if (!wallet) return { score: 0, status: "Clear", reasons: [] };
   ensureWalletCollections(wallet);
+  if (wallet.mssExemptionStatus !== "none" && !wallet.mssManualFlag) {
+    wallet.mssAutomaticReasons = [];
+    return {
+      score: 0,
+      status: "MSS Exempt",
+      reasons: [],
+      exempt: true,
+      exemptionStatus: wallet.mssExemptionStatus,
+      manualFlag: false,
+      details: {
+        inventoryValue: 0,
+        contrabandCount: 0,
+        riskyActions: 0,
+        rapidGain: 0,
+        recentTransactions: []
+      }
+    };
+  }
   const inventoryValue = wallet.holdings.reduce((sum, holding) => {
     const item = getInventoryItem(holding.itemId);
     return sum + itemValue(item, store) * Number(holding.quantity || 0);
@@ -217,8 +251,28 @@ export function calculateWalletSuspicion(store, wallet) {
     score += 12;
     reasons.push("tax irregularity");
   }
+  if (wallet.mssManualFlag) {
+    score = Math.max(score, Number(wallet.suspicionLevel || 0), 35);
+    reasons.push(...(wallet.mssManualReasons || []).filter(Boolean));
+  }
   score = Math.max(0, Math.min(100, Math.round(score)));
-  return { score, status: suspicionBand(score), reasons };
+  wallet.mssAutomaticReasons = reasons.filter((reason) => !(wallet.mssManualReasons || []).includes(reason)).slice(0, 10);
+  return {
+    score,
+    status: wallet.mssManualFlag ? "Under Investigation" : suspicionBand(score),
+    reasons,
+    exempt: wallet.mssExemptionStatus !== "none",
+    exemptionStatus: wallet.mssExemptionStatus,
+    manualFlag: wallet.mssManualFlag,
+    details: {
+      inventoryValue,
+      contrabandCount,
+      riskyActions: risky,
+      rapidGain,
+      largeBalance: Number(wallet.balance || 0),
+      recentTransactions: recent.slice(0, 8)
+    }
+  };
 }
 
 function getHolding(wallet, itemId) {
@@ -742,6 +796,14 @@ export function normalizeEconomyStore(economy = {}) {
       jobLevel: Math.max(1, Number(wallet.jobLevel || levelForXp(wallet.jobXp))),
       unlockedRecipes: Array.isArray(wallet.unlockedRecipes) ? wallet.unlockedRecipes : [],
       workPermits: Array.isArray(wallet.workPermits) ? wallet.workPermits : [],
+      mssExemptionStatus: mssExemptionStatuses.includes(wallet.mssExemptionStatus) ? wallet.mssExemptionStatus : "none",
+      mssManualFlag: Boolean(wallet.mssManualFlag),
+      mssManualReasons: Array.isArray(wallet.mssManualReasons) ? wallet.mssManualReasons.slice(0, 10) : [],
+      mssAutomaticReasons: Array.isArray(wallet.mssAutomaticReasons) ? wallet.mssAutomaticReasons.slice(0, 10) : [],
+      mssNotes: Array.isArray(wallet.mssNotes) ? wallet.mssNotes.slice(0, 50) : [],
+      mssInvestigationStatus: cleanText(wallet.mssInvestigationStatus || "", 80),
+      mssLastReviewedAt: cleanText(wallet.mssLastReviewedAt || "", 80),
+      mssLastReviewedBy: cleanText(wallet.mssLastReviewedBy || "", 120),
       selectedJobId: cleanText(wallet.selectedJobId || "", 120),
       jobChangedAt: cleanText(wallet.jobChangedAt || "", 80),
       suspicionLevel: Math.max(0, Math.min(100, Number(wallet.suspicionLevel || 0))),
@@ -760,6 +822,7 @@ export function normalizeEconomyStore(economy = {}) {
     taxDistribution: normalizeTaxDistribution(economy.taxDistribution || {}),
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
     raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs : [],
+    mssAuditLog: Array.isArray(economy.mssAuditLog) ? economy.mssAuditLog : [],
     lootboxAllocationDate: cleanText(economy.lootboxAllocationDate || "", 20),
     globalLootboxesOpenedToday: Math.max(0, Number(economy.globalLootboxesOpenedToday || 0)),
     perUserLootboxesOpenedToday: economy.perUserLootboxesOpenedToday && typeof economy.perUserLootboxesOpenedToday === "object" ? economy.perUserLootboxesOpenedToday : {},
@@ -1125,6 +1188,26 @@ function addAlert(store, alert) {
     },
     ...(store.alerts || [])
   ].slice(0, 300);
+}
+
+function addMssAudit(store, { actor = "mss", wallet, action, oldScore = 0, newScore = 0, oldStatus = "", newStatus = "", reason = "" }) {
+  store.mssAuditLog = [
+    {
+      id: createId("mss-audit"),
+      at: new Date().toISOString(),
+      actor: cleanText(actor, 120),
+      walletId: wallet?.id || "",
+      displayName: cleanText(wallet?.displayName || "", 160),
+      district: cleanText(wallet?.district || "", 80),
+      action: cleanText(action, 120),
+      oldScore: Math.max(0, Math.min(100, Number(oldScore || 0))),
+      newScore: Math.max(0, Math.min(100, Number(newScore || 0))),
+      oldStatus: cleanText(oldStatus, 120),
+      newStatus: cleanText(newStatus, 120),
+      reason: cleanText(reason, 1000)
+    },
+    ...(store.mssAuditLog || [])
+  ].slice(0, 500);
 }
 
 function postMssAlert(store, wallet, alert) {
@@ -2068,13 +2151,14 @@ export function getInventoryDashboard(store, wallet) {
 }
 
 function raidTargetWallets(store, { mode = "target", walletId = "", district = "" } = {}) {
-  if (mode === "district") return (store.wallets || []).filter((wallet) => wallet.district === district);
+  const raidable = (wallet) => !["exempt from raids", "fully protected"].includes(wallet.mssExemptionStatus);
+  if (mode === "district") return (store.wallets || []).filter((wallet) => wallet.district === district && raidable(wallet));
   if (mode === "random") {
-    const ranked = [...(store.wallets || [])].sort((a, b) => calculateWalletSuspicion(store, b).score - calculateWalletSuspicion(store, a).score);
+    const ranked = [...(store.wallets || [])].filter(raidable).sort((a, b) => calculateWalletSuspicion(store, b).score - calculateWalletSuspicion(store, a).score);
     return ranked.length ? [ranked[0]] : [];
   }
   const wallet = getWallet(store, walletId);
-  return wallet ? [wallet] : [];
+  return wallet && raidable(wallet) ? [wallet] : [];
 }
 
 export async function conductMssRaid({
@@ -2196,13 +2280,147 @@ export async function conductMssRaid({
 export function getSecurityDashboard(store, wallet = null) {
   const scored = (store.wallets || []).map((entry) => {
     const suspicion = calculateWalletSuspicion(store, entry);
-    return { wallet: entry, ...suspicion };
+    const walletTransactions = (store.transactions || []).filter((transaction) =>
+      transaction.fromWalletId === entry.id || transaction.toWalletId === entry.id
+    );
+    const raids = (store.raidLogs || []).filter((raid) => raid.walletId === entry.id);
+    return {
+      wallet: entry,
+      ...suspicion,
+      recentTransactions: walletTransactions.slice(0, 8),
+      raids: raids.slice(0, 8),
+      previousWarnings: (store.alerts || []).filter((alert) => alert.walletId === entry.id).slice(0, 8)
+    };
   }).sort((a, b) => b.score - a.score);
   return {
     current: wallet ? calculateWalletSuspicion(store, wallet) : null,
-    flagged: scored.filter((entry) => entry.score >= 35).slice(0, 12),
-    raidLogs: (store.raidLogs || []).slice(0, 30)
+    flagged: scored.filter((entry) =>
+      entry.score >= 35 ||
+      entry.wallet.underReview ||
+      entry.wallet.wanted ||
+      entry.wallet.mssManualFlag ||
+      entry.wallet.mssExemptionStatus !== "none" ||
+      entry.wallet.mssInvestigationStatus === "Under Investigation"
+    ).slice(0, 50),
+    raidLogs: (store.raidLogs || []).slice(0, 30),
+    auditLog: (store.mssAuditLog || []).slice(0, 50)
   };
+}
+
+export async function updateMssFlag({
+  walletId,
+  action,
+  reason = "",
+  newScore = 0,
+  exemptionStatus = "none",
+  note = "",
+  actor = "mss"
+}) {
+  const store = await getEconomyStore();
+  const wallet = getWallet(store, walletId);
+  if (!wallet) return { ok: false, reason: "wallet-not-found", store };
+  ensureWalletCollections(wallet);
+  const cleanReason = cleanText(reason || note || "MSS security update", 1000);
+  if (["clear-flags", "reduce-suspicion", "manual-flag", "mark-exempt", "remove-exemption", "start-investigation"].includes(action) && !cleanReason) {
+    return { ok: false, reason: "reason-required", store };
+  }
+  const before = calculateWalletSuspicion(store, wallet);
+  const oldScore = before.score;
+  const oldStatus = `${before.status}${wallet.mssExemptionStatus !== "none" ? ` / ${wallet.mssExemptionStatus}` : ""}`;
+  const now = new Date().toISOString();
+
+  if (action === "clear-flags") {
+    wallet.suspicionLevel = 0;
+    wallet.securityStatus = "Clear";
+    wallet.underReview = false;
+    wallet.wanted = false;
+    wallet.bounty = 0;
+    wallet.mssManualFlag = false;
+    wallet.mssManualReasons = [];
+    wallet.mssAutomaticReasons = [];
+    wallet.taxStatus = wallet.taxStatus === "MSS watchlist" ? "compliant" : wallet.taxStatus;
+    store.alerts = (store.alerts || []).map((alert) =>
+      alert.walletId === wallet.id ? { ...alert, status: "cleared", resolvedAt: now, resolvedBy: actor } : alert
+    );
+  }
+
+  if (action === "reduce-suspicion") {
+    wallet.suspicionLevel = Math.max(0, Math.min(100, Number(newScore || 0)));
+    wallet.securityStatus = suspicionBand(wallet.suspicionLevel);
+    wallet.underReview = wallet.suspicionLevel >= 35;
+    wallet.mssManualFlag = wallet.suspicionLevel >= 35;
+    wallet.mssManualReasons = [cleanReason, ...(wallet.mssManualReasons || [])].slice(0, 10);
+  }
+
+  if (action === "manual-flag" || action === "start-investigation") {
+    wallet.suspicionLevel = Math.max(35, Math.min(100, Number(newScore || wallet.suspicionLevel || 60)));
+    wallet.securityStatus = "Under Investigation";
+    wallet.underReview = true;
+    wallet.mssManualFlag = true;
+    wallet.mssInvestigationStatus = "Under Investigation";
+    wallet.mssManualReasons = [cleanReason, ...(wallet.mssManualReasons || [])].slice(0, 10);
+    postMssAlert(store, wallet, {
+      severity: wallet.suspicionLevel >= 80 ? "critical" : "high",
+      type: action === "manual-flag" ? "manual_mss_flag" : "mss_investigation",
+      summary: `${wallet.displayName} ${action === "manual-flag" ? "manually flagged" : "placed under investigation"} by MSS. ${cleanReason}`,
+      action: "investigate"
+    });
+  }
+
+  if (action === "mark-exempt") {
+    wallet.mssExemptionStatus = mssExemptionStatuses.includes(exemptionStatus) ? exemptionStatus : "none";
+    wallet.mssManualFlag = false;
+    wallet.mssManualReasons = [];
+    wallet.mssAutomaticReasons = [];
+    if (wallet.mssExemptionStatus !== "none") {
+      wallet.suspicionLevel = 0;
+      wallet.securityStatus = "MSS Exempt";
+      wallet.underReview = false;
+      wallet.wanted = false;
+    }
+  }
+
+  if (action === "remove-exemption") {
+    wallet.mssExemptionStatus = "none";
+    wallet.securityStatus = suspicionBand(Number(wallet.suspicionLevel || 0));
+  }
+
+  if (action === "add-note") {
+    wallet.mssNotes = [
+      {
+        id: createId("mss-note"),
+        at: now,
+        by: cleanText(actor, 120),
+        note: cleanText(note || reason, 1200)
+      },
+      ...(wallet.mssNotes || [])
+    ].slice(0, 50);
+  }
+
+  wallet.mssLastReviewedAt = now;
+  wallet.mssLastReviewedBy = actor;
+  wallet.updatedAt = now;
+  const after = calculateWalletSuspicion(store, wallet);
+  addMssAudit(store, {
+    actor,
+    wallet,
+    action,
+    oldScore,
+    newScore: after.score,
+    oldStatus,
+    newStatus: `${after.status}${wallet.mssExemptionStatus !== "none" ? ` / ${wallet.mssExemptionStatus}` : ""}`,
+    reason: cleanReason
+  });
+  pushTransaction(store, {
+    fromWalletId: "mss",
+    toWalletId: wallet.id,
+    amount: 0,
+    type: `mss_${action}`,
+    reason: cleanReason,
+    createdBy: actor,
+    meta: { oldScore, newScore: after.score, exemptionStatus: wallet.mssExemptionStatus }
+  });
+  return { ok: true, wallet, store: await saveEconomyStore(store) };
 }
 
 export function getStockMarketDashboard(store, wallet) {
