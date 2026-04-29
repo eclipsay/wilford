@@ -23,6 +23,7 @@ export const POST = safeAction("marketplace/action", "/marketplace", async funct
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();
+  const fromEconomyHub = String(formData.get("source") || "") === "economy-hub";
   const citizen = await getCurrentCitizen();
   if (!citizen) {
     return redirectTo(request, "/marketplace?error=session");
@@ -54,7 +55,9 @@ export const POST = safeAction("marketplace/action", "/marketplace", async funct
         transactionId: result.store?.transactions?.[0]?.id || ""
       }).catch(() => null);
     }
-    return redirectTo(request, `/marketplace?${result.ok ? "saved=buy" : "error=buy"}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=buy" : "error=buy"}#market-game`
+      : `/marketplace?${result.ok ? "saved=buy" : "error=buy"}`);
   }
 
   if (intent === "sell") {
@@ -77,7 +80,9 @@ export const POST = safeAction("marketplace/action", "/marketplace", async funct
         transactionId: result.store?.transactions?.[0]?.id || ""
       }).catch(() => null);
     }
-    return redirectTo(request, `/marketplace?${result.ok ? "saved=sell" : "error=sell"}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=sell" : "error=sell"}#market-game`
+      : `/marketplace?${result.ok ? "saved=sell" : "error=sell"}`);
   }
 
   if (intent === "buy-listing") {
@@ -100,7 +105,9 @@ export const POST = safeAction("marketplace/action", "/marketplace", async funct
         transactionId: result.store?.transactions?.[0]?.id || ""
       }).catch(() => null);
     }
-    return redirectTo(request, `/marketplace?${result.ok ? "saved=listing" : `error=${result.reason || "listing"}`}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=listing" : `error=${result.reason || "listing"}`}#market-game`
+      : `/marketplace?${result.ok ? "saved=listing" : `error=${result.reason || "listing"}`}`);
   }
 
   if (intent === "watch-item" || intent === "favourite-district" || intent === "market-alerts") {

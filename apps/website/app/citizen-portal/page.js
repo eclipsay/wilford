@@ -182,9 +182,10 @@ export default async function CitizenPortalPage({ searchParams }) {
         <section className="citizen-hub-grid scroll-fade" aria-label="Citizen dashboard">
           {[
             ["PC", "Wallet", "Send money, claim daily pay, and review your Panem Credit balance.", "/panem-credit", "Open Wallet", [["Send Money", "/panem-credit"], ["Transactions", "/panem-credit#ledger"]]],
-            ["WK", "Work", "Earn credits through your district job, overtime, and local production.", "/panem-credit#jobs-work", "Work Now", [["Choose Job", "/panem-credit#jobs-work"], ["Crafting", "/crafting"]]],
-            ["IN", "Inventory", "View resources, rare items, crates, and goods you can sell or craft.", "/inventory", "View Inventory", [["Craft", "/crafting"], ["Sell Items", "/inventory"]]],
-            ["MK", "Marketplace", "Buy official goods, list items, and watch district prices.", "/marketplace", "Open Market", [["Listings", "/marketplace"], ["Black Market", "/black-market"]]],
+            ["GM", "Panem Economy Hub", "Play the citizen economy as a simple loop: work, gather, craft, trade, and invest.", "/citizen-portal/economy-hub", "Play Economy", [["Work", "/citizen-portal/economy-hub#work-game"], ["Gather", "/citizen-portal/economy-hub#gather-game"]]],
+            ["WK", "Work", "Earn credits through your district job, overtime, and local production.", "/citizen-portal/economy-hub#work-game", "Work Now", [["Choose Job", "/citizen-portal/economy-hub#work-game"], ["Crafting", "/citizen-portal/economy-hub#craft-game"]]],
+            ["IN", "Inventory", "View resources, rare items, crates, and goods you can sell or craft.", "/citizen-portal/economy-hub#inventory-game", "View Inventory", [["Craft", "/citizen-portal/economy-hub#craft-game"], ["Sell Items", "/citizen-portal/economy-hub#inventory-game"]]],
+            ["MK", "Marketplace", "Buy official goods, list items, and watch district prices.", "/citizen-portal/economy-hub#market-game", "Open Market", [["Listings", "/marketplace"], ["Black Market", "/citizen-portal/economy-hub#black-market-game"]]],
             ["ST", "Stocks", "Check your PSE portfolio, buy shares, and follow market news.", "/stock-market", "Check Stocks", [["Portfolio", "/stock-market"], ["Market News", "/stock-market"]]],
             ["RA", "Requests & Alerts", "Read official notices and submit help, appeal, or support requests.", "#citizen-alert-center", "View Alerts", [["Submit Request", "#citizen-request-form"], ["Court", "/supreme-court"]]]
           ].map(([icon, title, text, href, action, links]) => (

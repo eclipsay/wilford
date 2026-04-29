@@ -34,6 +34,7 @@ export const POST = safeAction("panem-credit/action", "/panem-credit", async fun
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();
+  const fromEconomyHub = String(formData.get("source") || "") === "economy-hub";
   const citizen = await getCurrentCitizen();
   if (!citizen) {
     return redirectTo(request, "/panem-credit?error=session");
@@ -112,7 +113,9 @@ export const POST = safeAction("panem-credit/action", "/panem-credit", async fun
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "economy work completed", `${result.job?.name || "Work"} / ${result.amount || 0} PC`);
     }
-    return redirectTo(request, `/panem-credit?${result.ok ? "saved=work" : `error=${result.reason || "work"}`}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=work" : `error=${result.reason || "work"}`}#work-game`
+      : `/panem-credit?${result.ok ? "saved=work" : `error=${result.reason || "work"}`}`);
   }
 
   if (intent === "set-job") {
@@ -125,7 +128,9 @@ export const POST = safeAction("panem-credit/action", "/panem-credit", async fun
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "job selected", result.job?.name || "Citizen job");
     }
-    return redirectTo(request, `/panem-credit?${result.ok ? "saved=job" : `error=${result.reason || "job"}`}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=job" : `error=${result.reason || "job"}`}#work-game`
+      : `/panem-credit?${result.ok ? "saved=job" : `error=${result.reason || "job"}`}`);
   }
 
   if (intent === "crime") {

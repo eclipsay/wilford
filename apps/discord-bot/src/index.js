@@ -1120,7 +1120,7 @@ function economyQuickLinks(...keys) {
     marketplace: linkButton("Marketplace", `${websiteUrl}/marketplace`, "🏪"),
     inventory: linkButton("Inventory", `${websiteUrl}/inventory`, "🎒"),
     stocks: linkButton("Stocks", `${websiteUrl}/stock-market`, "📈"),
-    portal: linkButton("Citizen Portal", `${websiteUrl}/citizen-portal`, "🛂")
+    portal: linkButton("Economy Hub", `${websiteUrl}/citizen-portal/economy-hub`, "🛂")
   };
   const buttons = keys.map((key) => links[key]).filter(Boolean).slice(0, 5);
   return buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
@@ -1648,7 +1648,7 @@ function citizenHubSelect(section = "wallet") {
 }
 
 function citizenHubButtons(section = "wallet") {
-  const openSite = linkButton("Citizen Hub", `${websiteUrl}/citizen-portal`, "🌐");
+  const openSite = linkButton("Economy Hub", `${websiteUrl}/citizen-portal/economy-hub`, "🌐");
   if (section === "jobs") {
     return [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("citizen-dashboard:browse-jobs").setLabel("Browse Jobs").setStyle(ButtonStyle.Secondary),

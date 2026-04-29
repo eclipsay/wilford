@@ -20,6 +20,7 @@ export const POST = safeAction("black-market/action", "/black-market", async fun
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();
+  const fromEconomyHub = String(formData.get("source") || "") === "economy-hub";
   const citizen = await getCurrentCitizen();
   if (!citizen) return redirectTo(request, "/black-market?error=session");
 
@@ -37,7 +38,9 @@ export const POST = safeAction("black-market/action", "/black-market", async fun
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "black market purchase", `${result.quantity} x ${result.good.name}`);
     }
-    return redirectTo(request, `/black-market?${result.ok ? "saved=buy" : "error=buy"}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=black" : "error=buy"}#black-market-game`
+      : `/black-market?${result.ok ? "saved=buy" : "error=buy"}`);
   }
 
   if (intent === "smuggle") {
@@ -51,7 +54,9 @@ export const POST = safeAction("black-market/action", "/black-market", async fun
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "smuggling run", `${result.item.name} / ${result.success ? "delivered" : "intercepted"}`);
     }
-    return redirectTo(request, `/black-market?${result.ok ? "saved=smuggle" : "error=smuggle"}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=smuggle" : "error=smuggle"}#black-market-game`
+      : `/black-market?${result.ok ? "saved=smuggle" : "error=smuggle"}`);
   }
 
   return redirectTo(request, "/black-market");

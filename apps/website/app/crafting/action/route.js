@@ -14,6 +14,7 @@ export const POST = safeAction("crafting/action", "/crafting", async function PO
   }
 
   const formData = await request.formData();
+  const fromEconomyHub = String(formData.get("source") || "") === "economy-hub";
   const citizen = await getCurrentCitizen();
   if (!citizen) return redirectTo(request, "/crafting?error=session");
 
@@ -35,5 +36,7 @@ export const POST = safeAction("crafting/action", "/crafting", async function PO
     );
   }
 
-  return redirectTo(request, `/crafting?${result.ok ? "saved=craft" : `error=${result.reason || "craft"}`}`);
+  return redirectTo(request, fromEconomyHub
+    ? `/citizen-portal/economy-hub?${result.ok ? "saved=craft" : `error=${result.reason || "craft"}`}#craft-game`
+    : `/crafting?${result.ok ? "saved=craft" : `error=${result.reason || "craft"}`}`);
 });

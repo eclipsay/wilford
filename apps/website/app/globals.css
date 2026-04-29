@@ -8903,3 +8903,268 @@ details.citizen-application-answers[open] {
     width: 54px;
   }
 }
+.economy-game-page {
+  --game-ink: #172026;
+  --game-panel: #fbfaf7;
+  --game-line: rgba(23, 32, 38, 0.14);
+  --game-accent: #2f6f73;
+  --game-warm: #b66a2c;
+  --game-risk: #55212a;
+}
+
+.economy-game-hero,
+.economy-play-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.1fr) minmax(260px, 0.9fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.economy-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0 2rem;
+}
+
+.economy-card-grid--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.economy-hub-card,
+.economy-action-card,
+.economy-location-card,
+.economy-result {
+  border: 1px solid var(--game-line);
+  border-radius: 8px;
+  background: var(--game-panel);
+  color: var(--game-ink);
+  box-shadow: 0 14px 32px rgba(23, 32, 38, 0.08);
+}
+
+.economy-hub-card {
+  display: grid;
+  gap: 0.75rem;
+  min-height: 230px;
+  padding: 1rem;
+  text-decoration: none;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.economy-hub-card:hover {
+  border-color: rgba(47, 111, 115, 0.45);
+  box-shadow: 0 18px 40px rgba(23, 32, 38, 0.12);
+  transform: translateY(-2px);
+}
+
+.economy-hub-card__icon,
+.economy-location-card__art span {
+  display: grid;
+  place-items: center;
+  width: 3.1rem;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: #e5f0ed;
+  color: #174c50;
+  font-weight: 800;
+}
+
+.economy-hub-card h3,
+.economy-action-card h3,
+.economy-location-card h3 {
+  margin: 0;
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+}
+
+.economy-hub-card p,
+.economy-action-card p,
+.economy-location-card p,
+.economy-result p {
+  margin: 0;
+}
+
+.economy-hub-card small {
+  align-self: end;
+  color: rgba(23, 32, 38, 0.68);
+}
+
+.economy-hub-card strong {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 2.6rem;
+  border-radius: 8px;
+  background: var(--game-accent);
+  color: #fff;
+}
+
+.economy-game-section {
+  margin: 2rem 0;
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--game-line);
+}
+
+.economy-section-heading {
+  max-width: 780px;
+  margin-bottom: 1rem;
+}
+
+.economy-section-heading h2 {
+  margin: 0;
+  font-size: clamp(1.25rem, 2.2vw, 1.9rem);
+}
+
+.economy-play-layout {
+  grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.6fr);
+}
+
+.economy-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.economy-action-card,
+.economy-location-card {
+  display: grid;
+  align-content: start;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.economy-action-card--featured {
+  background: linear-gradient(180deg, #fbfaf7 0%, #edf4f2 100%);
+}
+
+.economy-action-form {
+  display: grid;
+}
+
+.economy-run-button {
+  min-height: 2.75rem;
+}
+
+.economy-action-hint {
+  color: rgba(23, 32, 38, 0.68);
+  font-size: 0.95rem;
+}
+
+.economy-progress {
+  height: 0.65rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(47, 111, 115, 0.16);
+}
+
+.economy-progress i {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--game-accent), var(--game-warm));
+  animation: economy-shift-progress 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes economy-shift-progress {
+  from { transform: translateX(-25%); }
+  to { transform: translateX(160%); }
+}
+
+.economy-location-card__art {
+  min-height: 110px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(47, 111, 115, 0.22), rgba(182, 106, 44, 0.2)),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.44) 0 10px, rgba(255, 255, 255, 0.16) 10px 20px);
+}
+
+.economy-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 1rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-left: 6px solid var(--game-accent);
+}
+
+.economy-result--risk {
+  border-left-color: var(--game-risk);
+  background: #fff8f7;
+}
+
+.economy-result__stats,
+.economy-game-hero .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.economy-result__stats span {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: rgba(23, 32, 38, 0.05);
+}
+
+.economy-positive {
+  color: #1f7a4d;
+}
+
+.economy-negative {
+  color: #a33b35;
+}
+
+.economy-game-section--black {
+  padding: 1.25rem;
+  border-radius: 8px;
+  background: #21191d;
+  color: #f8f2ea;
+}
+
+.economy-game-section--black .eyebrow,
+.economy-game-section--black .economy-action-hint {
+  color: rgba(248, 242, 234, 0.72);
+}
+
+.economy-action-card--black {
+  background: #2f2228;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f8f2ea;
+}
+
+.economy-action-card--black .panem-ledger {
+  color: #f8f2ea;
+}
+
+.economy-inventory-grid {
+  margin-top: 1rem;
+}
+
+@media (max-width: 1100px) {
+  .economy-game-hero,
+  .economy-play-layout,
+  .economy-result {
+    grid-template-columns: 1fr;
+  }
+
+  .economy-card-grid,
+  .economy-card-grid--compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .economy-card-grid,
+  .economy-card-grid--compact,
+  .economy-mini-grid,
+  .economy-result__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .economy-hub-card {
+    min-height: auto;
+  }
+}

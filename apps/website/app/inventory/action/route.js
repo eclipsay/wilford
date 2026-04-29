@@ -22,6 +22,7 @@ export const POST = safeAction("inventory/action", "/inventory", async function 
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();
+  const fromEconomyHub = String(formData.get("source") || "") === "economy-hub";
   const citizen = await getCurrentCitizen();
   if (!citizen) return redirectTo(request, "/inventory?error=session");
 
@@ -39,7 +40,9 @@ export const POST = safeAction("inventory/action", "/inventory", async function 
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "inventory gather", result.item ? `${result.quantity} x ${result.item.name}` : result.action?.name || "gather");
     }
-    return redirectTo(request, `/inventory?${result.ok ? "saved=gather" : `error=${result.reason || "gather"}`}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=gather" : `error=${result.reason || "gather"}`}#gather-game`
+      : `/inventory?${result.ok ? "saved=gather" : `error=${result.reason || "gather"}`}`);
   }
 
   if (intent === "sell-state") {
@@ -52,7 +55,9 @@ export const POST = safeAction("inventory/action", "/inventory", async function 
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "inventory state sale", `${result.quantity} x ${result.item.name}`);
     }
-    return redirectTo(request, `/inventory?${result.ok ? "saved=sell" : "error=sell"}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=sell" : "error=sell"}#inventory-game`
+      : `/inventory?${result.ok ? "saved=sell" : "error=sell"}`);
   }
 
   if (intent === "list") {
@@ -63,7 +68,9 @@ export const POST = safeAction("inventory/action", "/inventory", async function 
       price: formData.get("price"),
       actor: citizen.unionSecurityId
     });
-    return redirectTo(request, `/inventory?${result.ok ? "saved=list" : "error=list"}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=sell" : "error=list"}#inventory-game`
+      : `/inventory?${result.ok ? "saved=list" : "error=list"}`);
   }
 
   if (intent === "crate") {
@@ -75,7 +82,9 @@ export const POST = safeAction("inventory/action", "/inventory", async function 
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "inventory crate opened", `${result.quantity} x ${result.item.name}`);
     }
-    return redirectTo(request, `/inventory?${result.ok ? "saved=crate" : `error=${result.reason || "crate"}`}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=gather" : `error=${result.reason || "crate"}`}#inventory-game`
+      : `/inventory?${result.ok ? "saved=crate" : `error=${result.reason || "crate"}`}`);
   }
 
   return redirectTo(request, "/inventory");

@@ -13,6 +13,7 @@ export const POST = safeAction("stock-market/action", "/stock-market", async fun
   if (!(await assertTrustedPostOrigin())) return redirectTo(request, "/stock-market?error=origin");
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();
+  const fromEconomyHub = String(formData.get("source") || "") === "economy-hub";
   const citizen = await getCurrentCitizen();
   if (!citizen) return redirectTo(request, "/stock-market?error=session");
   const store = await getEconomyStore();
@@ -34,7 +35,9 @@ export const POST = safeAction("stock-market/action", "/stock-market", async fun
         transactionId: result.store?.transactions?.[0]?.id || ""
       }).catch(() => null);
     }
-    return redirectTo(request, `/stock-market?${result.ok ? "saved=buy" : "error=buy"}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=stock-buy" : "error=buy"}#stock-game`
+      : `/stock-market?${result.ok ? "saved=buy" : "error=buy"}`);
   }
   if (intent === "sell") {
     const result = await sellStock({ walletId: wallet.id, ticker: formData.get("ticker"), shares: formData.get("shares"), actor: citizen.unionSecurityId });
@@ -51,7 +54,9 @@ export const POST = safeAction("stock-market/action", "/stock-market", async fun
         transactionId: result.store?.transactions?.[0]?.id || ""
       }).catch(() => null);
     }
-    return redirectTo(request, `/stock-market?${result.ok ? "saved=sell" : "error=sell"}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=stock-sell" : "error=sell"}#stock-game`
+      : `/stock-market?${result.ok ? "saved=sell" : "error=sell"}`);
   }
   if (intent === "watch") {
     const result = await updateStockWatchlist({ walletId: wallet.id, ticker: formData.get("ticker"), actor: citizen.unionSecurityId });
