@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { safeAction } from "../../../../lib/action-routes";
-import { assertTrustedPostOrigin, canAccess, requireGovernmentUser } from "../../../../lib/government-auth";
-import { createCitizenRecord, updateCitizenRecord, updateDistrictProfile } from "../../../../lib/citizen-state";
+import { addAuditEvent, assertTrustedPostOrigin, canAccess, requireGovernmentUser } from "../../../../lib/government-auth";
+import { createCitizenRecord, resetCitizenPassword, updateCitizenRecord, updateDistrictProfile } from "../../../../lib/citizen-state";
 import { createWallet, getEconomyStore, getWallet, saveEconomyStore } from "../../../../lib/panem-credit";
 
 function redirectTo(request, path) {
@@ -67,6 +67,16 @@ export const POST = safeAction("government-access/union-security-registry/action
   }
 
   const id = String(formData.get("citizenId") || "").trim();
+  if (intent === "reset-citizen-password") {
+    if (!identityAccess) return redirectTo(request, "/government-access?denied=1");
+    const result = await resetCitizenPassword(id);
+    await addAuditEvent(actor.username, "citizen password reset", id, result.ok ? "success" : "failed").catch(() => {});
+    const suffix = result.ok
+      ? `saved=password&citizen=${encodeURIComponent(id)}&temporaryPassword=${encodeURIComponent(result.temporaryPassword)}`
+      : `error=password&citizen=${encodeURIComponent(id)}`;
+    return redirectTo(request, `/government-access/union-security-registry?${suffix}`);
+  }
+
   const fields = Object.fromEntries(formData.entries());
   if (["suspend", "revoke", "lost"].includes(intent)) {
     fields.verificationStatus = intent === "suspend" ? "Suspended" : intent === "revoke" ? "Revoked" : "Lost/Stolen";

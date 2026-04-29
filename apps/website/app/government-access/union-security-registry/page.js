@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatCredits, taxLabel } from "@wilford/shared";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
+import { TemporaryPasswordNotice } from "../../../components/TemporaryPasswordNotice";
 import { canAccess, requireGovernmentUser } from "../../../lib/government-auth";
 import {
   citizenStatuses,
@@ -42,6 +43,7 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
       <main className="content content--wide portal-page government-command-page identity-registry-page">
         <Link className="button" href="/government-access">Back to Dashboard</Link>
         {params?.saved ? <section className="application-notice"><strong>Registry Updated</strong><p>The identity record has been saved.</p></section> : null}
+        <TemporaryPasswordNotice password={params?.temporaryPassword ? String(params.temporaryPassword) : ""} />
 
         <section className="government-dashboard-grid">
           <article className="government-status-panel"><p className="eyebrow">Citizen IDs</p><h2>{state.citizenRecords.length}</h2><p>Registry identities.</p></article>
@@ -129,6 +131,7 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
                 <button className="button button--solid-site" name="intent" type="submit" value="save">Save Record</button>
                 {identityAccess ? <button className="button" name="intent" type="submit" value="regenerate-code">Regenerate Code</button> : null}
                 {identityAccess ? <button className="button" name="intent" type="submit" value="regenerate-id">Regenerate ID</button> : null}
+                {identityAccess ? <button className="button" name="intent" type="submit" value="reset-citizen-password">Reset Portal Password</button> : null}
                 {identityAccess ? <button className="button" name="intent" type="submit" value="lost">Mark Lost/Stolen</button> : null}
                 {identityAccess ? <button className="button button--danger-site" name="intent" type="submit" value="revoke">Revoke</button> : null}
                 <button className="button button--danger-site" name="intent" type="submit" value="suspend">Suspend / Restrict</button>

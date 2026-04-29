@@ -202,6 +202,10 @@ function hashPassword(password) {
   return `${salt}:${hash}`;
 }
 
+function generateTemporaryPassword() {
+  return `WPU-CIT-${randomBytes(5).toString("hex").toUpperCase()}`;
+}
+
 function districtNumber(name) {
   if (name === "The Capitol" || name === "Capitol") return 0;
   return Number(String(name).replace(/\D/g, "")) || 0;
@@ -704,6 +708,29 @@ export async function updateCitizenRecord(id, fields) {
     });
   });
   return saveCitizenState(state);
+}
+
+export async function resetCitizenPassword(id) {
+  const state = await getCitizenState();
+  const temporaryPassword = generateTemporaryPassword();
+  let updated = null;
+  state.citizenRecords = state.citizenRecords.map((record) => {
+    if (record.id !== id) return record;
+    updated = normalizeCitizenRecord({
+      ...record,
+      passwordHash: hashPassword(temporaryPassword),
+      forcePasswordChange: true,
+      temporaryPasswordIssuedAt: new Date().toISOString(),
+      credentialDeliveryStatus: "manual delivery required",
+      credentialDeliveryError: "",
+      updatedAt: new Date().toISOString()
+    });
+    return updated;
+  });
+  if (!updated) return { ok: false, temporaryPassword: "" };
+  await saveCitizenState(state);
+  await recordCitizenActivity(id, "password reset", "Citizen Portal temporary password issued by government registry.");
+  return { ok: true, temporaryPassword };
 }
 
 export async function updateDistrictProfile(id, fields) {
