@@ -83,7 +83,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
   const taxesPaid = store.taxRecords
     .filter((record) => record.status === "paid")
     .reduce((sum, record) => sum + Number(record.amount || 0), 0);
-  const tradeVolume = store.transactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const grossDomesticProduct = store.districts.reduce((sum, district) => sum + Number(district.tradeVolume || 0), 0);
   const activeEvent = store.events.find((event) => event.status === "active") || store.events[0];
   const wantedWallets = store.wallets.filter((wallet) => wallet.wanted || wallet.underReview || Number(wallet.bounty || 0) > 0);
   const frozenAssets = store.wallets
@@ -149,9 +149,9 @@ export default async function PanemCreditControlPage({ searchParams }) {
             <p>All collected taxes are deposited into the WPU State Treasury.</p>
           </article>
           <article className="government-status-panel">
-            <p className="eyebrow">Trade Volume</p>
-            <h2>{formatCredits(tradeVolume)}</h2>
-            <p>{store.transactions.length} ledger transactions.</p>
+            <p className="eyebrow">Gross Domestic Product</p>
+            <h2>{formatCredits(grossDomesticProduct)}</h2>
+            <p>Estimated district production and trade output.</p>
           </article>
           <article className="government-status-panel">
             <p className="eyebrow">MSS Alerts</p>
