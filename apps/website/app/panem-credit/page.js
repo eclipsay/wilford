@@ -1,4 +1,13 @@
-import { formatCredits, taxLabel, titleForBalance } from "@wilford/shared";
+import {
+  economyCrimeDefaults,
+  economyGambleDefaults,
+  economyJobDefaults,
+  formatCredits,
+  investmentFundDefaults,
+  prestigeItemDefaults,
+  taxLabel,
+  titleForBalance
+} from "@wilford/shared";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getEconomyStore, getWallet } from "../../lib/panem-credit";
@@ -94,6 +103,15 @@ export default async function PanemCreditPage({ searchParams }) {
   const walletTaxes = store.taxRecords.filter((record) => record.walletId === selectedWallet.id);
   const paidTax = sumTaxes(walletTaxes.filter((record) => record.status === "paid"));
   const outstandingTax = sumTaxes(walletTaxes.filter((record) => record.status !== "paid"));
+  const activeEvent = store.events.find((event) => event.status === "active") || store.events[0];
+  const richest = [...store.wallets].sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0)).slice(0, 6);
+  const wanted = store.wallets.filter((wallet) => wallet.wanted || wallet.underReview || Number(wallet.bounty || 0) > 0).slice(0, 6);
+  const districtChampions = store.districts.map((district) => {
+    const champion = [...store.wallets]
+      .filter((wallet) => wallet.district === district.name)
+      .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))[0];
+    return { district, champion };
+  }).filter((entry) => entry.champion).slice(0, 6);
 
   return (
     <SiteLayout>
@@ -134,6 +152,18 @@ export default async function PanemCreditPage({ searchParams }) {
             <p>{citizen.name} / {citizen.unionSecurityId}</p>
           </article>
 
+          <article className="finance-panel panem-event-panel">
+            <p className="eyebrow">Active State Event</p>
+            <h2>{activeEvent?.title || "Standard Treasury Cycle"}</h2>
+            <p>{activeEvent?.summary || "Normal payout, market, and taxation rules are in effect."}</p>
+            <div className="metric-grid">
+              <span><strong>x{Number(activeEvent?.rewardMultiplier || 1)}</strong> Daily rewards</span>
+              <span><strong>x{Number(activeEvent?.workMultiplier || 1)}</strong> Labour payouts</span>
+              <span><strong>x{Number(activeEvent?.marketMultiplier || 1)}</strong> Market pressure</span>
+              <span><strong>{selectedWallet.streak || 0}</strong> Login streak</span>
+            </div>
+          </article>
+
           <article className="finance-panel">
             <p className="eyebrow">Tax Status</p>
             <h2>Taxation sustains the Union.</h2>
@@ -143,6 +173,7 @@ export default async function PanemCreditPage({ searchParams }) {
               <span><strong>{formatCredits(selectedWallet.salary ?? 125)}</strong> Daily salary</span>
               <span><strong>{selectedWallet.taxStatus}</strong> Current status</span>
               <span><strong>{selectedWallet.district || "Unassigned"}</strong> District affiliation</span>
+              <span><strong>{formatCredits(selectedWallet.bounty || 0)}</strong> Posted bounty</span>
             </div>
           </article>
 
@@ -174,6 +205,101 @@ export default async function PanemCreditPage({ searchParams }) {
         </section>
 
         <section className="state-section scroll-fade">
+          <p className="eyebrow">Civic Earnings</p>
+          <h2>Work Desk</h2>
+          <div className="panem-market-grid">
+            {economyJobDefaults.map((job) => (
+              <article className="premium-card panem-market-card" key={job.id}>
+                <span className="court-role-badge">{job.district}</span>
+                <h3>{job.name}</h3>
+                <p>{job.description}</p>
+                <dl className="panem-ledger">
+                  <div><dt>Payout</dt><dd>{formatCredits(job.minReward)} - {formatCredits(job.maxReward)}</dd></div>
+                  <div><dt>Cooldown</dt><dd>{job.cooldownHours}h</dd></div>
+                </dl>
+                <form action="/panem-credit/action" method="post">
+                  <input name="intent" type="hidden" value="work" />
+                  <input name="jobId" type="hidden" value={job.id} />
+                  <button className="button button--solid-site" type="submit">Work Shift</button>
+                </form>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="state-section scroll-fade">
+          <p className="eyebrow">Risk Office</p>
+          <h2>Fictional Crime and State Games</h2>
+          <div className="panem-ledger-layout">
+            <form action="/panem-credit/action" className="panel public-application-form" method="post">
+              <input name="intent" type="hidden" value="crime" />
+              <h3>Risk Action</h3>
+              <label className="public-application-field">
+                <span>Action</span>
+                <select name="crimeId">
+                  {economyCrimeDefaults.map((crime) => (
+                    <option key={crime.id} value={crime.id}>{crime.name} / {(crime.successChance * 100).toFixed(0)}% success</option>
+                  ))}
+                </select>
+              </label>
+              <label className="public-application-field">
+                <span>Optional target Union Security ID</span>
+                <input autoComplete="off" name="targetSecurityId" placeholder="Required for rob citizen" />
+              </label>
+              <button className="button button--danger-site" type="submit">Take Risk</button>
+            </form>
+            <form action="/panem-credit/action" className="panel public-application-form" method="post">
+              <input name="intent" type="hidden" value="gamble" />
+              <h3>Capitol Games</h3>
+              <label className="public-application-field">
+                <span>Game</span>
+                <select name="gameId">
+                  {economyGambleDefaults.map((game) => (
+                    <option key={game.id} value={game.id}>{game.name} / max {formatCredits(game.maxBet)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="public-application-field"><span>Bet amount</span><input defaultValue="50" min="1" name="amount" type="number" /></label>
+              <button className="button button--solid-site" type="submit">Place Bet</button>
+            </form>
+          </div>
+        </section>
+
+        <section className="state-section scroll-fade">
+          <p className="eyebrow">Investment and Prestige</p>
+          <h2>Build Status</h2>
+          <div className="panem-ledger-layout">
+            <form action="/panem-credit/action" className="panel public-application-form" method="post">
+              <input name="intent" type="hidden" value="invest" />
+              <h3>Investment Fund</h3>
+              <label className="public-application-field">
+                <span>Fund</span>
+                <select name="fundId">
+                  {investmentFundDefaults.map((fund) => (
+                    <option key={fund.id} value={fund.id}>{fund.name} / {fund.riskLevel}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="public-application-field"><span>Amount</span><input defaultValue="100" min="25" name="amount" type="number" /></label>
+              <button className="button button--solid-site" type="submit">Invest</button>
+            </form>
+            <form action="/panem-credit/action" className="panel public-application-form" method="post">
+              <input name="intent" type="hidden" value="prestige" />
+              <h3>Prestige Registry</h3>
+              <label className="public-application-field">
+                <span>Item</span>
+                <select name="itemId">
+                  {prestigeItemDefaults.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name} / {formatCredits(item.price)}</option>
+                  ))}
+                </select>
+              </label>
+              <button className="button button--solid-site" type="submit">Purchase Status</button>
+            </form>
+          </div>
+        </section>
+
+        <section className="state-section scroll-fade">
           <p className="eyebrow">Marketplace</p>
           <h2>District Goods Exchange</h2>
           <div className="panem-market-grid">
@@ -184,6 +310,7 @@ export default async function PanemCreditPage({ searchParams }) {
                 <p>{item.description}</p>
                 <dl className="panem-ledger">
                   <div><dt>Price</dt><dd>{formatCredits(item.currentPrice)}</dd></div>
+                  <div><dt>Base</dt><dd>{formatCredits(item.basePrice)}</dd></div>
                   <div><dt>Stock</dt><dd>{item.stock}</dd></div>
                   <div><dt>Category</dt><dd>{item.category}</dd></div>
                 </dl>
@@ -258,7 +385,7 @@ export default async function PanemCreditPage({ searchParams }) {
 
         <section className="state-section scroll-fade">
           <p className="eyebrow">Ledger</p>
-          <h2>Transactions, Taxes, and Rankings</h2>
+          <h2>Transactions, Taxes, Rankings, and MSS Watch</h2>
           <div className="panem-ledger-layout">
             <article className="panel">
               <h3>Recent Transactions</h3>
@@ -289,6 +416,33 @@ export default async function PanemCreditPage({ searchParams }) {
                 <li><span>District</span><strong>{citizen.district}</strong></li>
                 <li><span>Verification</span><strong>{citizen.verificationStatus}</strong></li>
                 <li><span>Security classification</span><strong>{citizen.securityClassification}</strong></li>
+              </ul>
+            </article>
+            <article className="panel">
+              <h3>Richest Citizens</h3>
+              <ul className="government-mini-list">
+                {richest.map((wallet, index) => (
+                  <li key={wallet.id}><span>{index + 1}. {wallet.displayName}</span><strong>{formatCredits(wallet.balance)}</strong></li>
+                ))}
+              </ul>
+            </article>
+            <article className="panel">
+              <h3>District Champions</h3>
+              <ul className="government-mini-list">
+                {districtChampions.map(({ district, champion }) => (
+                  <li key={district.id}><span>{district.name}</span><strong>{champion.displayName}</strong></li>
+                ))}
+              </ul>
+            </article>
+            <article className="panel panem-wanted-panel">
+              <h3>Most Wanted Financiers</h3>
+              <ul className="government-mini-list">
+                {wanted.length ? wanted.map((wallet) => (
+                  <li key={wallet.id}>
+                    <span>{wallet.displayName} / {wallet.taxStatus || "MSS review"}</span>
+                    <strong>{formatCredits(wallet.bounty || 0)}</strong>
+                  </li>
+                )) : <li><span>No active public warrants.</span><strong>Clear</strong></li>}
               </ul>
             </article>
           </div>

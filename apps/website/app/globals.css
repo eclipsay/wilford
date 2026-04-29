@@ -6554,9 +6554,28 @@ body {
   --panem-panel: rgba(18, 5, 5, 0.84);
 }
 
+.marketplace-page {
+  --market-green: #69d29b;
+  --market-red: #ff8c7a;
+}
+
+.market-hero-board {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) repeat(2, minmax(220px, 0.9fr));
+  gap: 18px;
+  margin-bottom: 64px;
+}
+
 .panem-wallet-card {
   border: 1px solid rgba(215, 168, 95, 0.32);
   box-shadow: 0 26px 70px rgba(0, 0, 0, 0.42);
+}
+
+.panem-event-panel {
+  border-color: rgba(215, 168, 95, 0.44);
+  background:
+    linear-gradient(145deg, rgba(91, 12, 12, 0.42), rgba(12, 8, 8, 0.88)),
+    var(--panem-panel);
 }
 
 .panem-inline-form {
@@ -6599,6 +6618,28 @@ body {
   background:
     linear-gradient(135deg, rgba(111, 23, 17, 0.42), transparent 58%),
     rgba(5, 5, 5, 0.58);
+}
+
+.market-category-food {
+  border-color: rgba(105, 210, 155, 0.2);
+}
+
+.market-category-technology,
+.market-category-energy {
+  border-color: rgba(120, 185, 255, 0.24);
+}
+
+.market-category-luxury-goods,
+.market-category-restricted-technology,
+.market-category-security-equipment {
+  border-color: rgba(215, 168, 95, 0.38);
+}
+
+.market-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .panem-market-card h3,
@@ -6646,6 +6687,157 @@ body {
   background:
     linear-gradient(135deg, rgba(127, 21, 21, 0.28), transparent 52%),
     rgba(4, 4, 4, 0.72);
+}
+
+.panem-wanted-panel {
+  border-color: rgba(198, 37, 37, 0.42);
+  background: linear-gradient(145deg, rgba(93, 8, 8, 0.46), rgba(12, 7, 7, 0.92));
+}
+
+.marketplace-listings {
+  margin-top: 18px;
+}
+
+.market-chart-grid .panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.market-chart-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  color: rgba(255, 244, 222, 0.78);
+  font-size: 0.9rem;
+}
+
+.market-chart-row i {
+  position: relative;
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(215, 168, 95, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.market-chart-row i::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--value);
+  content: "";
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(139, 17, 17, 0.95), rgba(215, 168, 95, 0.95));
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.inventory-card {
+  display: grid;
+  gap: 12px;
+  min-height: 100%;
+  padding: 20px;
+  border: 1px solid rgba(215, 168, 95, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(127, 21, 21, 0.22), rgba(5, 5, 5, 0.76)),
+    rgba(5, 5, 5, 0.72);
+}
+
+.inventory-card h3,
+.inventory-card p {
+  margin: 0;
+}
+
+.inventory-card__icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid rgba(215, 168, 95, 0.34);
+  border-radius: 50%;
+  color: var(--gold-bright);
+  background: rgba(0, 0, 0, 0.28);
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+}
+
+.inventory-card--uncommon {
+  border-color: rgba(105, 210, 155, 0.32);
+}
+
+.inventory-card--rare {
+  border-color: rgba(120, 185, 255, 0.38);
+}
+
+.inventory-card--epic {
+  border-color: rgba(210, 89, 255, 0.42);
+}
+
+.inventory-card--legendary {
+  border-color: rgba(255, 211, 111, 0.58);
+  box-shadow: 0 0 34px rgba(215, 168, 95, 0.16);
+}
+
+.stock-market-page .wallet-card__balance {
+  color: var(--gold-bright);
+}
+
+.stock-company-card {
+  border-color: rgba(215, 168, 95, 0.26);
+}
+
+.citizen-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 58px;
+}
+
+.citizen-quick-card {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 18px;
+  border: 1px solid rgba(215, 168, 95, 0.22);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  background:
+    linear-gradient(145deg, rgba(127, 21, 21, 0.2), rgba(5, 5, 5, 0.74)),
+    rgba(5, 5, 5, 0.68);
+}
+
+.citizen-quick-card span {
+  font-size: 1.6rem;
+}
+
+.citizen-quick-card strong {
+  color: var(--gold-bright);
+}
+
+.citizen-quick-card small {
+  color: rgba(255, 244, 222, 0.78);
+}
+
+.citizen-quick-card em,
+.system-group-badge {
+  color: var(--gold);
+  font-size: 0.76rem;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.citizen-helper-card h3,
+.citizen-helper-card p {
+  margin: 0;
 }
 
 .metric-grid {
@@ -6758,10 +6950,16 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .market-hero-board {
+    grid-template-columns: 1fr;
+  }
+
   .panem-action-grid,
   .panem-market-grid,
   .panem-district-grid,
-  .panem-ledger-layout {
+  .panem-ledger-layout,
+  .inventory-grid,
+  .citizen-quick-grid {
     grid-template-columns: 1fr;
   }
 

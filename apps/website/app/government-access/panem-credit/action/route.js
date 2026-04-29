@@ -16,7 +16,10 @@ import {
   updateEconomyAdmin,
   updateWalletStatus,
   getEconomyStore,
-  getWallet
+  getWallet,
+  markWalletWanted,
+  pardonWallet,
+  triggerEconomyEvent
 } from "../../../../lib/panem-credit";
 import { updateCitizenRecord } from "../../../../lib/citizen-state";
 
@@ -49,6 +52,25 @@ export async function POST(request) {
       actor: actorName
     });
     return redirectTo(request, "/government-access/panem-credit?saved=wallet");
+  }
+
+  if (intent === "wanted" || intent === "pardon") {
+    if (!securityAccess) return deny(request);
+    if (intent === "wanted") {
+      await markWalletWanted({
+        walletId: String(formData.get("walletId") || "").trim(),
+        bounty: formData.get("bounty") || 250,
+        reason: formData.get("reason") || "MSS financial warrant",
+        actor: actorName
+      });
+    } else {
+      await pardonWallet({
+        walletId: String(formData.get("walletId") || "").trim(),
+        reason: formData.get("reason") || "MSS clearance",
+        actor: actorName
+      });
+    }
+    return redirectTo(request, "/government-access/panem-credit?saved=mss");
   }
 
   if (!fullAccess) {
@@ -156,6 +178,14 @@ export async function POST(request) {
 
   if (intent === "set-tax" || intent === "district" || intent === "item") {
     await updateEconomyAdmin(Object.fromEntries(formData.entries()), actorName);
+  }
+
+  if (intent === "trigger-event") {
+    await triggerEconomyEvent({
+      eventId: String(formData.get("eventId") || "").trim(),
+      durationHours: formData.get("durationHours") || 168,
+      actor: actorName
+    });
   }
 
   if (intent === "reverse") {

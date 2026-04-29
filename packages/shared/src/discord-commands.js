@@ -36,6 +36,12 @@ export const publicBotCommands = [
     usage: "-commands"
   },
   {
+    name: "/help-economy, /help-market, /help-inventory, /help-stocks, /help-citizen, /help-mss",
+    access: "Public",
+    description: "Beginner help menus with simple next steps for economy, market, inventory, stocks, citizen services, and MSS alerts.",
+    usage: "/help-economy"
+  },
+  {
     name: "-userinfo / /userinfo",
     access: "Staff",
     description: "Show a quick profile for a mentioned member.",
@@ -44,20 +50,44 @@ export const publicBotCommands = [
   {
     name: "/balance, /pay, /transactions, /daily",
     access: "Citizens",
-    description: "Use the Panem Credit wallet for balances, payments, ledger history, and daily civic stipends.",
+    description: "Use the Panem Credit wallet for balances, payments, ledger history, daily stipends, and streak rewards.",
     usage: "/pay @user 50"
   },
   {
-    name: "/tax, /market, /buy, /sell, /district, /leaderboard",
+    name: "/work, /overtime, /crime, /rob, /gamble, /lottery, /invest",
     access: "Citizens",
-    description: "Review taxes, trade district goods, check production, and view Panem Credit rankings.",
+    description: "Earn, risk, wager, and invest Panem Credits through the gamified state economy.",
+    usage: "/work job:Power Plant Shift"
+  },
+  {
+    name: "/inventory, /fish, /mine, /farm, /scavenge, /log, /extract, /inspect, /lootbox, /crate",
+    access: "Citizens",
+    description: "Gather resources, discover rare items, inspect values, open crates, and manage inventory.",
+    usage: "/inventory"
+  },
+  {
+    name: "/stocks, /stock, /buy-stock, /sell-stock, /portfolio, /watchlist, /market-news, /dividends",
+    access: "Citizens",
+    description: "Trade fictional PSE shares, follow stock news, track dividends, and manage stock watchlists.",
+    usage: "/stock LBE"
+  },
+  {
+    name: "/tax, /market, /prices, /buy, /sell, /list, /portfolio, /viewholdings, /market-alerts, /district, /leaderboard",
+    access: "Citizens",
+    description: "Review taxes, trade district goods, check production, manage holdings, and view Panem Credit rankings.",
     usage: "/buy grain-sack 2"
   },
   {
-    name: "/grant, /fine, /freeze-wallet, /unfreeze-wallet, /set-tax, /run-tax, /economy-report",
+    name: "/grant, /issue-grant, /fine, /freeze-wallet, /unfreeze-wallet, /wanted, /clear, /trigger-event, /set-tax, /run-tax, /economy-report",
     access: "Economy admins",
-    description: "Ministry of Credit & Records command set for grants, fines, freezes, rates, taxation, and reports.",
+    description: "Ministry and MSS command set for grants, fines, freezes, warrants, events, rates, taxation, and reports.",
     usage: "/economy-report"
+  },
+  {
+    name: "/market-event, /set-stock-price, /suspend-stock, /issue-dividend, /stock-report",
+    access: "Economy admins",
+    description: "Administer the Panem Stock Exchange with events, price controls, suspensions, dividends, and reports.",
+    usage: "/stock-report"
   },
   {
     name: "-purge / /purge",

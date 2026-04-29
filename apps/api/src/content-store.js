@@ -3,7 +3,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   districtEconomyDefaults,
+  gatheringActionDefaults,
+  inventoryItemDefaults,
+  inventoryRarityTiers,
   marketItemDefaults,
+  stockCompanyDefaults,
   taxTypes
 } from "@wilford/shared";
 import { config } from "./config.js";
@@ -223,7 +227,24 @@ function normalizeEconomyStore(economy = {}) {
       Array.isArray(economy.categories) && economy.categories.length
         ? economy.categories
         : defaultContent.economy.categories,
-    events: Array.isArray(economy.events) ? economy.events : defaultContent.economy.events
+    events: Array.isArray(economy.events) ? economy.events : defaultContent.economy.events,
+    inventoryItems:
+      Array.isArray(economy.inventoryItems) && economy.inventoryItems.length
+        ? economy.inventoryItems
+        : inventoryItemDefaults,
+    rarityTiers: Array.isArray(economy.rarityTiers) ? economy.rarityTiers : inventoryRarityTiers,
+    gatheringActions:
+      Array.isArray(economy.gatheringActions) && economy.gatheringActions.length
+        ? economy.gatheringActions
+        : gatheringActionDefaults,
+    inventoryChallenges: Array.isArray(economy.inventoryChallenges) ? economy.inventoryChallenges : [],
+    stockCompanies:
+      Array.isArray(economy.stockCompanies) && economy.stockCompanies.length
+        ? economy.stockCompanies
+        : stockCompanyDefaults,
+    stockTrades: Array.isArray(economy.stockTrades) ? economy.stockTrades : [],
+    stockEvents: Array.isArray(economy.stockEvents) ? economy.stockEvents : [],
+    stockSettings: { transactionTax: 0.015, transactionFee: 2, ...(economy.stockSettings || {}) }
   };
 }
 

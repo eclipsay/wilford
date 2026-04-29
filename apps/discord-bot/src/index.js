@@ -18,10 +18,20 @@ import {
 import {
   applicationQuestions,
   brand,
+  economyCrimeDefaults,
+  economyEventDefaults,
+  economyGambleDefaults,
+  economyJobDefaults,
   formatCredits,
   formatShortSha,
+  gatheringActionDefaults,
+  investmentFundDefaults,
+  inventoryItemDefaults,
+  inventoryRarityTiers,
   publicBotCommands,
   staffApplicationCommands,
+  stockCompanyDefaults,
+  stockMarketEventDefaults,
   taxLabel,
   titleForBalance
 } from "@wilford/shared";
@@ -47,6 +57,7 @@ const adminApiKey = String(process.env.ADMIN_API_KEY || "").trim();
 const broadcastGuildId = String(process.env.DISCORD_GUILD_ID || "").trim();
 const announcementChannelId = String(process.env.DISCORD_ANNOUNCEMENT_CHANNEL_ID || "").trim();
 const mssChannelId = String(process.env.DISCORD_MSS_CHANNEL_ID || "").trim();
+const marketplaceChannelId = String(process.env.PANEM_MARKETPLACE_CHANNEL_ID || process.env.DISCORD_MARKETPLACE_CHANNEL_ID || "").trim();
 const enemiesOfStateChannelId = String(process.env.ENEMIES_OF_STATE_CHANNEL_ID || "").trim();
 const courtAnnouncementsChannelId = String(process.env.COURT_ANNOUNCEMENTS_CHANNEL_ID || "").trim();
 const activeHearingsChannelId = String(process.env.ACTIVE_HEARINGS_CHANNEL_ID || "").trim();
@@ -270,51 +281,431 @@ function pushEconomyTransaction(economy, transaction) {
   ].slice(0, 1000);
 }
 
-function ministryEmbed(title, description) {
+function randomEconomyAmount(min, max) {
+  return Math.floor(Math.random() * (Number(max || min) - Number(min || 0) + 1)) + Number(min || 0);
+}
+
+function economyActiveEvent(economy) {
+  const now = Date.now();
+  return (economy.events || []).find((event) =>
+    event.status === "active" && (!event.endsAt || Date.parse(event.endsAt) > now)
+  ) || economyEventDefaults[0];
+}
+
+function economyCooldownReady(economy, walletId, type, key, hours) {
+  const last = (economy.transactions || []).find((transaction) =>
+    (transaction.fromWalletId === walletId || transaction.toWalletId === walletId) &&
+    transaction.type === type &&
+    transaction.meta?.key === key
+  );
+  return !last || Date.now() - Date.parse(last.createdAt || 0) >= Number(hours || 0) * 60 * 60 * 1000;
+}
+
+function addEconomyAlert(economy, alert) {
+  economy.alerts = [
+    {
+      id: createId("economy-alert"),
+      status: "open",
+      createdAt: new Date().toISOString(),
+      ...alert
+    },
+    ...(economy.alerts || [])
+  ].slice(0, 300);
+}
+
+function ensureEconomyHoldings(wallet) {
+  wallet.holdings = Array.isArray(wallet.holdings) ? wallet.holdings : [];
+  wallet.watchlist = Array.isArray(wallet.watchlist) ? wallet.watchlist : [];
+  wallet.favouriteDistricts = Array.isArray(wallet.favouriteDistricts) ? wallet.favouriteDistricts : [];
+  wallet.marketAlerts = wallet.marketAlerts !== false;
+  wallet.inventorySlots = Math.max(20, Number(wallet.inventorySlots || 40));
+  wallet.inventoryFlags = Array.isArray(wallet.inventoryFlags) ? wallet.inventoryFlags : [];
+  wallet.actionBans = Array.isArray(wallet.actionBans) ? wallet.actionBans : [];
+  wallet.achievements = Array.isArray(wallet.achievements) ? wallet.achievements : [];
+  wallet.collectionScore = Math.max(0, Number(wallet.collectionScore || 0));
+}
+
+function inventoryItemById(itemId, economy) {
+  return (economy?.inventoryItems || inventoryItemDefaults).find((item) => item.id === itemId) ||
+    (economy?.marketItems || []).find((item) => item.id === itemId) ||
+    inventoryItemDefaults.find((item) => item.id === itemId);
+}
+
+function inventoryRarity(item) {
+  return item?.rarity || (item?.restricted ? "rare" : "common");
+}
+
+function rarityMultiplierFor(rarity) {
+  return inventoryRarityTiers.find((tier) => tier.id === rarity)?.multiplier || 1;
+}
+
+function inventoryItemValue(item, economy) {
+  const market = (economy.marketItems || []).find((entry) => entry.id === item?.id);
+  const base = Number(item?.baseValue || market?.currentPrice || market?.basePrice || item?.basePrice || 1);
+  const district = (economy.districts || []).find((entry) => entry.name === (item?.district || market?.district));
+  const pressure = district ? 1 + (Number(district.demandLevel || 70) - Number(district.supplyLevel || 70)) / 260 : 1;
+  return Math.max(1, Math.round(base * rarityMultiplierFor(inventoryRarity(item)) * pressure));
+}
+
+function addEconomyHolding(wallet, itemId, quantity, unitPrice = 0) {
+  ensureEconomyHoldings(wallet);
+  const count = Math.max(1, Number(quantity || 1));
+  let holding = wallet.holdings.find((entry) => entry.itemId === itemId);
+  if (!holding) {
+    holding = { itemId, quantity: 0, averageCost: 0, durability: 100, acquiredAt: new Date().toISOString(), acquisitionHistory: [] };
+    wallet.holdings.push(holding);
+  }
+  const item = inventoryItemDefaults.find((entry) => entry.id === itemId);
+  const previousQuantity = Number(holding.quantity || 0);
+  const previousCost = previousQuantity * Number(holding.averageCost || 0);
+  holding.quantity = previousQuantity + count;
+  holding.averageCost = Math.round(((previousCost + count * Number(unitPrice || 0)) / holding.quantity) * 100) / 100;
+  holding.rarity = inventoryRarity(item);
+  holding.type = item?.type || item?.category || "goods";
+  holding.durability = Math.min(100, Math.max(0, Number(holding.durability ?? item?.durability ?? 100)));
+  holding.acquisitionHistory = [{ source: "discord", quantity: count, unitPrice: Number(unitPrice || 0), createdAt: new Date().toISOString() }, ...(holding.acquisitionHistory || [])].slice(0, 12);
+}
+
+function removeEconomyHolding(wallet, itemId, quantity) {
+  ensureEconomyHoldings(wallet);
+  const count = Math.max(1, Number(quantity || 1));
+  const holding = wallet.holdings.find((entry) => entry.itemId === itemId);
+  if (!holding || Number(holding.quantity || 0) < count) return false;
+  holding.quantity -= count;
+  wallet.holdings = wallet.holdings.filter((entry) => Number(entry.quantity || 0) > 0);
+  return true;
+}
+
+function marketChangePercent(item) {
+  const base = Number(item?.basePrice || item?.currentPrice || 1);
+  return Math.round(((Number(item?.currentPrice || base) - base) / base) * 1000) / 10;
+}
+
+function occupiedInventorySlots(wallet) {
+  ensureEconomyHoldings(wallet);
+  return wallet.holdings.reduce((sum, holding) => sum + Math.max(0, Number(holding.quantity || 0)), 0);
+}
+
+function discordRollDrop(action) {
+  const roll = Math.random();
+  let cursor = 0;
+  for (const drop of action.drops || []) {
+    cursor += Number(drop.chance || 0);
+    if (roll <= cursor) return drop;
+  }
+  return null;
+}
+
+function discordRollRisk(action) {
+  return (action.riskEvents || []).find((risk) => Math.random() < Number(risk.chance || 0)) || null;
+}
+
+function removeRandomDiscordHolding(wallet) {
+  ensureEconomyHoldings(wallet);
+  const candidates = wallet.holdings.filter((holding) => Number(holding.quantity || 0) > 0);
+  if (!candidates.length) return "";
+  const holding = candidates[randomEconomyAmount(0, candidates.length - 1)];
+  removeEconomyHolding(wallet, holding.itemId, 1);
+  return holding.itemId;
+}
+
+function ensureStockCollections(wallet) {
+  wallet.stockPortfolio = Array.isArray(wallet.stockPortfolio) ? wallet.stockPortfolio : [];
+  wallet.stockWatchlist = Array.isArray(wallet.stockWatchlist) ? wallet.stockWatchlist : [];
+  wallet.portfolioFrozen = Boolean(wallet.portfolioFrozen);
+}
+
+function findStockCompany(economy, ticker) {
+  return (economy.stockCompanies || stockCompanyDefaults).find((company) => company.ticker.toLowerCase() === String(ticker || "").toLowerCase());
+}
+
+function getDiscordStockPosition(wallet, ticker) {
+  ensureStockCollections(wallet);
+  let position = wallet.stockPortfolio.find((entry) => entry.ticker === ticker);
+  if (!position) {
+    position = { ticker, shares: 0, averagePrice: 0, dividendsEarned: 0 };
+    wallet.stockPortfolio.push(position);
+  }
+  return position;
+}
+
+function discordStockPortfolioValue(wallet, economy) {
+  ensureStockCollections(wallet);
+  return wallet.stockPortfolio.reduce((sum, position) => {
+    const company = findStockCompany(economy, position.ticker);
+    return sum + Number(position.shares || 0) * Number(company?.sharePrice || 0);
+  }, 0);
+}
+
+function discordMoveStock(company, direction = 0) {
+  const previous = Number(company.sharePrice || 1);
+  company.sharePrice = Math.max(1, Math.round(previous * (1 + direction) * 100) / 100);
+  company.dailyChangePercent = Math.round(((company.sharePrice - previous) / previous) * 1000) / 10;
+  company.priceHistory = [...(company.priceHistory || []), { date: new Date().toISOString().slice(0, 10), price: company.sharePrice }].slice(-30);
+}
+
+async function resolveMarketplaceChannel() {
+  if (marketplaceChannelId) {
+    try {
+      return await client.channels.fetch(marketplaceChannelId);
+    } catch {}
+  }
+  const guildId = broadcastGuildId || applicationGuildId;
+  if (!guildId) return null;
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    const channels = await guild.channels.fetch();
+    return channels.find((channel) => channel?.name === "panem-marketplace" && channel?.isTextBased?.()) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function postMarketNotice(title, description) {
+  const channel = await resolveMarketplaceChannel();
+  if (!channel?.isTextBased?.()) return;
+  await channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xd7a85f)
+        .setTitle(title)
+        .setDescription(description)
+        .setFooter({ text: "Panem Marketplace • Ministry of Credit & Records" })
+        .setTimestamp(new Date())
+    ]
+  });
+}
+
+async function postMssFinancialAlert(alert) {
+  const channelId = mssChannelId || announcementChannelId;
+  if (!channelId) return;
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (channel?.isTextBased?.()) {
+      await channel.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x8b1111)
+            .setTitle("MSS Financial Crime Alert")
+            .setDescription(alert.summary || "Suspicious Panem Credit activity detected.")
+            .addFields(
+              { name: "Severity", value: String(alert.severity || "high"), inline: true },
+              { name: "Action", value: String(alert.action || "Investigate"), inline: true }
+            )
+            .setFooter({ text: "Ministry of State Security • Financial Crimes Desk" })
+            .setTimestamp(new Date())
+        ]
+      });
+    }
+  } catch (error) {
+    console.warn(`Unable to post MSS financial alert: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
+}
+
+function markDiscordWanted(economy, targetWallet, amount, reason, actor) {
+  targetWallet.wanted = true;
+  targetWallet.underReview = true;
+  targetWallet.bounty = Math.max(Number(targetWallet.bounty || 0), Number(amount || 250));
+  targetWallet.taxStatus = "MSS watchlist";
+  addEconomyAlert(economy, {
+    severity: "critical",
+    type: "wanted_financier",
+    walletId: targetWallet.id,
+    bounty: targetWallet.bounty,
+    summary: `${targetWallet.displayName} marked wanted. ${reason}`,
+    action: "bounty posted"
+  });
+  pushEconomyTransaction(economy, { fromWalletId: targetWallet.id, toWalletId: "mss", amount: 0, type: "wanted", reason, createdBy: actor });
+}
+
+const economyHelpFooter = "Use /help-economy for commands • Open the website for full dashboards";
+
+function iconForTitle(title = "") {
+  const value = title.toLowerCase();
+  if (value.includes("stock") || value.includes("pse") || value.includes("dividend")) return "📈";
+  if (value.includes("market") || value.includes("listing") || value.includes("price")) return "🏪";
+  if (value.includes("inventory") || value.includes("crate") || value.includes("item")) return "🎒";
+  if (value.includes("fish")) return "🎣";
+  if (value.includes("mine") || value.includes("mining")) return "⛏";
+  if (value.includes("farm") || value.includes("harvest")) return "🌾";
+  if (value.includes("mss") || value.includes("alert") || value.includes("wanted")) return "🚨";
+  if (value.includes("tax")) return "📜";
+  if (value.includes("grant") || value.includes("government") || value.includes("wallet status")) return "🏛";
+  if (value.includes("payment") || value.includes("transfer")) return "🪙";
+  if (value.includes("balance") || value.includes("wallet")) return "💳";
+  return "🏛";
+}
+
+function ministryEmbed(title, description, fields = []) {
+  const icon = iconForTitle(title);
   return new EmbedBuilder()
     .setColor(0xd7a85f)
     .setAuthor({ name: "Ministry of Credit & Records" })
-    .setTitle(title)
+    .setTitle(`${icon} ${title}`)
     .setDescription(description)
-    .setFooter({ text: "Taxation sustains the Union." })
+    .addFields(fields)
+    .setFooter({ text: economyHelpFooter })
     .setTimestamp(new Date());
+}
+
+function linkButton(label, url, emoji) {
+  return new ButtonBuilder()
+    .setStyle(ButtonStyle.Link)
+    .setLabel(label)
+    .setURL(url)
+    .setEmoji(emoji);
+}
+
+function economyQuickLinks(...keys) {
+  const links = {
+    transactions: linkButton("Transactions", `${websiteUrl}/panem-credit`, "📜"),
+    marketplace: linkButton("Marketplace", `${websiteUrl}/marketplace`, "🏪"),
+    inventory: linkButton("Inventory", `${websiteUrl}/inventory`, "🎒"),
+    stocks: linkButton("Stocks", `${websiteUrl}/stock-market`, "📈"),
+    portal: linkButton("Citizen Portal", `${websiteUrl}/citizen-portal`, "🛂")
+  };
+  const buttons = keys.map((key) => links[key]).filter(Boolean).slice(0, 5);
+  return buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
+}
+
+function helpEmbed(title, lines) {
+  return ministryEmbed(title, lines.join("\n"));
 }
 
 function requireEconomyAdmin(interaction) {
   return hasSlashCommandAccess(interaction, PermissionsBitField.Flags.ManageGuild);
 }
 
-async function replyEconomy(interaction, embed, ephemeral = false) {
-  await interaction.reply({ embeds: [embed], ephemeral });
+async function replyEconomy(interaction, embed, ephemeral = false, components = []) {
+  await interaction.reply({ embeds: [embed], components, ephemeral });
 }
 
 async function handleEconomySlashCommand(interaction) {
   const name = interaction.commandName;
+  const helpCommands = new Set(["help-economy", "help-market", "help-inventory", "help-stocks", "help-citizen", "help-mss"]);
   const citizenEconomyCommands = new Set([
     "balance",
     "pay",
     "transactions",
     "daily",
+    "work",
+    "overtime",
+    "crime",
+    "rob",
+    "gamble",
+    "lottery",
+    "invest",
     "tax",
     "market",
+    "prices",
     "buy",
     "sell",
+    "list",
+    "portfolio",
+    "viewholdings",
+    "market-alerts",
+    "inventory",
+    "fish",
+    "mine",
+    "farm",
+    "scavenge",
+    "log",
+    "extract",
+    "inspect",
+    "lootbox",
+    "crate",
+    "stocks",
+    "stock",
+    "buy-stock",
+    "sell-stock",
+    "watchlist",
+    "market-news",
+    "dividends",
     "district",
     "leaderboard"
   ]);
   const adminEconomyCommands = new Set([
     "grant",
+    "issue-grant",
     "fine",
     "freeze-wallet",
     "unfreeze-wallet",
     "set-tax",
+    "trigger-event",
+    "wanted",
+    "clear",
+    "market-event",
+    "set-stock-price",
+    "suspend-stock",
+    "issue-dividend",
+    "stock-report",
     "run-tax",
     "economy-report"
   ]);
-  const economyCommands = new Set([...citizenEconomyCommands, ...adminEconomyCommands]);
+  const economyCommands = new Set([...helpCommands, ...citizenEconomyCommands, ...adminEconomyCommands]);
 
   if (!economyCommands.has(name)) {
     return false;
+  }
+
+  if (name === "help-economy") {
+    await replyEconomy(interaction, helpEmbed("Economy Help", [
+      "💳 `/balance` checks your Panem Credit wallet.",
+      "🪙 `/pay @user 50` sends credits to a verified citizen.",
+      "🏪 `/market` and `/prices` show goods and district prices.",
+      "🎒 `/inventory` shows gathered items and resources.",
+      "📈 `/stocks` opens the Panem Stock Exchange overview.",
+      "Tip: start with `/daily`, then try `/work`, `/market`, or `/inventory`."
+    ]), false, economyQuickLinks("portal", "marketplace", "inventory", "stocks"));
+    return true;
+  }
+  if (name === "help-market") {
+    await replyEconomy(interaction, helpEmbed("Marketplace Help", [
+      "🏪 `/market` shows top goods, prices, stock, and movement.",
+      "📊 `/prices` shows district production pressure.",
+      "🛒 `/buy grain-sack 2` buys state stock into your inventory.",
+      "🏷 `/list grain-sack 1 120` lists held goods for sale.",
+      "Tip: District Production affects marketplace prices."
+    ]), false, economyQuickLinks("marketplace", "inventory"));
+    return true;
+  }
+  if (name === "help-inventory") {
+    await replyEconomy(interaction, helpEmbed("Inventory Help", [
+      "🎒 `/inventory` shows your items, value, rarity, and slots.",
+      "🎣 `/fish`, ⛏ `/mine`, 🌾 `/farm`, `/scavenge`, `/log`, `/extract` gather goods.",
+      "🔎 `/inspect item` shows rarity and value.",
+      "📦 `/crate` opens a paid reward crate.",
+      "Warning: risky gathering can fine you, lose items, or trigger MSS review."
+    ]), false, economyQuickLinks("inventory", "marketplace"));
+    return true;
+  }
+  if (name === "help-stocks") {
+    await replyEconomy(interaction, helpEmbed("Stock Market Help", [
+      "📈 `/stocks` shows the PSE overview.",
+      "🔎 `/stock LBE` shows one company.",
+      "🟢 `/buy-stock LBE 5` buys shares.",
+      "🔴 `/sell-stock LBE 2` sells shares.",
+      "⭐ `/watchlist LBE` tracks or untracks a ticker.",
+      "Stocks can rise or fall. District output and events matter."
+    ]), false, economyQuickLinks("stocks", "portal"));
+    return true;
+  }
+  if (name === "help-citizen") {
+    await replyEconomy(interaction, helpEmbed("Citizen Help", [
+      "🛂 Use the Citizen Portal to see Union ID, requests, wallet, inventory, market, and stocks.",
+      "💳 `/daily` gives a daily civic payment.",
+      "🏛 Submit requests from the website when you need government help.",
+      "📜 Taxes help fund the Union. Check `/tax` when unsure."
+    ]), false, economyQuickLinks("portal", "transactions"));
+    return true;
+  }
+  if (name === "help-mss") {
+    await replyEconomy(interaction, helpEmbed("MSS Help", [
+      "🚨 MSS alerts appear after suspicious transfers, contraband, failed crime, or risky market behavior.",
+      "Admin tools include `/wanted`, `/clear`, `/freeze-wallet`, and stock portfolio freezes on the website.",
+      "Use Government Access for full investigations, watchlists, and financial crime review."
+    ]), true, economyQuickLinks("portal"));
+    return true;
   }
 
   const economy = await readEconomyStore();
@@ -337,7 +728,9 @@ async function handleEconomySlashCommand(interaction) {
   if (name === "balance") {
     await replyEconomy(
       interaction,
-      ministryEmbed("Panem Credit Balance", `${identity.citizen.name}\n${wallet.displayName}\n${formatCredits(wallet.balance)}\n${wallet.title || titleForBalance(wallet.balance)} / ${wallet.status}`)
+      ministryEmbed("Panem Credit Balance", `${identity.citizen.name}\n${wallet.displayName}\n${formatCredits(wallet.balance)}\n${wallet.title || titleForBalance(wallet.balance)} / ${wallet.status}`),
+      false,
+      economyQuickLinks("transactions", "marketplace", "inventory", "stocks")
     );
     return true;
   }
@@ -394,28 +787,130 @@ async function handleEconomySlashCommand(interaction) {
 
   if (name === "daily") {
     const today = new Date().toISOString().slice(0, 10);
-    const alreadyClaimed = (economy.transactions || []).some(
-      (transaction) =>
-        transaction.toWalletId === wallet.id &&
-        transaction.type === "daily_stipend" &&
-        String(transaction.createdAt || "").startsWith(today)
-    );
+    wallet.loginDays = Array.isArray(wallet.loginDays) ? wallet.loginDays : [];
+    const alreadyClaimed = wallet.loginDays.includes(today) || (economy.transactions || []).some((transaction) => transaction.toWalletId === wallet.id && transaction.type === "daily_stipend" && String(transaction.createdAt || "").startsWith(today));
     if (alreadyClaimed) {
       await replyEconomy(interaction, ministryEmbed("Daily Stipend", "Your civic stipend has already been claimed today."));
       return true;
     }
-    const salary = Math.max(0, Number(wallet.salary ?? 125));
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    wallet.streak = wallet.loginDays.includes(yesterday) ? Number(wallet.streak || 0) + 1 : 1;
+    wallet.loginDays = [today, ...wallet.loginDays.filter((day) => day !== today)].slice(0, 21);
+    const event = economyActiveEvent(economy);
+    const randomBonus = Math.random() < 0.16 ? randomEconomyAmount(25, 175) : 0;
+    const weeklyBonus = wallet.streak % 7 === 0 ? 500 : 0;
+    const salary = Math.round((Math.max(50, Number(wallet.salary ?? 125)) + wallet.streak * 10 + weeklyBonus + randomBonus) * Number(event.rewardMultiplier || 1));
     wallet.balance += salary;
     pushEconomyTransaction(economy, {
       fromWalletId: "treasury",
       toWalletId: wallet.id,
       amount: salary,
       type: "daily_stipend",
-      reason: "Daily civic salary",
-      createdBy: interaction.user.id
+      reason: `Daily Civic Payment. Streak ${wallet.streak}${weeklyBonus ? " / 7-day loyalty bonus" : ""}.`,
+      createdBy: interaction.user.id,
+      meta: { key: "daily", streak: wallet.streak, eventId: event.id }
     });
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed("Daily Civic Salary", `${formatCredits(salary)} has been issued to your wallet.`));
+    await replyEconomy(interaction, ministryEmbed("Daily Civic Salary", `${formatCredits(salary)} issued.\nStreak: ${wallet.streak} day(s).\nEvent: ${event.title}.`));
+    return true;
+  }
+
+  if (name === "work" || name === "overtime") {
+    const jobId = name === "overtime" ? "overtime" : interaction.options.getString("job") || "work-shift";
+    const job = economyJobDefaults.find((entry) => entry.id === jobId) || economyJobDefaults[0];
+    if (wallet.status !== "active" || !economyCooldownReady(economy, wallet.id, "work", job.id, job.cooldownHours)) {
+      await replyEconomy(interaction, ministryEmbed("Work Desk", "This wallet cannot work that assignment yet. Cooldown or account status applies."));
+      return true;
+    }
+    const district = (economy.districts || []).find((entry) => entry.name === wallet.district);
+    const event = economyActiveEvent(economy);
+    const districtFit = job.district === "Any" || job.district === wallet.district ? 1.18 : 1;
+    const eventBoost = event.boostedDistricts?.includes(wallet.district) ? 1.2 : 1;
+    const prosperity = 1 + (Number(district?.prosperityRating || 70) - 70) / 300;
+    const reward = Math.round(randomEconomyAmount(job.minReward, job.maxReward) * districtFit * eventBoost * prosperity * Number(event.workMultiplier || 1));
+    wallet.balance += reward;
+    pushEconomyTransaction(economy, { fromWalletId: "district-production", toWalletId: wallet.id, amount: reward, type: "work", reason: job.name, createdBy: interaction.user.id, meta: { key: job.id, eventId: event.id } });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Work Completed", `${job.name}\nReward: ${formatCredits(reward)}\nEvent: ${event.title}`));
+    return true;
+  }
+
+  if (name === "crime" || name === "rob") {
+    const crime = name === "rob"
+      ? economyCrimeDefaults.find((entry) => entry.id === "rob-citizen")
+      : economyCrimeDefaults.find((entry) => entry.id === interaction.options.getString("action", true)) || economyCrimeDefaults[0];
+    const targetUser = name === "rob" ? interaction.options.getUser("user", true) : null;
+    const confirmed = interaction.options.getBoolean("confirm") === true;
+    if ((name === "rob" || ["counterfeit-credits", "hack-treasury-terminal", "black-market-trade"].includes(crime.id)) && !confirmed) {
+      await replyEconomy(interaction, ministryEmbed("Confirmation Required", `This is a risky action and may trigger MSS review.\nRun the command again with \`confirm: True\` to proceed.`), true);
+      return true;
+    }
+    const targetIdentity = targetUser ? getVerifiedDiscordCitizen(governmentStore, economy, targetUser) : null;
+    const targetWallet = targetIdentity?.wallet || null;
+    if (wallet.status !== "active" || !economyCooldownReady(economy, wallet.id, "crime", crime.id, crime.cooldownHours)) {
+      await replyEconomy(interaction, ministryEmbed("Risk Denied", "Cooldown or wallet restrictions prevent that action."));
+      return true;
+    }
+    const event = economyActiveEvent(economy);
+    const success = Math.random() < Number(crime.successChance || 0);
+    const detected = !success || Math.random() < Math.min(0.95, Number(crime.detectionChance || 0) + Number(event.crimeDetectionBonus || 0));
+    let value = success ? randomEconomyAmount(crime.minReward, crime.maxReward) : Math.round(Number(crime.penalty || 0) * Number(event.crimePenaltyMultiplier || 1));
+    if (success && targetWallet) {
+      value = Math.min(value, Number(targetWallet.balance || 0));
+      targetWallet.balance -= value;
+    }
+    wallet.balance = success ? Number(wallet.balance || 0) + value : Math.max(0, Number(wallet.balance || 0) - value);
+    pushEconomyTransaction(economy, { fromWalletId: success ? (targetWallet?.id || "black-market") : wallet.id, toWalletId: success ? wallet.id : "treasury", amount: value, type: "crime", reason: `${crime.name}: ${success ? "success" : "failed"}`, createdBy: interaction.user.id, meta: { key: crime.id, success, detected } });
+    if (detected) {
+      const alert = { severity: success ? "high" : "critical", type: crime.id, walletId: wallet.id, fine: Math.max(25, Math.round(value * 0.8)), bounty: Math.round(value * 0.75), summary: `MSS Financial Crime Alert: ${wallet.displayName} triggered ${crime.name}.`, action: "investigate" };
+      wallet.underReview = true;
+      if (["rob-citizen", "counterfeit-credits", "hack-treasury-terminal"].includes(crime.id)) wallet.wanted = true;
+      wallet.bounty = Math.max(Number(wallet.bounty || 0), alert.bounty);
+      addEconomyAlert(economy, alert);
+      await postMssFinancialAlert(alert);
+    }
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Risk Result", `${crime.name}: ${success ? "Success" : "Failed"}\n${success ? "Gained" : "Lost"} ${formatCredits(value)}${detected ? "\nMSS alert generated." : ""}`));
+    return true;
+  }
+
+  if (name === "gamble" || name === "lottery") {
+    const game = name === "lottery"
+      ? economyGambleDefaults.find((entry) => entry.id === "district-lottery")
+      : economyGambleDefaults.find((entry) => entry.id === interaction.options.getString("game")) || economyGambleDefaults[0];
+    const bet = Math.max(Number(game.minBet || 1), Math.min(Number(game.maxBet || 500), interaction.options.getNumber("amount") || game.minBet));
+    if (bet >= 1000 && interaction.options.getBoolean("confirm") !== true) {
+      await replyEconomy(interaction, ministryEmbed("Confirmation Required", `That is a large wager: ${formatCredits(bet)}.\nRun again with \`confirm: True\` to place the bet.`), true);
+      return true;
+    }
+    if (wallet.status !== "active" || wallet.balance < bet || !economyCooldownReady(economy, wallet.id, "gamble", game.id, game.cooldownHours)) {
+      await replyEconomy(interaction, ministryEmbed("Games Desk", "The wager cannot be accepted. Check your balance, cooldown, and wallet status. Example: `/gamble amount:50`."));
+      return true;
+    }
+    const won = Math.random() < Number(game.winChance || 0);
+    const payout = won ? Math.round(bet * Number(game.payoutMultiplier || 1)) : 0;
+    wallet.balance = Math.max(0, Number(wallet.balance || 0) - bet + payout);
+    pushEconomyTransaction(economy, { fromWalletId: won ? "capitol-games" : wallet.id, toWalletId: won ? wallet.id : "capitol-games", amount: won ? payout : bet, type: "gamble", reason: game.name, createdBy: interaction.user.id, meta: { key: game.id, bet, won } });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed(game.name, won ? `Winner. Payout: ${formatCredits(payout)}.` : `No payout. Stake lost: ${formatCredits(bet)}.`));
+    return true;
+  }
+
+  if (name === "invest") {
+    const fund = investmentFundDefaults.find((entry) => entry.id === interaction.options.getString("fund", true)) || investmentFundDefaults[0];
+    const stake = Math.max(25, interaction.options.getNumber("amount", true));
+    if (wallet.status !== "active" || wallet.balance < stake) {
+      await replyEconomy(interaction, ministryEmbed("Investment Rejected", "Insufficient balance or restricted wallet."));
+      return true;
+    }
+    const lost = Math.random() < Number(fund.lossChance || 0);
+    const rate = lost ? -randomEconomyAmount(2, 18) / 100 : Number(fund.minReturn) + Math.random() * (Number(fund.maxReturn) - Number(fund.minReturn));
+    const returnAmount = Math.round(stake * rate);
+    wallet.balance = Math.max(0, Number(wallet.balance || 0) + returnAmount);
+    wallet.investments = [{ id: createId("investment"), fundId: fund.id, amount: stake, returnAmount, createdAt: new Date().toISOString() }, ...(wallet.investments || [])].slice(0, 20);
+    pushEconomyTransaction(economy, { fromWalletId: returnAmount >= 0 ? fund.id : wallet.id, toWalletId: returnAmount >= 0 ? wallet.id : fund.id, amount: Math.abs(returnAmount), type: "investment", reason: fund.name, createdBy: interaction.user.id, meta: { key: fund.id, stake, returnAmount } });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Investment Settled", `${fund.name}\nStake: ${formatCredits(stake)}\nReturn: ${formatCredits(returnAmount)}`));
     return true;
   }
 
@@ -428,8 +923,27 @@ async function handleEconomySlashCommand(interaction) {
   }
 
   if (name === "market") {
-    const rows = (economy.marketItems || []).slice(0, 12).map((item) => `${item.name} (${item.district}) - ${formatCredits(item.currentPrice || item.basePrice)} / stock ${item.stock}`).join("\n");
-    await replyEconomy(interaction, ministryEmbed("Marketplace Listings", rows || "No goods listed."));
+    const rows = [...(economy.marketItems || [])]
+      .sort((a, b) => Math.abs(marketChangePercent(b)) - Math.abs(marketChangePercent(a)))
+      .slice(0, 12)
+      .map((item) => `${item.name} (${item.district}) - ${formatCredits(item.currentPrice || item.basePrice)} / ${marketChangePercent(item) >= 0 ? "+" : ""}${marketChangePercent(item)}% / stock ${item.stock}`)
+      .join("\n");
+    await replyEconomy(interaction, ministryEmbed("Marketplace Listings", rows || "No goods listed."), false, economyQuickLinks("marketplace", "inventory"));
+    return true;
+  }
+
+  if (name === "prices") {
+    const rows = [...(economy.districts || [])]
+      .sort((a, b) => Number(b.tradeVolume || 0) - Number(a.tradeVolume || 0))
+      .slice(0, 10)
+      .map((district, index) => {
+        const goods = (economy.marketItems || []).filter((item) => item.district === district.name);
+        const multiplier = goods.length ? goods.reduce((sum, item) => sum + Number(item.currentPrice || 0) / Math.max(1, Number(item.basePrice || 1)), 0) / goods.length : 1;
+        const change = Math.round(((Number(district.demandLevel || 0) - Number(district.supplyLevel || 0)) / 3) * 10) / 10;
+        return `${index + 1}. ${district.name} - output ${Math.round((Number(district.supplyLevel || 0) + Number(district.prosperityRating || 0)) / 2)} / x${multiplier.toFixed(2)} / ${change >= 0 ? "+" : ""}${change}%`;
+      })
+      .join("\n");
+    await replyEconomy(interaction, ministryEmbed("District Production Prices", rows || "No district data."));
     return true;
   }
 
@@ -450,6 +964,7 @@ async function handleEconomySlashCommand(interaction) {
     }
     wallet.balance -= subtotal + taxAmount;
     item.stock -= quantity;
+    addEconomyHolding(wallet, item.id, quantity, Number(item.currentPrice || item.basePrice || 0));
     pushEconomyTransaction(economy, {
       fromWalletId: wallet.id,
       toWalletId: "market",
@@ -459,18 +974,34 @@ async function handleEconomySlashCommand(interaction) {
       taxAmount,
       createdBy: interaction.user.id
     });
+    if (item.stock <= 25) {
+      await postMarketNotice("Marketplace Shortage Notice", `${item.district} reports low stock for ${item.name}. Remaining stock: ${item.stock}.`);
+    }
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Purchase Approved", `${quantity} x ${item.name}\nTotal: ${formatCredits(subtotal + taxAmount)}.`));
     return true;
   }
 
-  if (name === "sell") {
+  if (name === "sell" || name === "list") {
     const itemId = interaction.options.getString("item", true);
     const quantity = interaction.options.getInteger("quantity", true);
-    const price = interaction.options.getNumber("price", true);
-    const item = (economy.marketItems || []).find((entry) => entry.id === itemId || entry.name.toLowerCase() === itemId.toLowerCase());
-    if (!item || wallet.status !== "active") {
-      await replyEconomy(interaction, ministryEmbed("Listing Rejected", "That item cannot be listed from this wallet."));
+    const price = interaction.options.getNumber("price");
+    const item = (economy.inventoryItems || inventoryItemDefaults).find((entry) => entry.id === itemId || entry.name.toLowerCase() === itemId.toLowerCase()) ||
+      (economy.marketItems || []).find((entry) => entry.id === itemId || entry.name.toLowerCase() === itemId.toLowerCase());
+    if (item && ["rare", "epic", "legendary"].includes(inventoryRarity(item)) && interaction.options.getBoolean("confirm") !== true) {
+      await replyEconomy(interaction, ministryEmbed("Confirmation Required", `${item.name} is ${inventoryRarity(item)}.\nRun again with \`confirm: True\` to sell or list it.`), true);
+      return true;
+    }
+    if (!item || wallet.status !== "active" || !removeEconomyHolding(wallet, item.id, quantity)) {
+      await replyEconomy(interaction, ministryEmbed("Listing Rejected", "That item cannot be listed from this wallet. Check `/inventory`, then try `/list item quantity price`."));
+      return true;
+    }
+    if (name === "sell" || !price) {
+      const value = inventoryItemValue(item, economy) * quantity;
+      wallet.balance += value;
+      pushEconomyTransaction(economy, { fromWalletId: "state-procurement", toWalletId: wallet.id, amount: value, type: "inventory_sell", reason: `${quantity} x ${item.name}`, createdBy: interaction.user.id, meta: { key: item.id, quantity } });
+      await writeEconomyStore(economy);
+      await replyEconomy(interaction, ministryEmbed("State Purchase Recorded", `${quantity} x ${item.name} sold for ${formatCredits(value)}.`));
       return true;
     }
     economy.listings = [
@@ -485,8 +1016,253 @@ async function handleEconomySlashCommand(interaction) {
       },
       ...(economy.listings || [])
     ];
+    pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "market-listings", amount: quantity * price, type: "listing_created", reason: `${quantity} x ${item.name}`, createdBy: interaction.user.id, meta: { key: item.id } });
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Listing Created", `${quantity} x ${item.name} listed at ${formatCredits(price)} each.`));
+    return true;
+  }
+
+  if (name === "portfolio" || name === "viewholdings") {
+    ensureEconomyHoldings(wallet);
+    ensureStockCollections(wallet);
+    const stockRows = wallet.stockPortfolio
+      .slice(0, 8)
+      .map((position) => {
+        const company = findStockCompany(economy, position.ticker);
+        const value = Number(position.shares || 0) * Number(company?.sharePrice || 0);
+        return `${position.ticker}: ${position.shares} shares - ${formatCredits(value)}`;
+      })
+      .join("\n") || "No stock positions.";
+    const rows = wallet.holdings
+      .slice(0, 10)
+      .map((holding) => {
+        const item = inventoryItemById(holding.itemId, economy);
+        return `${item?.name || holding.itemId}: ${holding.quantity} @ ${formatCredits(holding.averageCost)}`;
+      })
+      .join("\n") || "No goods held. Buy from /market or the Marketplace page.";
+    await replyEconomy(interaction, ministryEmbed("Citizen Portfolio", `Stocks: ${formatCredits(discordStockPortfolioValue(wallet, economy))}\n${stockRows}\n\nInventory:\n${rows}`));
+    return true;
+  }
+
+  if (name === "market-alerts") {
+    const mode = interaction.options.getString("mode", true);
+    ensureEconomyHoldings(wallet);
+    wallet.marketAlerts = mode === "on";
+    pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "market-watch", amount: 0, type: "market_preferences", reason: `Market alerts ${mode}`, createdBy: interaction.user.id });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Market Alerts Updated", `Marketplace alerts are now ${mode}.`));
+    return true;
+  }
+
+  if (name === "stocks") {
+    const companies = [...(economy.stockCompanies || stockCompanyDefaults)];
+    const index = companies.reduce((sum, company) => sum + Number(company.sharePrice || 0), 0);
+    const rows = [...companies]
+      .sort((a, b) => Number(b.dailyChangePercent || 0) - Number(a.dailyChangePercent || 0))
+      .slice(0, 8)
+      .map((company) => `${company.ticker} ${formatCredits(company.sharePrice)} (${Number(company.dailyChangePercent || 0) >= 0 ? "+" : ""}${Number(company.dailyChangePercent || 0).toFixed(1)}%)`)
+      .join("\n");
+    await replyEconomy(interaction, ministryEmbed("Panem Stock Exchange", `PSE Index: ${index.toLocaleString("en-GB")}\n\n${rows}`), false, economyQuickLinks("stocks", "portal"));
+    return true;
+  }
+
+  if (name === "stock") {
+    const company = findStockCompany(economy, interaction.options.getString("ticker", true));
+    if (!company) {
+      await replyEconomy(interaction, ministryEmbed("PSE Lookup Failed", "That ticker is not listed on the Panem Stock Exchange."));
+      return true;
+    }
+    await replyEconomy(interaction, ministryEmbed(`${company.ticker} / ${company.name}`, `${company.district} / ${company.sector}\nPrice: ${formatCredits(company.sharePrice)}\nDaily change: ${Number(company.dailyChangePercent || 0) >= 0 ? "+" : ""}${Number(company.dailyChangePercent || 0).toFixed(1)}%\nRisk: ${company.riskLevel}\nDividend: ${(Number(company.dividendRate || 0) * 100).toFixed(1)}%\nStatus: ${company.status}\n\n${company.description}`));
+    return true;
+  }
+
+  if (name === "buy-stock" || name === "sell-stock") {
+    const company = findStockCompany(economy, interaction.options.getString("ticker", true));
+    const shares = interaction.options.getInteger("amount", true);
+    ensureStockCollections(wallet);
+    if (!company || company.status !== "active" || wallet.status !== "active" || wallet.portfolioFrozen || shares <= 0) {
+      await replyEconomy(interaction, ministryEmbed("PSE Trade Rejected", "Ticker, trading status, or wallet restrictions prevent this trade."));
+      return true;
+    }
+    const taxRate = Number(economy.stockSettings?.transactionTax || 0.015);
+    const fee = Number(economy.stockSettings?.transactionFee || 2);
+    const position = getDiscordStockPosition(wallet, company.ticker);
+    if (name === "buy-stock") {
+      discordMoveStock(company, Math.min(0.018, shares / 10000));
+      const subtotal = Math.round(Number(company.sharePrice || 0) * shares * 100) / 100;
+      const tax = Math.round(subtotal * taxRate * 100) / 100;
+      const total = subtotal + tax + fee;
+      if (total >= 5000 && interaction.options.getBoolean("confirm") !== true) {
+        await replyEconomy(interaction, ministryEmbed("Confirmation Required", `This stock order costs ${formatCredits(total)}.\nRun again with \`confirm: True\` to buy ${shares} ${company.ticker}.`), true);
+        return true;
+      }
+      if (Number(wallet.balance || 0) < total) {
+        await replyEconomy(interaction, ministryEmbed("PSE Trade Rejected", `You need ${formatCredits(total)} for this order. Try fewer shares, for example: \`/buy-stock ${company.ticker} 1\`.`));
+        return true;
+      }
+      const previousShares = Number(position.shares || 0);
+      const previousCost = previousShares * Number(position.averagePrice || 0);
+      position.shares = previousShares + shares;
+      position.averagePrice = Math.round(((previousCost + subtotal) / position.shares) * 100) / 100;
+      wallet.balance -= total;
+      economy.stockTrades = [{ id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "buy", shares, price: company.sharePrice, subtotal, tax, fee, createdAt: new Date().toISOString(), createdBy: interaction.user.id }, ...(economy.stockTrades || [])].slice(0, 1000);
+      pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "pse", amount: total, type: "stock_buy", reason: `${shares} ${company.ticker} shares`, taxAmount: tax, createdBy: interaction.user.id, meta: { key: company.ticker } });
+      await writeEconomyStore(economy);
+      await replyEconomy(interaction, ministryEmbed("PSE Buy Order Filled", `${shares} ${company.ticker} shares purchased for ${formatCredits(total)}.`));
+      return true;
+    }
+    if (Number(position.shares || 0) < shares) {
+      await replyEconomy(interaction, ministryEmbed("PSE Trade Rejected", "You do not hold enough shares."));
+      return true;
+    }
+    discordMoveStock(company, -Math.min(0.018, shares / 10000));
+    const subtotal = Math.round(Number(company.sharePrice || 0) * shares * 100) / 100;
+    const tax = Math.round(subtotal * taxRate * 100) / 100;
+    const proceeds = Math.max(0, subtotal - tax - fee);
+    position.shares -= shares;
+    wallet.stockPortfolio = wallet.stockPortfolio.filter((entry) => Number(entry.shares || 0) > 0);
+    wallet.balance += proceeds;
+    economy.stockTrades = [{ id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "sell", shares, price: company.sharePrice, subtotal, tax, fee, createdAt: new Date().toISOString(), createdBy: interaction.user.id }, ...(economy.stockTrades || [])].slice(0, 1000);
+    pushEconomyTransaction(economy, { fromWalletId: "pse", toWalletId: wallet.id, amount: proceeds, type: "stock_sell", reason: `${shares} ${company.ticker} shares`, taxAmount: tax, createdBy: interaction.user.id, meta: { key: company.ticker } });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("PSE Sell Order Filled", `${shares} ${company.ticker} shares sold for ${formatCredits(proceeds)}.`));
+    return true;
+  }
+
+  if (name === "inventory") {
+    ensureEconomyHoldings(wallet);
+    const worth = wallet.holdings.reduce((sum, holding) => {
+      const item = inventoryItemById(holding.itemId, economy);
+      return sum + inventoryItemValue(item, economy) * Number(holding.quantity || 0);
+    }, 0);
+    const rows = wallet.holdings
+      .slice(0, 12)
+      .map((holding) => {
+        const item = inventoryItemById(holding.itemId, economy);
+        return `${item?.name || holding.itemId}: ${holding.quantity} (${inventoryRarity(item)}) - ${formatCredits(inventoryItemValue(item, economy))}`;
+      })
+      .join("\n") || "No items held. Try /fish, /mine, /farm, /scavenge, /log, or /extract.";
+    await replyEconomy(interaction, ministryEmbed("Citizen Inventory", `Worth: ${formatCredits(worth)}\nSlots: ${occupiedInventorySlots(wallet)} / ${wallet.inventorySlots}\n\n${rows}`), false, economyQuickLinks("inventory", "marketplace"));
+    return true;
+  }
+
+  if (["fish", "mine", "farm", "scavenge", "log", "extract"].includes(name)) {
+    const action = gatheringActionDefaults.find((entry) => entry.command === name || entry.id === name);
+    ensureEconomyHoldings(wallet);
+    if (!action || wallet.status !== "active" || occupiedInventorySlots(wallet) >= wallet.inventorySlots || !economyCooldownReady(economy, wallet.id, "gather", action.id, action.cooldownHours)) {
+      await replyEconomy(interaction, ministryEmbed("Gathering Denied", "Cooldown, inventory slots, or wallet restrictions prevent that action."));
+      return true;
+    }
+    const success = Math.random() < Number(action.successChance || 0);
+    const drop = success ? discordRollDrop(action) : null;
+    const item = drop ? inventoryItemById(drop.itemId, economy) : null;
+    const quantity = drop ? randomEconomyAmount(drop.minQuantity || 1, drop.maxQuantity || 1) : 0;
+    const risk = discordRollRisk(action);
+    let penalty = 0;
+    let lostItemId = "";
+    if (risk) {
+      penalty = Math.max(0, Number(risk.creditPenalty || 0));
+      wallet.balance = Math.max(-1000, Number(wallet.balance || 0) - penalty);
+      if (risk.loseItem) lostItemId = removeRandomDiscordHolding(wallet);
+      if (risk.cooldownPenaltyHours) {
+        wallet.actionBans = [{ actionId: action.id, reason: risk.label, until: new Date(Date.now() + Number(risk.cooldownPenaltyHours) * 60 * 60 * 1000).toISOString() }, ...(wallet.actionBans || [])].slice(0, 10);
+      }
+      if (risk.mssAlert) {
+        const alert = { severity: "high", type: "inventory_risk", walletId: wallet.id, fine: penalty, summary: `MSS Inventory Alert: ${wallet.displayName} triggered ${risk.label} during ${action.name}.`, action: "investigate" };
+        addEconomyAlert(economy, alert);
+        await postMssFinancialAlert(alert);
+      }
+    }
+    if (item) {
+      addEconomyHolding(wallet, item.id, quantity, inventoryItemValue(item, economy));
+      wallet.collectionScore = Number(wallet.collectionScore || 0) + Math.round(quantity * rarityMultiplierFor(inventoryRarity(item)) * 10);
+      if (["epic", "legendary"].includes(inventoryRarity(item))) {
+        wallet.achievements = [...new Set([inventoryRarity(item) === "legendary" ? "Legendary Find" : "Epic Discovery", ...(wallet.achievements || [])])].slice(0, 20);
+        await postMarketNotice("Legendary Find Alert", `${wallet.displayName} discovered ${quantity} x ${item.name} through ${action.name}.`);
+      }
+      if (item.contraband) {
+        const alert = { severity: "critical", type: "contraband_inventory", walletId: wallet.id, summary: `${wallet.displayName} acquired restricted inventory: ${item.name}.`, action: "inspect inventory" };
+        wallet.inventoryFlags = [{ itemId: item.id, reason: "Restricted acquisition", createdAt: new Date().toISOString() }, ...(wallet.inventoryFlags || [])].slice(0, 10);
+        addEconomyAlert(economy, alert);
+        await postMssFinancialAlert(alert);
+      }
+    }
+    pushEconomyTransaction(economy, {
+      fromWalletId: action.district,
+      toWalletId: wallet.id,
+      amount: item ? inventoryItemValue(item, economy) * quantity : penalty,
+      type: "gather",
+      reason: item ? `${action.name}: ${quantity} x ${item.name}` : `${action.name}: ${action.failureText}`,
+      createdBy: interaction.user.id,
+      meta: { key: action.id, itemId: item?.id || "", quantity, riskId: risk?.id || "", lostItemId }
+    });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed(action.name, item ? `${quantity} x ${item.name} acquired.\nRarity: ${inventoryRarity(item)}\nValue: ${formatCredits(inventoryItemValue(item, economy) * quantity)}${risk ? `\nRisk event: ${risk.label}${penalty ? ` (${formatCredits(penalty)} penalty)` : ""}` : ""}` : `${action.failureText}${risk ? `\nRisk event: ${risk.label}` : ""}`));
+    return true;
+  }
+
+  if (name === "inspect") {
+    const itemQuery = interaction.options.getString("item", true).toLowerCase();
+    const item = (economy.inventoryItems || inventoryItemDefaults).find((entry) => entry.id === itemQuery || entry.name.toLowerCase() === itemQuery) ||
+      (economy.marketItems || []).find((entry) => entry.id === itemQuery || entry.name.toLowerCase() === itemQuery);
+    if (!item) {
+      await replyEconomy(interaction, ministryEmbed("Inspection Failed", "That item is not registered in the state catalog."));
+      return true;
+    }
+    await replyEconomy(interaction, ministryEmbed("Item Inspection", `${item.name}\nType: ${item.type || item.category || "goods"}\nRarity: ${inventoryRarity(item)}\nValue: ${formatCredits(inventoryItemValue(item, economy))}\nDistrict: ${item.district || "Unassigned"}\n${item.description || "No description."}`));
+    return true;
+  }
+
+  if (name === "lootbox" || name === "crate") {
+    ensureEconomyHoldings(wallet);
+    const cost = 150;
+    if (wallet.status !== "active" || Number(wallet.balance || 0) < cost || occupiedInventorySlots(wallet) >= wallet.inventorySlots) {
+      await replyEconomy(interaction, ministryEmbed("Crate Rejected", "Balance, wallet status, or inventory slots prevent opening a crate."));
+      return true;
+    }
+    wallet.balance -= cost;
+    const roll = Math.random();
+    const rarity = roll > 0.985 ? "legendary" : roll > 0.93 ? "epic" : roll > 0.78 ? "rare" : roll > 0.48 ? "uncommon" : "common";
+    const pool = (economy.inventoryItems || inventoryItemDefaults).filter((item) => item.rarity === rarity && !item.contraband);
+    const item = pool[randomEconomyAmount(0, Math.max(0, pool.length - 1))] || inventoryItemDefaults[0];
+    const quantity = rarity === "common" ? randomEconomyAmount(1, 4) : 1;
+    addEconomyHolding(wallet, item.id, quantity, inventoryItemValue(item, economy));
+    pushEconomyTransaction(economy, { fromWalletId: "lucky-crate", toWalletId: wallet.id, amount: inventoryItemValue(item, economy) * quantity, type: "lootbox", reason: `${quantity} x ${item.name}`, createdBy: interaction.user.id, meta: { key: item.id, rarity, quantity } });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Lucky Crate Opened", `${quantity} x ${item.name}\nRarity: ${rarity}\nValue: ${formatCredits(inventoryItemValue(item, economy) * quantity)}`));
+    return true;
+  }
+
+  if (name === "watchlist") {
+    ensureStockCollections(wallet);
+    const ticker = interaction.options.getString("ticker");
+    if (ticker) {
+      const company = findStockCompany(economy, ticker);
+      if (company) {
+        wallet.stockWatchlist = wallet.stockWatchlist.includes(company.ticker)
+          ? wallet.stockWatchlist.filter((entry) => entry !== company.ticker)
+          : [company.ticker, ...wallet.stockWatchlist].slice(0, 20);
+        await writeEconomyStore(economy);
+      }
+    }
+    const rows = wallet.stockWatchlist.map((entry) => {
+      const company = findStockCompany(economy, entry);
+      return `${entry}: ${company ? formatCredits(company.sharePrice) : "Unknown"}`;
+    }).join("\n") || "No watched stocks.";
+    await replyEconomy(interaction, ministryEmbed("PSE Watchlist", rows));
+    return true;
+  }
+
+  if (name === "market-news") {
+    const rows = (economy.stockEvents || []).slice(0, 8).map((event) => `${event.title} (${event.tickers?.join(", ") || "PSE"})`).join("\n") || "No PSE news recorded.";
+    await replyEconomy(interaction, ministryEmbed("PSE Market News", rows));
+    return true;
+  }
+
+  if (name === "dividends") {
+    ensureStockCollections(wallet);
+    const rows = wallet.stockPortfolio.map((position) => `${position.ticker}: ${formatCredits(position.dividendsEarned || 0)} earned`).join("\n") || "No dividends recorded.";
+    await replyEconomy(interaction, ministryEmbed("PSE Dividends", rows));
     return true;
   }
 
@@ -527,7 +1303,7 @@ async function handleEconomySlashCommand(interaction) {
     return true;
   }
 
-  if (name === "grant" && targetWallet) {
+  if ((name === "grant" || name === "issue-grant") && targetWallet) {
     targetWallet.balance += amount;
     pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: targetWallet.id, amount, type: "grant", reason, createdBy: interaction.user.id });
     await writeEconomyStore(economy);
@@ -552,12 +1328,120 @@ async function handleEconomySlashCommand(interaction) {
     return true;
   }
 
+  if (name === "wanted" && targetWallet) {
+    markDiscordWanted(economy, targetWallet, amount || 500, reason, interaction.user.id);
+    await writeEconomyStore(economy);
+    await postMssFinancialAlert({ severity: "critical", summary: `${target.tag} marked wanted by MSS Financial Crimes Desk. Bounty: ${formatCredits(targetWallet.bounty)}.`, action: "bounty posted" });
+    await replyEconomy(interaction, ministryEmbed("MSS Warrant Posted", `${target.tag} is now wanted.\nBounty: ${formatCredits(targetWallet.bounty)}.`));
+    return true;
+  }
+
+  if (name === "clear" && targetWallet) {
+    targetWallet.wanted = false;
+    targetWallet.underReview = false;
+    targetWallet.bounty = 0;
+    targetWallet.taxStatus = "compliant";
+    economy.alerts = (economy.alerts || []).map((alert) => alert.walletId === targetWallet.id ? { ...alert, status: "cleared", resolvedAt: new Date().toISOString(), resolvedBy: interaction.user.id } : alert);
+    pushEconomyTransaction(economy, { fromWalletId: "mss", toWalletId: targetWallet.id, amount: 0, type: "pardon", reason, createdBy: interaction.user.id });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("MSS Status Cleared", `${target.tag} has been cleared by financial security.`));
+    return true;
+  }
+
   if (name === "set-tax") {
     const type = interaction.options.getString("type", true);
     const rate = interaction.options.getNumber("rate", true);
     economy.taxRates = { ...(economy.taxRates || {}), [type]: rate };
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Tax Rate Set", `${taxLabel(type)} set to ${(rate * 100).toFixed(1)}%.`));
+    return true;
+  }
+
+  if (name === "trigger-event") {
+    const eventId = interaction.options.getString("event", true);
+    const hours = interaction.options.getInteger("hours") || 168;
+    const selected = economyEventDefaults.find((entry) => entry.id === eventId) || economyEventDefaults[0];
+    const now = new Date();
+    economy.events = [
+      { ...selected, status: "active", startsAt: now.toISOString(), endsAt: new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString(), triggeredBy: interaction.user.id },
+      ...(economy.events || []).map((entry) => ({ ...entry, status: entry.status === "active" ? "expired" : entry.status }))
+    ].slice(0, 20);
+    pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: "ledger", amount: 0, type: "economy_event", reason: selected.title, createdBy: interaction.user.id, meta: { key: selected.id } });
+    await writeEconomyStore(economy);
+    await postMarketNotice("Government Market Notice", `${selected.title}\n${selected.summary}`);
+    await replyEconomy(interaction, ministryEmbed("State Event Triggered", `${selected.title}\n${selected.summary}`));
+    return true;
+  }
+
+  if (name === "market-event") {
+    const eventId = interaction.options.getString("event", true);
+    const selected = stockMarketEventDefaults.find((entry) => entry.id === eventId) || stockMarketEventDefaults[0];
+    const targets = selected.tickers.length ? selected.tickers : (economy.stockCompanies || []).map((company) => company.ticker);
+    for (const company of economy.stockCompanies || []) {
+      if (targets.includes(company.ticker)) discordMoveStock(company, Number(selected.priceImpact || 0));
+    }
+    economy.stockEvents = [{ ...selected, id: createId("stock-event"), createdAt: new Date().toISOString(), createdBy: interaction.user.id }, ...(economy.stockEvents || [])].slice(0, 50);
+    pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: "pse", amount: 0, type: "stock_event", reason: selected.title, createdBy: interaction.user.id, meta: { key: selected.id } });
+    await writeEconomyStore(economy);
+    await postMarketNotice("PSE Market Event", selected.title);
+    await replyEconomy(interaction, ministryEmbed("PSE Event Triggered", selected.title));
+    return true;
+  }
+
+  if (name === "set-stock-price") {
+    const company = findStockCompany(economy, interaction.options.getString("ticker", true));
+    const price = interaction.options.getNumber("price", true);
+    if (!company) {
+      await replyEconomy(interaction, ministryEmbed("PSE Admin Rejected", "Ticker not found."));
+      return true;
+    }
+    const previous = Number(company.sharePrice || 1);
+    company.sharePrice = Math.max(1, price);
+    company.dailyChangePercent = Math.round(((company.sharePrice - previous) / previous) * 1000) / 10;
+    company.priceHistory = [...(company.priceHistory || []), { date: new Date().toISOString().slice(0, 10), price: company.sharePrice }].slice(-30);
+    pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: "pse", amount: 0, type: "stock_admin", reason: `${company.ticker} price set`, createdBy: interaction.user.id });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("PSE Price Set", `${company.ticker} set to ${formatCredits(company.sharePrice)}.`));
+    return true;
+  }
+
+  if (name === "suspend-stock") {
+    const company = findStockCompany(economy, interaction.options.getString("ticker", true));
+    if (!company) {
+      await replyEconomy(interaction, ministryEmbed("PSE Admin Rejected", "Ticker not found."));
+      return true;
+    }
+    company.status = company.status === "active" ? "suspended" : "active";
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("PSE Trading Status", `${company.ticker} is now ${company.status}.`));
+    return true;
+  }
+
+  if (name === "issue-dividend") {
+    const ticker = interaction.options.getString("ticker");
+    const companies = ticker ? [findStockCompany(economy, ticker)].filter(Boolean) : (economy.stockCompanies || []).filter((company) => Number(company.dividendRate || 0) > 0);
+    let totalPaid = 0;
+    for (const company of companies) {
+      for (const entry of economy.wallets || []) {
+        const position = (entry.stockPortfolio || []).find((item) => item.ticker === company.ticker);
+        if (!position || Number(position.shares || 0) <= 0) continue;
+        const dividend = Math.round(Number(position.shares || 0) * Number(company.sharePrice || 0) * Number(company.dividendRate || 0) * 100) / 100;
+        entry.balance += dividend;
+        position.dividendsEarned = Number(position.dividendsEarned || 0) + dividend;
+        totalPaid += dividend;
+        pushEconomyTransaction(economy, { fromWalletId: company.ticker, toWalletId: entry.id, amount: dividend, type: "stock_dividend", reason: `${company.ticker} dividend`, createdBy: interaction.user.id, meta: { key: company.ticker } });
+      }
+    }
+    economy.stockEvents = [{ id: createId("stock-event"), title: `PSE dividends issued: ${formatCredits(totalPaid)}`, tickers: companies.map((company) => company.ticker), priceImpact: 0, severity: "low", createdAt: new Date().toISOString(), createdBy: interaction.user.id }, ...(economy.stockEvents || [])].slice(0, 50);
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("PSE Dividends Issued", `Total paid: ${formatCredits(totalPaid)}.`));
+    return true;
+  }
+
+  if (name === "stock-report") {
+    const marketValue = (economy.wallets || []).reduce((sum, entry) => sum + discordStockPortfolioValue(entry, economy), 0);
+    const suspended = (economy.stockCompanies || []).filter((company) => company.status !== "active").length;
+    await replyEconomy(interaction, ministryEmbed("PSE Report", `Companies: ${(economy.stockCompanies || []).length}\nTrades: ${(economy.stockTrades || []).length}\nCitizen portfolio value: ${formatCredits(marketValue)}\nSuspended/frozen listings: ${suspended}`));
     return true;
   }
 
@@ -2725,6 +3609,12 @@ async function runBroadcastApprovalLoop() {
 function buildSlashCommands() {
   return [
     new SlashCommandBuilder().setName("help").setDescription("Show all Wilford bot commands."),
+    new SlashCommandBuilder().setName("help-economy").setDescription("Beginner guide for Panem Credit economy commands."),
+    new SlashCommandBuilder().setName("help-market").setDescription("Beginner guide for marketplace commands."),
+    new SlashCommandBuilder().setName("help-inventory").setDescription("Beginner guide for inventory and gathering commands."),
+    new SlashCommandBuilder().setName("help-stocks").setDescription("Beginner guide for Panem Stock Exchange commands."),
+    new SlashCommandBuilder().setName("help-citizen").setDescription("Beginner guide for citizen portal and civic actions."),
+    new SlashCommandBuilder().setName("help-mss").setDescription("Beginner guide for MSS economy alerts and actions."),
     new SlashCommandBuilder().setName("ping").setDescription("Check whether the bot is online."),
     new SlashCommandBuilder()
       .setName("commands")
@@ -2789,8 +3679,61 @@ function buildSlashCommands() {
       .addNumberOption((option) => option.setName("amount").setDescription("Amount of Panem Credits.").setRequired(true).setMinValue(1)),
     new SlashCommandBuilder().setName("transactions").setDescription("Show recent Panem Credit transactions."),
     new SlashCommandBuilder().setName("daily").setDescription("Claim the daily civic stipend."),
+    new SlashCommandBuilder()
+      .setName("work")
+      .setDescription("Work a Panem Credit job shift.")
+      .addStringOption((option) =>
+        option
+          .setName("job")
+          .setDescription("Job assignment.")
+          .addChoices(...economyJobDefaults.slice(0, 25).map((job) => ({ name: job.name, value: job.id })))
+      ),
+    new SlashCommandBuilder().setName("overtime").setDescription("Work overtime for higher Panem Credit pay."),
+    new SlashCommandBuilder()
+      .setName("crime")
+      .setDescription("Attempt a fictional risky economy action.")
+      .addStringOption((option) =>
+        option
+          .setName("action")
+          .setDescription("Risk action.")
+          .setRequired(true)
+          .addChoices(...economyCrimeDefaults.map((crime) => ({ name: crime.name, value: crime.id })))
+      )
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm high-risk action.")),
+    new SlashCommandBuilder()
+      .setName("rob")
+      .setDescription("Attempt a fictional robbery against another citizen.")
+      .addUserOption((option) => option.setName("user").setDescription("Target citizen.").setRequired(true))
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm MSS-risk action.")),
+    new SlashCommandBuilder()
+      .setName("gamble")
+      .setDescription("Play a Panem Credit chance game.")
+      .addNumberOption((option) => option.setName("amount").setDescription("Bet amount.").setRequired(true).setMinValue(1))
+      .addStringOption((option) =>
+        option
+          .setName("game")
+          .setDescription("Game.")
+          .addChoices(...economyGambleDefaults.filter((game) => game.id !== "district-lottery").map((game) => ({ name: game.name, value: game.id })))
+      )
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm large wager.")),
+    new SlashCommandBuilder()
+      .setName("lottery")
+      .setDescription("Buy a District Lottery ticket.")
+      .addNumberOption((option) => option.setName("amount").setDescription("Ticket stake.").setMinValue(1)),
+    new SlashCommandBuilder()
+      .setName("invest")
+      .setDescription("Invest Panem Credits in a state fund.")
+      .addStringOption((option) =>
+        option
+          .setName("fund")
+          .setDescription("Investment fund.")
+          .setRequired(true)
+          .addChoices(...investmentFundDefaults.map((fund) => ({ name: fund.name, value: fund.id })))
+      )
+      .addNumberOption((option) => option.setName("amount").setDescription("Amount to allocate.").setRequired(true).setMinValue(25)),
     new SlashCommandBuilder().setName("tax").setDescription("Show your tax status."),
     new SlashCommandBuilder().setName("market").setDescription("Show marketplace listings."),
+    new SlashCommandBuilder().setName("prices").setDescription("Show district production and price changes."),
     new SlashCommandBuilder()
       .setName("buy")
       .setDescription("Buy district goods.")
@@ -2798,10 +3741,65 @@ function buildSlashCommands() {
       .addIntegerOption((option) => option.setName("quantity").setDescription("Quantity.").setRequired(true).setMinValue(1)),
     new SlashCommandBuilder()
       .setName("sell")
-      .setDescription("List goods for sale.")
+      .setDescription("Sell an inventory item directly to the state.")
       .addStringOption((option) => option.setName("item").setDescription("Item ID or name.").setRequired(true))
       .addIntegerOption((option) => option.setName("quantity").setDescription("Quantity.").setRequired(true).setMinValue(1))
-      .addNumberOption((option) => option.setName("price").setDescription("Unit price.").setRequired(true).setMinValue(1)),
+      .addNumberOption((option) => option.setName("price").setDescription("Optional unit price; use /list for marketplace listings.").setMinValue(1))
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm rare item sale.")),
+    new SlashCommandBuilder()
+      .setName("list")
+      .setDescription("Create a citizen marketplace listing.")
+      .addStringOption((option) => option.setName("item").setDescription("Item ID or name.").setRequired(true))
+      .addIntegerOption((option) => option.setName("quantity").setDescription("Quantity.").setRequired(true).setMinValue(1))
+      .addNumberOption((option) => option.setName("price").setDescription("Unit price.").setRequired(true).setMinValue(1))
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm rare item listing.")),
+    new SlashCommandBuilder().setName("portfolio").setDescription("Show your Panem marketplace portfolio."),
+    new SlashCommandBuilder().setName("viewholdings").setDescription("Show your held market goods."),
+    new SlashCommandBuilder().setName("inventory").setDescription("Show your inventory items, rarity, slots, and worth."),
+    new SlashCommandBuilder().setName("fish").setDescription("Gather fish and rare catches in District 4."),
+    new SlashCommandBuilder().setName("mine").setDescription("Mine coal, ore, and rare relics in District 12."),
+    new SlashCommandBuilder().setName("farm").setDescription("Farm grain, crops, and harvest caches."),
+    new SlashCommandBuilder().setName("scavenge").setDescription("Scavenge transport salvage and rail artifacts."),
+    new SlashCommandBuilder().setName("log").setDescription("Gather timber and heartwood in District 7."),
+    new SlashCommandBuilder().setName("extract").setDescription("Extract energy cells and risky power cores."),
+    new SlashCommandBuilder()
+      .setName("inspect")
+      .setDescription("Inspect an inventory item value and rarity.")
+      .addStringOption((option) => option.setName("item").setDescription("Item ID or name.").setRequired(true)),
+    new SlashCommandBuilder().setName("lootbox").setDescription("Open a paid inventory reward crate."),
+    new SlashCommandBuilder().setName("crate").setDescription("Open a paid inventory reward crate."),
+    new SlashCommandBuilder().setName("stocks").setDescription("Show Panem Stock Exchange overview."),
+    new SlashCommandBuilder()
+      .setName("stock")
+      .setDescription("Show one PSE company.")
+      .addStringOption((option) => option.setName("ticker").setDescription("Ticker, e.g. LBE.").setRequired(true)),
+    new SlashCommandBuilder()
+      .setName("buy-stock")
+      .setDescription("Buy PSE shares.")
+      .addStringOption((option) => option.setName("ticker").setDescription("Ticker, e.g. LBE.").setRequired(true))
+      .addIntegerOption((option) => option.setName("amount").setDescription("Shares.").setRequired(true).setMinValue(1))
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm expensive order.")),
+    new SlashCommandBuilder()
+      .setName("sell-stock")
+      .setDescription("Sell PSE shares.")
+      .addStringOption((option) => option.setName("ticker").setDescription("Ticker, e.g. LBE.").setRequired(true))
+      .addIntegerOption((option) => option.setName("amount").setDescription("Shares.").setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder()
+      .setName("watchlist")
+      .setDescription("Show or toggle your PSE watchlist.")
+      .addStringOption((option) => option.setName("ticker").setDescription("Optional ticker to toggle.")),
+    new SlashCommandBuilder().setName("market-news").setDescription("Show latest PSE market news."),
+    new SlashCommandBuilder().setName("dividends").setDescription("Show PSE dividend payments."),
+    new SlashCommandBuilder()
+      .setName("market-alerts")
+      .setDescription("Turn Panem marketplace alerts on or off.")
+      .addStringOption((option) =>
+        option
+          .setName("mode")
+          .setDescription("Alert mode.")
+          .setRequired(true)
+          .addChoices({ name: "On", value: "on" }, { name: "Off", value: "off" })
+      ),
     new SlashCommandBuilder().setName("district").setDescription("Show your district economy status."),
     new SlashCommandBuilder().setName("leaderboard").setDescription("Show the Panem Credit leaderboard."),
     new SlashCommandBuilder()
@@ -2811,6 +3809,13 @@ function buildSlashCommands() {
       .addUserOption((option) => option.setName("user").setDescription("Recipient.").setRequired(true))
       .addNumberOption((option) => option.setName("amount").setDescription("Amount.").setRequired(true).setMinValue(1))
       .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
+    new SlashCommandBuilder()
+      .setName("issue-grant")
+      .setDescription("Issue a limited-time state grant.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Recipient.").setRequired(true))
+      .addNumberOption((option) => option.setName("amount").setDescription("Amount.").setRequired(true).setMinValue(1))
+      .addStringOption((option) => option.setName("reason").setDescription("Grant reason.").setMaxLength(300)),
     new SlashCommandBuilder()
       .setName("fine")
       .setDescription("Fine a user in Panem Credits.")
@@ -2848,6 +3853,62 @@ function buildSlashCommands() {
           )
       )
       .addNumberOption((option) => option.setName("rate").setDescription("Decimal rate, e.g. 0.05.").setRequired(true).setMinValue(0).setMaxValue(1)),
+    new SlashCommandBuilder()
+      .setName("trigger-event")
+      .setDescription("Trigger a rotating Panem Credit economy event.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addStringOption((option) =>
+        option
+          .setName("event")
+          .setDescription("State event.")
+          .setRequired(true)
+          .addChoices(...economyEventDefaults.map((event) => ({ name: event.title, value: event.id })))
+      )
+      .addIntegerOption((option) => option.setName("hours").setDescription("Duration in hours.").setMinValue(1).setMaxValue(720)),
+    new SlashCommandBuilder()
+      .setName("wanted")
+      .setDescription("Mark a user as a wanted financier.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
+      .addNumberOption((option) => option.setName("amount").setDescription("Bounty amount.").setMinValue(1))
+      .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
+    new SlashCommandBuilder()
+      .setName("clear")
+      .setDescription("Clear a user's MSS financial status.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addUserOption((option) => option.setName("user").setDescription("Citizen.").setRequired(true))
+      .addStringOption((option) => option.setName("reason").setDescription("Reason.").setMaxLength(300)),
+    new SlashCommandBuilder()
+      .setName("market-event")
+      .setDescription("Trigger a PSE market event.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addStringOption((option) =>
+        option
+          .setName("event")
+          .setDescription("PSE event.")
+          .setRequired(true)
+          .addChoices(...stockMarketEventDefaults.map((event) => ({ name: event.title.slice(0, 100), value: event.id })))
+      ),
+    new SlashCommandBuilder()
+      .setName("set-stock-price")
+      .setDescription("Set a PSE share price.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addStringOption((option) => option.setName("ticker").setDescription("Ticker.").setRequired(true))
+      .addNumberOption((option) => option.setName("price").setDescription("Share price.").setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder()
+      .setName("suspend-stock")
+      .setDescription("Toggle PSE trading suspension.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addStringOption((option) => option.setName("ticker").setDescription("Ticker.").setRequired(true)),
+    new SlashCommandBuilder()
+      .setName("issue-dividend")
+      .setDescription("Issue PSE dividends.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addStringOption((option) => option.setName("ticker").setDescription("Optional ticker.")),
+    new SlashCommandBuilder()
+      .setName("stock-report")
+      .setDescription("Show a PSE admin report.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder()
       .setName("run-tax")
       .setDescription("Run automatic income taxation.")

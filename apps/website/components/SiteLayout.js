@@ -11,6 +11,9 @@ const stateNavigation = [
   { label: "The People", href: "/members" },
   { label: "Districts", href: "/districts" },
   { label: "Panem Credit", href: "/panem-credit" },
+  { label: "Marketplace", href: "/marketplace" },
+  { label: "Inventory", href: "/inventory" },
+  { label: "Stock Market", href: "/stock-market" },
   { label: "Ministry of State Security", href: "/ministry-of-state-security" },
   { label: "Enemy Registry", href: "/enemies-of-the-state" },
   { label: "SUPREME COURT", href: "/supreme-court" },
@@ -84,6 +87,9 @@ export async function SiteLayout({ children }) {
             <Link href="/information">The Union</Link>
             <Link href="/districts">Districts</Link>
             <Link href="/panem-credit">Panem Credit</Link>
+            <Link href="/marketplace">Marketplace</Link>
+            <Link href="/inventory">Inventory</Link>
+            <Link href="/stock-market">Stock Market</Link>
             <Link href="/supreme-court">Supreme Court</Link>
             <Link href="/enemies-of-the-state">Enemy Registry</Link>
             <Link href="/citizenship">Citizenship</Link>

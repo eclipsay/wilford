@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatCredits, taxLabel, taxTypes, titleForBalance } from "@wilford/shared";
+import { economyEventDefaults, formatCredits, taxLabel, taxTypes, titleForBalance } from "@wilford/shared";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import { canAccess, requireGovernmentUser } from "../../../lib/government-auth";
@@ -24,6 +24,11 @@ export default async function PanemCreditControlPage({ searchParams }) {
     .filter((record) => record.status === "paid")
     .reduce((sum, record) => sum + Number(record.amount || 0), 0);
   const tradeVolume = store.transactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const activeEvent = store.events.find((event) => event.status === "active") || store.events[0];
+  const wantedWallets = store.wallets.filter((wallet) => wallet.wanted || wallet.underReview || Number(wallet.bounty || 0) > 0);
+  const frozenAssets = store.wallets
+    .filter((wallet) => wallet.status === "frozen")
+    .reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
 
   return (
     <SiteLayout>
@@ -64,6 +69,33 @@ export default async function PanemCreditControlPage({ searchParams }) {
             <h2>{store.alerts.length}</h2>
             <p>Suspicious activity, unpaid penalties, and restricted-market warnings.</p>
           </article>
+          <article className="government-status-panel">
+            <p className="eyebrow">Wanted Financiers</p>
+            <h2>{wantedWallets.length}</h2>
+            <p>{formatCredits(frozenAssets)} in frozen assets.</p>
+          </article>
+        </section>
+
+        <section className="panel government-user-panel">
+          <p className="eyebrow">Current Event</p>
+          <h2>{activeEvent?.title || "Standard Treasury Cycle"}</h2>
+          <p>{activeEvent?.summary || "No active emergency modifier."}</p>
+          {fullAccess ? (
+            <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
+              <input name="intent" type="hidden" value="trigger-event" />
+              <div className="public-application-grid public-application-grid--three">
+                <label className="public-application-field">
+                  <span>Event</span>
+                  <select name="eventId">
+                    {economyEventDefaults.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
+                  </select>
+                </label>
+                <label className="public-application-field"><span>Duration hours</span><input defaultValue="168" min="1" name="durationHours" type="number" /></label>
+                <label className="public-application-field"><span>Authority note</span><input name="reason" placeholder="Treasury cycle order" /></label>
+              </div>
+              <button className="button button--solid-site" type="submit">Trigger Event</button>
+            </form>
+          ) : null}
         </section>
 
         {fullAccess ? (
@@ -124,6 +156,8 @@ export default async function PanemCreditControlPage({ searchParams }) {
                   <span><strong>{wallet.taxStatus}</strong> Tax status</span>
                   <span><strong>{wallet.title || titleForBalance(wallet.balance)}</strong> Title</span>
                   <span><strong>{linkedCitizen?.name || "Unlinked"}</strong> Citizen record</span>
+                  <span><strong>{wallet.wanted ? "Wanted" : wallet.underReview ? "Under Review" : "Clear"}</strong> MSS status</span>
+                  <span><strong>{formatCredits(wallet.bounty || 0)}</strong> Bounty</span>
                 </div>
                 {fullAccess ? (
                   <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
@@ -166,6 +200,8 @@ export default async function PanemCreditControlPage({ searchParams }) {
                       <form action="/government-access/panem-credit/action" method="post"><input name="intent" type="hidden" value="freeze" /><input name="walletId" type="hidden" value={wallet.id} /><button className="button" type="submit">Freeze</button></form>
                       <form action="/government-access/panem-credit/action" method="post"><input name="intent" type="hidden" value="unfreeze" /><input name="walletId" type="hidden" value={wallet.id} /><button className="button" type="submit">Unfreeze</button></form>
                       <form action="/government-access/panem-credit/action" method="post"><input name="intent" type="hidden" value="restrict" /><input name="walletId" type="hidden" value={wallet.id} /><button className="button" type="submit">Restrict</button></form>
+                      <form action="/government-access/panem-credit/action" method="post"><input name="intent" type="hidden" value="wanted" /><input name="walletId" type="hidden" value={wallet.id} /><input name="bounty" type="hidden" value="500" /><button className="button button--danger-site" type="submit">Wanted</button></form>
+                      <form action="/government-access/panem-credit/action" method="post"><input name="intent" type="hidden" value="pardon" /><input name="walletId" type="hidden" value={wallet.id} /><button className="button" type="submit">Pardon</button></form>
                     </>
                   ) : null}
                 </div>

@@ -172,7 +172,13 @@ app.get("/api/economy", async (_req, res) => {
     listings: economy.listings.filter((listing) => listing.status === "active"),
     taxRates: economy.taxRates,
     districts: economy.districts,
-    events: economy.events
+    events: economy.events,
+    inventoryItems: economy.inventoryItems,
+    gatheringActions: economy.gatheringActions,
+    inventoryChallenges: economy.inventoryChallenges,
+    stockCompanies: economy.stockCompanies,
+    stockEvents: economy.stockEvents,
+    stockSettings: economy.stockSettings
   });
 });
 

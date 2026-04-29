@@ -11,6 +11,14 @@ const mssDuties = [
   "Strategic Security"
 ];
 
+const mssSections = [
+  ["🚨", "Alerts", "Financial crime, contraband, suspicious transfers, and security notices."],
+  ["🔎", "Investigations", "Review citizens, wallets, inventories, stock portfolios, and records."],
+  ["📜", "Enemy Registry", "Public and restricted Enemy of the State records."],
+  ["💳", "Financial Crime", "Wallet freezes, fines, bounties, and portfolio restrictions."],
+  ["👁", "Watchlist", "Ongoing monitoring for restricted activity and insider trading."]
+];
+
 export const metadata = {
   title: "Ministry of State Security"
 };
@@ -49,6 +57,19 @@ export default function MinistryOfStateSecurityPage() {
               <p>Maintained under classified ministry authority.</p>
             </article>
           ))}
+        </section>
+
+        <section className="state-section scroll-fade">
+          <p className="eyebrow">MSS Organisation</p>
+          <h2>Security Work Areas</h2>
+          <div className="portal-grid">
+            {mssSections.map(([icon, title, text]) => (
+              <article className="panel citizen-helper-card" key={title}>
+                <h3>{icon} {title}</h3>
+                <p>{text}</p>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="restricted-banner restricted-banner--mss scroll-fade">

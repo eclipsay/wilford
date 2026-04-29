@@ -8,6 +8,7 @@ import {
   requestCategories,
   requestPriorities
 } from "../../lib/citizen-state";
+import { getEconomyStore } from "../../lib/panem-credit";
 
 export const metadata = {
   title: "Citizen Portal"
@@ -82,10 +83,19 @@ export default async function CitizenPortalPage({ searchParams }) {
   }
 
   const profile = await hydrateCitizenProfile(record);
+  const economy = await getEconomyStore();
   const wallet = profile.wallet;
   const activeRequests = profile.requests.filter((request) => !["Completed", "Rejected"].includes(request.status));
   const paidTax = sum(profile.taxes, (tax) => tax.status === "paid");
   const outstandingTax = sum(profile.taxes, (tax) => tax.status !== "paid");
+  const inventoryValue = (wallet?.holdings || []).reduce((total, holding) => {
+    const item = economy.inventoryItems.find((entry) => entry.id === holding.itemId) || economy.marketItems.find((entry) => entry.id === holding.itemId);
+    return total + Number(holding.quantity || 0) * Number(item?.baseValue || item?.currentPrice || holding.averageCost || 0);
+  }, 0);
+  const stockValue = (wallet?.stockPortfolio || []).reduce((total, position) => {
+    const company = economy.stockCompanies.find((entry) => entry.ticker === position.ticker);
+    return total + Number(position.shares || 0) * Number(company?.sharePrice || 0);
+  }, 0);
   const notices = [
     wallet?.taxStatus && wallet.taxStatus !== "compliant" ? `Tax status requires attention: ${wallet.taxStatus}.` : "",
     record.securityClassification !== "Clear" ? `Security classification: ${record.securityClassification}.` : "",
@@ -126,6 +136,45 @@ export default async function CitizenPortalPage({ searchParams }) {
             <span>Union Security ID</span>
             <strong>{record.unionSecurityId}</strong>
             <p>{record.verificationStatus} / {record.securityClassification}</p>
+          </div>
+        </section>
+
+        <section className="citizen-quick-grid scroll-fade" aria-label="Citizen quick dashboard">
+          {[
+            ["💳", "Wallet", wallet ? formatCredits(wallet.balance) : "No wallet", "/panem-credit", "Open Wallet"],
+            ["🏪", "Marketplace", "Trade goods", "/marketplace", "Browse Market"],
+            ["🎒", "Inventory", inventoryValue ? formatCredits(inventoryValue) : "Empty", "/inventory", "View Items"],
+            ["📈", "Stock Market", stockValue ? formatCredits(stockValue) : "No shares", "/stock-market", "Open PSE"],
+            ["🏛", "Requests", `${activeRequests.length} active`, "#citizen-request-form", "Submit Request"],
+            ["🛂", "Union ID", record.unionSecurityId, `/verify-citizen?code=${encodeURIComponent(record.verificationCode)}`, "Verify"],
+            ["📜", "Taxes", wallet?.taxStatus || "Unrecorded", "/panem-credit", "Review Taxes"]
+          ].map(([icon, title, value, href, action]) => (
+            <Link className="citizen-quick-card" href={href} key={title}>
+              <span aria-hidden="true">{icon}</span>
+              <strong>{title}</strong>
+              <small>{value}</small>
+              <em>{action}</em>
+            </Link>
+          ))}
+        </section>
+
+        <section className="state-section scroll-fade">
+          <p className="eyebrow">What can I do?</p>
+          <h2>Start here</h2>
+          <div className="portal-grid">
+            {[
+              ["Earn credits", "Claim your daily payment, work shifts, or complete district labour in Panem Credit."],
+              ["Buy goods", "Use Marketplace to buy district goods. District Production affects marketplace prices."],
+              ["Sell inventory", wallet?.holdings?.length ? "List held goods or sell items directly to the state." : "Your inventory is empty. Try fishing, mining, or farming to collect goods."],
+              ["Invest in stocks", wallet?.stockPortfolio?.length ? "Track your PSE portfolio and dividends." : "You do not own shares yet. Visit the Panem Stock Exchange."],
+              ["Submit requests", "Ask the government for support, records, transfers, or official review."],
+              ["Check Union ID", "Verify your identity, district, and security classification from the portal."]
+            ].map(([title, text]) => (
+              <article className="panel citizen-helper-card" key={title}>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </article>
+            ))}
           </div>
         </section>
 
@@ -184,7 +233,7 @@ export default async function CitizenPortalPage({ searchParams }) {
           </article>
         </section>
 
-        <section className="state-section scroll-fade">
+        <section className="state-section scroll-fade" id="citizen-request-form">
           <p className="eyebrow">Citizen Services</p>
           <h2>Submit Government Request</h2>
           <form action="/citizen-portal/action" className="panel public-application-form citizen-request-form" method="post">

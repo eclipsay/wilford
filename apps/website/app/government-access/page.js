@@ -10,66 +10,96 @@ import {
 
 const systems = [
   {
+    group: "Government",
+    icon: "👥",
     title: "User Control Panel",
     text: "Manage government users, roles, status, temporary passwords, and account notes.",
     href: "/government-access/users",
     permission: "userControl"
   },
   {
+    group: "Government",
+    icon: "📢",
     title: "Bulletin Control",
     text: "Create and maintain public WPU News Bulletin directives.",
     href: "/government-access/bulletins",
     permission: "bulletinControl"
   },
   {
+    group: "Government",
+    icon: "📰",
     title: "Article Control",
     text: "Create, edit, publish, and withdraw official WPU News articles.",
     href: "/government-access/articles",
     permission: "articleControl"
   },
   {
+    group: "Government",
+    icon: "⚖",
     title: "Supreme Court Control",
     text: "Manage cases, rulings, evidence, access keys, and formal statements.",
     href: "/government-access/supreme-court",
     permission: "supremeCourtControl"
   },
   {
+    group: "MSS",
+    icon: "🚨",
     title: "MSS Console",
     text: "Ministry of State Security command tools and protected registries.",
     href: "/government-access/mss-console",
     permission: "mssTools"
   },
   {
+    group: "Government",
+    icon: "📡",
     title: "Broadcast Approvals",
     text: "Approve or decline server-wide Discord broadcasts and high-risk directives.",
     href: "/government-access/broadcast-approvals",
     permission: "broadcastApproval"
   },
   {
+    group: "Citizen Services",
+    icon: "🛂",
     title: "Citizen Applications",
     text: "Review citizenship applications and clerk intake material.",
     href: "/government-access/citizenship",
     permission: "citizenshipReview"
   },
   {
+    group: "Citizen Services",
+    icon: "🏛",
     title: "Citizen Requests Control",
     text: "Review support requests, petitions, district transfers, ministry assignments, and official responses.",
     href: "/government-access/citizen-requests",
     permission: "citizenRequestControl"
   },
   {
+    group: "MSS",
+    icon: "🛂",
     title: "Union Security Registry",
     text: "Manage citizen IDs, passport records, district affiliations, wallet links, and MSS classifications.",
     href: "/government-access/union-security-registry",
     permission: "identitySecurity"
   },
   {
+    group: "Economy",
+    icon: "💳",
     title: "Panem Credit Control",
     text: "Manage wallets, taxes, marketplace stock, district production, and MSS financial alerts.",
     href: "/government-access/panem-credit",
     permission: "economyView"
   },
   {
+    group: "Economy",
+    icon: "📈",
+    title: "Stock Market Control",
+    text: "Manage PSE companies, trading status, events, dividends, taxes, and citizen portfolios.",
+    href: "/government-access/stock-market",
+    permission: "economyView"
+  },
+  {
+    group: "Security Logs",
+    icon: "📜",
     title: "Audit Log",
     text: "View login attempts, access denials, user actions, and restricted edits.",
     href: "/government-access/audit",
@@ -210,7 +240,8 @@ export default async function GovernmentAccessPage({ searchParams }) {
                   href={allowed && !user.forcePasswordChange ? system.href : undefined}
                   key={system.title}
                 >
-                  <span>{system.title}</span>
+                  <span>{system.icon} {system.title}</span>
+                  <small className="system-group-badge">{system.group}</small>
                   <p>{system.text}</p>
                   <strong>{allowed ? "Authorised" : "Restricted"}</strong>
                 </CardTag>
