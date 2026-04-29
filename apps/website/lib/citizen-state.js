@@ -172,16 +172,67 @@ const governorNames = {
   "District 13": "Governor Severin Locke"
 };
 
-const governorPortraits = {
-  "The Capitol": "/ClydeBarrowPortrait.png",
-  "District 1": "/AedraPortrait.png",
-  "District 3": "/HubertSkeletrixPortrait.png"
+const officialGovernorProfiles = {
+  "The Capitol": {
+    governorName: "Clyde Barrow",
+    governorTitle: "Governor of the Capitol",
+    governorPortrait: "/ClydeBarrowPortrait.png",
+    governorBiography:
+      "Clyde Barrow governs the Capitol, seat of WPU government, ceremony, law, finance, culture, and national command.",
+    loreDescription:
+      "The Capitol is the seat of WPU government, ceremony, law, finance, culture, and national command."
+  },
+  "District 1": {
+    governorName: "Lady Aedra",
+    governorTitle: "Governor of District 1",
+    governorPortrait: "/AedraPortrait.png",
+    governorBiography:
+      "Lady Aedra governs District 1, directing luxury goods, elite manufacturing, ceremonial fashion, and prestige exports.",
+    loreDescription:
+      "District 1 produces luxury goods, elite manufacturing, ceremonial fashion, and prestige exports for the Union.",
+    economicOutput: "Luxury goods, elite manufacturing, ceremonial fashion, prestige exports",
+    productionGoods: "Luxury goods, elite manufacturing, ceremonial fashion, prestige exports",
+    tradeRelevance:
+      "Luxury goods, elite manufacturing, ceremonial fashion, and prestige exports anchor District 1's Panem Credit trade position."
+  },
+  "District 3": {
+    governorName: "Hubert Skeletrix",
+    governorTitle: "Governor of District 3",
+    governorPortrait: "/HubertSkeletrixPortrait.png",
+    governorBiography:
+      "Hubert Skeletrix governs District 3 and leads the Chipkittle Clan, the dominant people and industrial identity of the district.",
+    loreDescription:
+      "District 3 is home to the Chipkittle Clan, led by Governor Hubert Skeletrix. The Chipkittle Clan forms the core population and industrial identity of District 3.",
+    economicOutput: "Technology, electronics, machinery, communications, engineering",
+    productionGoods: "Technology, electronics, machinery, communications, engineering",
+    tradeRelevance:
+      "Technology, electronics, machinery, communications, and engineering keep District 3 central to Union production and Panem Credit trade.",
+    loreNote: "Leader of the Chipkittle Clan"
+  }
 };
+
+export function slugify(value = "") {
+  return String(value)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function districtSlug(district = {}) {
+  if (district.canonicalName === "The Capitol" || district.name === "Capitol") return "capitol";
+  return slugify(district.canonicalName || district.name);
+}
+
+export function personSlug(name = "") {
+  return slugify(String(name).replace(/^Governor\s+/i, ""));
+}
 
 export function defaultDistrictProfiles(economyDistricts = districtEconomyDefaults) {
   return economyDistricts.map((district) => {
     const number = districtNumber(district.name);
     const governorName = governorNames[district.name] || `Governor of ${district.name}`;
+    const officialGovernor = officialGovernorProfiles[district.name] || {};
     return {
       id: district.id,
       name: district.name === "The Capitol" ? "Capitol" : district.name,
@@ -189,7 +240,7 @@ export function defaultDistrictProfiles(economyDistricts = districtEconomyDefaul
       industry: district.productionType,
       governorName,
       governorTitle: number === 0 ? "Capitol Governor" : `${district.name} Governor`,
-      governorPortrait: governorPortraits[district.name] || "/wpu-grand-seal.png",
+      governorPortrait: "/wpu-grand-seal.png",
       governorBiography: `${governorName} administers ${district.name === "The Capitol" ? "central command, civic culture, and finance" : `${district.name} production, census order, and civic welfare`} under the Grand Seal.`,
       loyaltyStatement: number === 13 ? "Restricted service remains loyal through silence and precision." : "The district serves the Union through ordered production.",
       appointmentDate: "2026-04-28",
@@ -204,7 +255,8 @@ export function defaultDistrictProfiles(economyDistricts = districtEconomyDefaul
       keyLandmarks: number === 0
         ? ["Grand Seal Plaza", "Ministry Row", "Credit & Records Hall"]
         : [`${district.name} Civic Registry`, "Union Rail Station", "Production Exchange"],
-      recentBulletins: []
+      recentBulletins: [],
+      ...officialGovernor
     };
   });
 }
@@ -299,25 +351,27 @@ function normalizeCitizenRequest(entry = {}) {
 function normalizeDistrictProfile(profile = {}, economyDistricts = districtEconomyDefaults) {
   const defaults = defaultDistrictProfiles(economyDistricts);
   const fallback = defaults.find((district) => district.id === profile.id || district.canonicalName === profile.canonicalName) || defaults[0];
+  const officialGovernor = officialGovernorProfiles[profile.canonicalName || fallback.canonicalName] || {};
+  const source = { ...fallback, ...profile, ...officialGovernor };
   return {
-    ...fallback,
-    ...profile,
-    name: cleanText(profile.name || fallback.name, 80),
-    canonicalName: cleanText(profile.canonicalName || fallback.canonicalName, 80),
-    industry: cleanText(profile.industry || fallback.industry, 180),
-    governorName: cleanText(profile.governorName || fallback.governorName, 160),
-    governorTitle: cleanText(profile.governorTitle || fallback.governorTitle, 160),
-    governorPortrait: cleanText(profile.governorPortrait || fallback.governorPortrait, 500),
-    governorBiography: cleanText(profile.governorBiography || fallback.governorBiography, 1200),
-    loyaltyStatement: cleanText(profile.loyaltyStatement || fallback.loyaltyStatement, 500),
-    appointmentDate: cleanText(profile.appointmentDate || fallback.appointmentDate, 40),
-    loreDescription: cleanText(profile.loreDescription || fallback.loreDescription, 1200),
-    economicOutput: cleanText(profile.economicOutput || fallback.economicOutput, 500),
-    productionGoods: cleanText(profile.productionGoods || fallback.productionGoods, 500),
-    tradeRelevance: cleanText(profile.tradeRelevance || fallback.tradeRelevance, 800),
-    developmentStatus: cleanText(profile.developmentStatus || fallback.developmentStatus, 160),
-    keyLandmarks: Array.isArray(profile.keyLandmarks) ? profile.keyLandmarks.map((item) => cleanText(item, 120)).filter(Boolean).slice(0, 6) : fallback.keyLandmarks,
-    recentBulletins: Array.isArray(profile.recentBulletins) ? profile.recentBulletins.map((item) => cleanText(item, 180)).filter(Boolean).slice(0, 5) : []
+    ...source,
+    name: cleanText(source.name, 80),
+    canonicalName: cleanText(source.canonicalName, 80),
+    industry: cleanText(source.industry, 180),
+    governorName: cleanText(source.governorName, 160),
+    governorTitle: cleanText(source.governorTitle, 160),
+    governorPortrait: cleanText(source.governorPortrait, 500),
+    governorBiography: cleanText(source.governorBiography, 1200),
+    loyaltyStatement: cleanText(source.loyaltyStatement, 500),
+    appointmentDate: cleanText(source.appointmentDate, 40),
+    loreDescription: cleanText(source.loreDescription, 1200),
+    economicOutput: cleanText(source.economicOutput, 500),
+    productionGoods: cleanText(source.productionGoods, 500),
+    tradeRelevance: cleanText(source.tradeRelevance, 800),
+    developmentStatus: cleanText(source.developmentStatus, 160),
+    loreNote: cleanText(source.loreNote, 240),
+    keyLandmarks: Array.isArray(source.keyLandmarks) ? source.keyLandmarks.map((item) => cleanText(item, 120)).filter(Boolean).slice(0, 6) : fallback.keyLandmarks,
+    recentBulletins: Array.isArray(source.recentBulletins) ? source.recentBulletins.map((item) => cleanText(item, 180)).filter(Boolean).slice(0, 5) : []
   };
 }
 

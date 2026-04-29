@@ -1,8 +1,9 @@
 import Image from "next/image";
+import Link from "next/link";
 import { formatCredits } from "@wilford/shared";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
-import { getCitizenState } from "../../lib/citizen-state";
+import { districtSlug, getCitizenState } from "../../lib/citizen-state";
 import { getEconomyStore } from "../../lib/panem-credit";
 
 export const metadata = {
@@ -48,7 +49,11 @@ export default async function DistrictsPage() {
             const isCapitol = district.name === "Capitol" || district.canonicalName === "The Capitol";
 
             return (
-              <article className={`district-profile-card${isCapitol ? " district-profile-card--capitol" : ""}`} key={district.id}>
+              <Link
+                className={`district-profile-card${isCapitol ? " district-profile-card--capitol" : ""}`}
+                href={`/districts/${districtSlug(district)}`}
+                key={district.id}
+              >
                 <div className="district-profile-card__governor">
                   <Image
                     src={district.governorPortrait || "/wpu-grand-seal.png"}
@@ -87,7 +92,7 @@ export default async function DistrictsPage() {
                     </ul>
                   ) : null}
                 </div>
-              </article>
+              </Link>
             );
           })}
         </section>

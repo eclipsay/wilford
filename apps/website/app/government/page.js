@@ -1,6 +1,9 @@
 import Image from "next/image";
+import Link from "next/link";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getCitizenState } from "../../lib/citizen-state";
+import { districtSlug } from "../../lib/citizen-state";
+import { governorProfileFromDistrict } from "../../lib/people";
 
 const ministries = [
   {
@@ -49,7 +52,14 @@ const ministries = [
   }
 ];
 
-const principles = ["Faith", "Order", "Service", "Unity"];
+const stateBodies = [
+  {
+    name: "Supreme Court",
+    label: "Judiciary",
+    purpose: "Interprets Union law, hears formal petitions, and publishes high court proceedings.",
+    href: "/supreme-court"
+  }
+];
 
 const executives = [
   {
@@ -83,7 +93,14 @@ export const revalidate = 0;
 
 export default async function GovernmentPage() {
   const state = await getCitizenState();
-  const governorPreview = state.districtProfiles.slice(0, 6);
+  const featuredGovernorIds = new Set(["capitol", "district-1", "district-3"]);
+  const governorPreview = state.districtProfiles
+    .filter((district) => featuredGovernorIds.has(district.id))
+    .map((district) => ({
+      ...district,
+      profile: governorProfileFromDistrict(district),
+      districtHref: `/districts/${districtSlug(district)}`
+    }));
 
   return (
     <SiteLayout>
@@ -111,7 +128,7 @@ export default async function GovernmentPage() {
 
         <section className="government-chart scroll-fade" aria-label="Government hierarchy">
           <article className="government-office government-office--chairman">
-            <div className="government-office__portrait">
+            <Link className="government-office__portrait" href="/chairman">
               <Image
                 src="/chairman-lemmie-portrait.png"
                 alt="Official portrait of Chairman Lemmie"
@@ -119,7 +136,7 @@ export default async function GovernmentPage() {
                 height={1402}
                 className="portrait-frame"
               />
-            </div>
+            </Link>
             <div>
               <p className="government-office__rank">Supreme Chairman</p>
               <h2>Chairman Lemmie</h2>
@@ -134,7 +151,10 @@ export default async function GovernmentPage() {
           <div className="government-executive-tier" aria-label="Senior executive command">
             {executives.map((executive) => (
               <article className="government-office government-office--executive" key={executive.name}>
-                <div className="government-office__portrait government-office__portrait--executive">
+                <Link
+                  className="government-office__portrait government-office__portrait--executive"
+                  href={`/people/${executive.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`}
+                >
                   <Image
                     src={executive.image}
                     alt={executive.imageAlt}
@@ -142,7 +162,7 @@ export default async function GovernmentPage() {
                     height={520}
                     className={executive.imageClassName}
                   />
-                </div>
+                </Link>
                 <div>
                   <p className="government-office__rank">{executive.rank}</p>
                   <h2>{executive.name}</h2>
@@ -174,21 +194,15 @@ export default async function GovernmentPage() {
               </article>
             ))}
           </div>
-        </section>
 
-        <section className="government-principles scroll-fade" aria-labelledby="government-principles-title">
-          <div className="government-section-heading">
-            <p className="government-hero__eyebrow">Civic Doctrine</p>
-            <h2 id="government-principles-title">Principles Of Governance</h2>
-          </div>
-
-          <div className="government-principles__grid">
-            {principles.map((principle) => (
-              <article className="government-principle" key={principle}>
-                <span aria-hidden="true">{principle[0]}</span>
-                <strong>{principle}</strong>
-                <p>Preserves The Union</p>
-              </article>
+          <div className="government-state-bodies" aria-label="Judicial bodies">
+            {stateBodies.map((body) => (
+              <Link className="government-ministry government-state-body" href={body.href} key={body.name}>
+                <p className="government-office__rank">{body.label}</p>
+                <h3>{body.name}</h3>
+                <p>{body.purpose}</p>
+                <strong>Public docket</strong>
+              </Link>
             ))}
           </div>
         </section>
@@ -196,19 +210,34 @@ export default async function GovernmentPage() {
         <section className="government-principles scroll-fade" aria-labelledby="district-admin-title">
           <div className="government-section-heading">
             <p className="government-hero__eyebrow">District Administration</p>
-            <h2 id="district-admin-title">Governor Council</h2>
+            <h2 id="district-admin-title">District Governors</h2>
           </div>
 
-          <div className="government-principles__grid">
+          <div className="government-governor-grid">
             {governorPreview.map((district) => {
               const isCapitol = district.name === "Capitol" || district.canonicalName === "The Capitol";
 
               return (
-                <article className={`government-principle${isCapitol ? " government-principle--capitol" : ""}`} key={district.id}>
-                  {isCapitol ? <em>Capitol High Office</em> : null}
-                  <span aria-hidden="true">{isCapitol ? "C" : district.name.replace(/\D/g, "")}</span>
-                  <strong>{district.governorName}</strong>
-                  <p>{isCapitol ? "Capitol Governor" : district.name}</p>
+                <article className={`government-governor-card${isCapitol ? " government-governor-card--capitol" : ""}`} key={district.id}>
+                  <Link className="government-governor-card__portrait" href={district.profile.href}>
+                    <Image
+                      src={district.governorPortrait || "/wpu-grand-seal.png"}
+                      alt={`Official portrait of ${district.governorName}`}
+                      width={420}
+                      height={520}
+                    />
+                  </Link>
+                  <div>
+                    {isCapitol ? <em>Capitol High Office</em> : null}
+                    <p>{district.name}</p>
+                    <h3>{district.governorName}</h3>
+                    <strong>{district.governorTitle}</strong>
+                    <span>{district.loreNote || district.industry}</span>
+                    <div className="government-governor-card__links">
+                      <Link href={district.districtHref}>District</Link>
+                      <Link href={district.profile.href}>Biography</Link>
+                    </div>
+                  </div>
                 </article>
               );
             })}
