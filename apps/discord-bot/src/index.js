@@ -10,10 +10,14 @@ import {
   Client,
   EmbedBuilder,
   GatewayIntentBits,
+  ModalBuilder,
   PermissionFlagsBits,
   PermissionsBitField,
   Partials,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } from "discord.js";
 import {
   applicationQuestions,
@@ -265,6 +269,13 @@ function walletLinkRequiredEmbed() {
   return ministryEmbed(
     "Wallet Link Required",
     "Your citizen identity is verified, but no Panem Credit wallet is linked to your Union Security record. Contact the Ministry of Credit & Records."
+  );
+}
+
+function linkedCitizenPromptEmbed() {
+  return ministryEmbed(
+    "Citizen Profile Not Linked",
+    `Your Discord account is not linked to a WPU citizen profile.\nUse the buttons below to link your profile, apply for citizenship, or open the Citizen Portal.`
   );
 }
 
@@ -572,6 +583,519 @@ function helpEmbed(title, lines) {
   return ministryEmbed(title, lines.join("\n"));
 }
 
+function dashboardSelect(section = "overview") {
+  const options = [
+    ["overview", "Overview", "Balance, status, inventory, stocks, and requests", "🏛"],
+    ["wallet", "Wallet", "Panem Credit wallet details", "💳"],
+    ["transactions", "Transactions", "Recent ledger activity", "🪙"],
+    ["marketplace", "Marketplace", "Listings and goods exchange", "🏪"],
+    ["inventory", "Inventory", "Items, rarity, and value", "🎒"],
+    ["stocks", "Stocks", "PSE portfolio and market", "📈"],
+    ["taxes", "Taxes", "Tax status and records", "📜"],
+    ["district", "District", "District production profile", "🌍"],
+    ["requests", "Requests", "Citizen requests and case files", "🏛"],
+    ["union-id", "Union ID", "Identity and verification", "🛂"],
+    ["help", "Help", "Beginner next steps", "❔"]
+  ];
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("citizen-dashboard:section")
+      .setPlaceholder("Choose a section")
+      .addOptions(options.map(([value, label, description, emoji]) => ({
+        label,
+        value,
+        description,
+        emoji,
+        default: value === section
+      })))
+  );
+}
+
+function dashboardButtons(section = "overview") {
+  const rows = [];
+  const openSite = new ButtonBuilder().setCustomId("citizen-dashboard:open-site").setLabel("Open Website").setEmoji("🌐").setStyle(ButtonStyle.Secondary);
+  const linkProfile = new ButtonBuilder().setCustomId("citizen-dashboard:link-profile").setLabel("Link Citizen Profile").setEmoji("🛂").setStyle(ButtonStyle.Primary);
+  const apply = linkButton("Apply", `${websiteUrl}/citizenship`, "🛂");
+  if (section === "unlinked") return [new ActionRowBuilder().addComponents(linkProfile, apply, linkButton("Citizen Portal", `${websiteUrl}/citizen-portal`, "🌐"))];
+  if (section === "wallet") rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("citizen-dashboard:send-credits").setLabel("Send Credits").setEmoji("🪙").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId("citizen-dashboard:transactions").setLabel("View Transactions").setEmoji("📜").setStyle(ButtonStyle.Secondary), openSite));
+  else if (section === "inventory") rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("citizen-dashboard:view-items").setLabel("View Items").setEmoji("🎒").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("citizen-dashboard:sell-item").setLabel("Sell/List Item").setEmoji("🏷").setStyle(ButtonStyle.Primary), openSite));
+  else if (section === "marketplace") rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("citizen-dashboard:browse-listings").setLabel("Browse Listings").setEmoji("🏪").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("citizen-dashboard:buy-item").setLabel("Buy Item").setEmoji("🛒").setStyle(ButtonStyle.Primary), openSite));
+  else if (section === "stocks") rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("citizen-dashboard:stock-buy").setLabel("Buy Stock").setEmoji("📈").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId("citizen-dashboard:stock-sell").setLabel("Sell Stock").setEmoji("📉").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("citizen-dashboard:market-news").setLabel("Market News").setEmoji("📰").setStyle(ButtonStyle.Secondary)));
+  else if (section === "requests") rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("citizen-dashboard:submit-request").setLabel("Submit Request").setEmoji("🏛").setStyle(ButtonStyle.Primary), openSite));
+  else if (section === "union-id") rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("citizen-dashboard:verify-code").setLabel("Verify Code").setEmoji("🛂").setStyle(ButtonStyle.Primary), openSite));
+  else rows.push(new ActionRowBuilder().addComponents(openSite, new ButtonBuilder().setCustomId("citizen-dashboard:transactions").setLabel("Transactions").setEmoji("📜").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("citizen-dashboard:view-items").setLabel("Inventory").setEmoji("🎒").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("citizen-dashboard:market-news").setLabel("Stocks").setEmoji("📈").setStyle(ButtonStyle.Secondary)));
+  return rows;
+}
+
+function dashboardComponents(section = "overview") {
+  return [dashboardSelect(section), ...dashboardButtons(section)];
+}
+
+function itemDisplayName(itemId, economy) {
+  const item = inventoryItemById(itemId, economy) || (economy.marketItems || []).find((entry) => entry.id === itemId);
+  return item?.name || itemId;
+}
+
+function dashboardMetricSummary(economy, governmentStore, identity) {
+  const wallet = identity.wallet;
+  ensureEconomyHoldings(wallet);
+  ensureStockCollections(wallet);
+  const requests = (governmentStore.citizenRequests || []).filter((request) => request.citizenId === identity.citizen.id);
+  const activeRequests = requests.filter((request) => !["Completed", "Rejected"].includes(request.status));
+  const inventoryValue = wallet.holdings.reduce((sum, holding) => sum + inventoryItemValue(inventoryItemById(holding.itemId, economy), economy) * Number(holding.quantity || 0), 0);
+  const stockValue = discordStockPortfolioValue(wallet, economy);
+  const listingsCount = (economy.listings || []).filter((listing) => listing.sellerWalletId === wallet.id && listing.status === "active").length;
+  const taxPaid = (economy.taxRecords || []).filter((record) => record.walletId === wallet.id && record.status === "paid").reduce((sum, record) => sum + Number(record.amount || 0), 0);
+  return { requests, activeRequests, inventoryValue, stockValue, listingsCount, taxPaid };
+}
+
+async function getCitizenDashboardContext(user) {
+  const [economy, governmentStore] = await Promise.all([readEconomyStore(), readGovernmentAccessStore()]);
+  const identity = getVerifiedDiscordCitizen(governmentStore, economy, user);
+  return { economy, governmentStore, identity };
+}
+
+function citizenDashboardEmbed(section, context, user) {
+  const { economy, governmentStore, identity } = context;
+  if (!identity) return linkedCitizenPromptEmbed();
+  if (!identity.wallet) return walletLinkRequiredEmbed();
+  const { citizen, wallet } = identity;
+  const metrics = dashboardMetricSummary(economy, governmentStore, identity);
+  const district = (economy.districts || []).find((entry) => entry.name === wallet.district || entry.name === citizen.district);
+  const title = {
+    overview: "Citizen Dashboard",
+    wallet: "Wallet",
+    transactions: "Transactions",
+    marketplace: "Marketplace",
+    inventory: "Inventory",
+    stocks: "Stocks",
+    taxes: "Taxes",
+    district: "District",
+    requests: "Requests",
+    "union-id": "Union ID",
+    help: "Citizen Help"
+  }[section] || "Citizen Dashboard";
+  let description = `${citizen.citizenName || citizen.name || wallet.displayName || "Registered Citizen"}\n${citizen.district || wallet.district || "Unassigned"}\n`;
+  const fields = [];
+  if (section === "wallet" || section === "overview") {
+    fields.push({ name: "💳 Balance", value: formatCredits(wallet.balance), inline: true }, { name: "Status", value: String(wallet.status || "active"), inline: true }, { name: "Tax", value: String(wallet.taxStatus || "compliant"), inline: true });
+  }
+  if (section === "overview") {
+    fields.push({ name: "🎒 Inventory", value: `${wallet.holdings.length} types\n${formatCredits(metrics.inventoryValue)}`, inline: true }, { name: "📈 Stocks", value: `${wallet.stockPortfolio.length} positions\n${formatCredits(metrics.stockValue)}`, inline: true }, { name: "🏪 Listings", value: String(metrics.listingsCount), inline: true }, { name: "🏛 Requests", value: `${metrics.activeRequests.length} active`, inline: true }, { name: "🛂 Union ID", value: `${citizen.unionSecurityId}\n${citizen.verificationStatus}`, inline: true }, { name: "🚨 MSS Status", value: wallet.wanted ? "Wanted" : wallet.underReview ? "Under review" : "Clear", inline: true });
+  } else if (section === "transactions") {
+    const rows = (economy.transactions || []).filter((txn) => txn.fromWalletId === wallet.id || txn.toWalletId === wallet.id).slice(0, 8).map((txn) => `${txn.type}: ${formatCredits(txn.amount)} - ${txn.reason}`).join("\n") || "No recent transactions.";
+    description += rows;
+  } else if (section === "marketplace") {
+    const listings = (economy.listings || []).filter((listing) => listing.status === "active").slice(0, 6).map((listing) => `${itemDisplayName(listing.itemId, economy)} x${listing.quantity} - ${formatCredits(listing.price)}`).join("\n") || "No active listings.";
+    description += `Your active listings: ${metrics.listingsCount}\n\n${listings}`;
+  } else if (section === "inventory") {
+    const rows = wallet.holdings.slice(0, 8).map((holding) => `${itemDisplayName(holding.itemId, economy)} x${holding.quantity} (${holding.rarity || "common"})`).join("\n") || "Your inventory is empty. Try fishing, mining, or farming.";
+    description += `Worth: ${formatCredits(metrics.inventoryValue)}\nSlots: ${occupiedInventorySlots(wallet)} / ${wallet.inventorySlots}\n\n${rows}`;
+  } else if (section === "stocks") {
+    const rows = wallet.stockPortfolio.slice(0, 8).map((position) => {
+      const company = findStockCompany(economy, position.ticker);
+      return `${position.ticker}: ${position.shares} shares - ${formatCredits(Number(position.shares || 0) * Number(company?.sharePrice || 0))}`;
+    }).join("\n") || "You do not own shares yet. Visit the Panem Stock Exchange.";
+    description += `Portfolio value: ${formatCredits(metrics.stockValue)}\n\n${rows}`;
+  } else if (section === "taxes") {
+    const rows = (economy.taxRecords || []).filter((record) => record.walletId === wallet.id).slice(0, 8).map((record) => `${taxLabel(record.taxType)}: ${formatCredits(record.amount)} (${record.status})`).join("\n") || "No tax records.";
+    description += `Status: ${wallet.taxStatus}\nPaid total: ${formatCredits(metrics.taxPaid)}\n\n${rows}`;
+  } else if (section === "district") {
+    description += `${district?.name || citizen.district || "Unassigned"}\n${district?.goodsProduced || "No district production data."}\nSupply ${district?.supplyLevel || 0} / Demand ${district?.demandLevel || 0} / Prosperity ${district?.prosperityRating || 0}`;
+  } else if (section === "requests") {
+    const rows = metrics.requests.slice(0, 8).map((request) => `${request.category}: ${request.status} (${request.priority})`).join("\n") || "No citizen requests recorded.";
+    description += `Active requests: ${metrics.activeRequests.length}\n\n${rows}`;
+  } else if (section === "union-id") {
+    description += `Union Security ID: ${citizen.unionSecurityId}\nVerification: ${citizen.verificationStatus}\nSecurity: ${citizen.securityClassification}\nCitizen status: ${citizen.citizenStatus}`;
+  } else if (section === "help") {
+    description += "Start with /daily for credits, /market for goods, /inventory for items, and /stocks for PSE shares. Use the dropdown to view each section.";
+  }
+  return ministryEmbed(title, description, fields).setAuthor({ name: `Wilford Panem Union • ${user.username}` }).setFooter({ text: "Wilford Panem Union • Citizen Services Network" });
+}
+
+async function replyCitizenDashboard(interaction, section = "overview", update = false) {
+  const context = await getCitizenDashboardContext(interaction.user);
+  const embed = citizenDashboardEmbed(section, context, interaction.user);
+  const components = context.identity?.wallet ? dashboardComponents(section) : dashboardButtons("unlinked");
+  if (update && interaction.isMessageComponent()) return interaction.update({ embeds: [embed], components });
+  const payload = { embeds: [embed], components, ephemeral: true };
+  return interaction.reply(payload);
+}
+
+async function writeGovernmentAccessStore(store) {
+  if (!adminApiKey) {
+    throw new Error("ADMIN_API_KEY is required for citizen registry writes.");
+  }
+  const response = await fetch(`${apiUrl}/api/admin/government-access-store`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-admin-key": adminApiKey },
+    body: JSON.stringify(store),
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new Error(`Citizen registry write failed (${response.status}).`);
+  }
+  return response.json();
+}
+
+async function updateCitizenDashboardAfterModal(interaction, section, message) {
+  const context = await getCitizenDashboardContext(interaction.user);
+  await interaction.reply({
+    embeds: [ministryEmbed("Dashboard Updated", message)],
+    ephemeral: true
+  });
+  return context;
+}
+
+function shortModalInput(id, label, placeholder, required = true) {
+  return new TextInputBuilder()
+    .setCustomId(id)
+    .setLabel(label)
+    .setPlaceholder(placeholder)
+    .setRequired(required)
+    .setStyle(TextInputStyle.Short);
+}
+
+function paragraphModalInput(id, label, placeholder, required = true) {
+  return new TextInputBuilder()
+    .setCustomId(id)
+    .setLabel(label)
+    .setPlaceholder(placeholder)
+    .setRequired(required)
+    .setStyle(TextInputStyle.Paragraph);
+}
+
+function dashboardModal(customId, title, inputs) {
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(title)
+    .addComponents(...inputs.map((input) => new ActionRowBuilder().addComponents(input)));
+}
+
+function modalValue(interaction, id) {
+  return String(interaction.fields.getTextInputValue(id) || "").trim();
+}
+
+function parsePositiveIntInput(value) {
+  const parsed = Number.parseInt(String(value || "").replace(/,/g, ""), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function parsePositiveNumberInput(value) {
+  const parsed = Number.parseFloat(String(value || "").replace(/,/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function findCitizenForDashboardTransfer(governmentStore, economy, input) {
+  const needle = String(input || "").trim().replace(/[<@!>]/g, "").toLowerCase();
+  if (!needle) return null;
+  const citizen = (governmentStore.citizenRecords || []).find((record) =>
+    String(record.unionSecurityId || "").toLowerCase() === needle ||
+    String(record.discordId || "").toLowerCase() === needle ||
+    String(record.citizenName || "").toLowerCase() === needle
+  );
+  if (!citizen) return null;
+  const wallet = getEconomyWallet(economy, citizen.id) || getEconomyWallet(economy, citizen.discordId);
+  return wallet ? { citizen, wallet } : null;
+}
+
+function dashboardReplyEmbed(title, message) {
+  return ministryEmbed(title, message).setFooter({ text: "Wilford Panem Union • Citizen Services Network" });
+}
+
+async function handleCitizenDashboardComponent(interaction) {
+  if (interaction.isStringSelectMenu() && interaction.customId === "citizen-dashboard:section") {
+    await replyCitizenDashboard(interaction, interaction.values[0] || "overview", true);
+    return true;
+  }
+
+  if (!interaction.isButton() || !interaction.customId.startsWith("citizen-dashboard:")) {
+    return false;
+  }
+
+  const action = interaction.customId.split(":")[1];
+  const sectionMap = {
+    transactions: "transactions",
+    "view-items": "inventory",
+    "browse-listings": "marketplace",
+    "market-news": "stocks"
+  };
+
+  if (sectionMap[action]) {
+    await replyCitizenDashboard(interaction, sectionMap[action], true);
+    return true;
+  }
+
+  if (action === "open-site") {
+    await interaction.reply({
+      embeds: [dashboardReplyEmbed("Citizen Portal Links", "Open the WPU website for the full citizen portal, marketplace, inventory, and Panem Stock Exchange.")],
+      components: economyQuickLinks(),
+      ephemeral: true
+    });
+    return true;
+  }
+
+  if (action === "link-profile" || action === "verify-code") {
+    await interaction.showModal(dashboardModal("citizen-modal:link-profile", "Link Citizen Profile", [
+      shortModalInput("unionSecurityId", "Union Security ID", "WPU-0000-0000"),
+      shortModalInput("verificationCode", "Verification Code", "ABC123")
+    ]));
+    return true;
+  }
+
+  if (action === "send-credits") {
+    await interaction.showModal(dashboardModal("citizen-modal:send-credits", "Send Panem Credits", [
+      shortModalInput("recipient", "Recipient", "Union Security ID, Discord ID, or citizen name"),
+      shortModalInput("amount", "Amount", "50"),
+      shortModalInput("note", "Note", "Civic payment", false)
+    ]));
+    return true;
+  }
+
+  if (action === "sell-item") {
+    await interaction.showModal(dashboardModal("citizen-modal:sell-item", "Sell or List Item", [
+      shortModalInput("item", "Item", "coal"),
+      shortModalInput("quantity", "Quantity", "1"),
+      shortModalInput("price", "Listing Price Optional", "Leave blank to sell to the state", false)
+    ]));
+    return true;
+  }
+
+  if (action === "buy-item") {
+    await interaction.showModal(dashboardModal("citizen-modal:buy-item", "Buy Marketplace Item", [
+      shortModalInput("item", "Item", "fish"),
+      shortModalInput("quantity", "Quantity", "1")
+    ]));
+    return true;
+  }
+
+  if (action === "stock-buy" || action === "stock-sell") {
+    await interaction.showModal(dashboardModal(`citizen-modal:${action}`, action === "stock-buy" ? "Buy Stock" : "Sell Stock", [
+      shortModalInput("ticker", "Ticker", "LBE"),
+      shortModalInput("shares", "Shares", "1")
+    ]));
+    return true;
+  }
+
+  if (action === "submit-request") {
+    await interaction.showModal(dashboardModal("citizen-modal:request", "Submit Government Request", [
+      shortModalInput("category", "Category", "Economy, Union ID, District, General"),
+      paragraphModalInput("message", "Message", "Describe what citizen services should review.")
+    ]));
+    return true;
+  }
+
+  await interaction.reply({ embeds: [dashboardReplyEmbed("Dashboard Action", "That dashboard action is not available yet.")], ephemeral: true });
+  return true;
+}
+
+async function handleCitizenDashboardModal(interaction) {
+  if (!interaction.isModalSubmit() || !interaction.customId.startsWith("citizen-modal:")) {
+    return false;
+  }
+
+  const action = interaction.customId.split(":")[1];
+  const economy = await readEconomyStore();
+  const governmentStore = await readGovernmentAccessStore();
+
+  if (action === "link-profile") {
+    const unionSecurityId = modalValue(interaction, "unionSecurityId");
+    const verificationCode = modalValue(interaction, "verificationCode");
+    const citizen = (governmentStore.citizenRecords || []).find((record) =>
+      String(record.unionSecurityId || "").trim().toLowerCase() === unionSecurityId.toLowerCase() &&
+      String(record.verificationCode || "").trim().toLowerCase() === verificationCode.toLowerCase()
+    );
+    if (!citizen || citizen.verificationStatus !== "Verified" || citizen.lostOrStolen) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Link Failed", "That Union Security ID and verification code could not be matched to an active verified citizen profile.")], ephemeral: true });
+      return true;
+    }
+    citizen.discordId = interaction.user.id;
+    citizen.discordTag = interaction.user.tag || interaction.user.username;
+    citizen.updatedAt = new Date().toISOString();
+    const wallet = getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId || citizen.id);
+    if (wallet) {
+      wallet.discordId = interaction.user.id;
+      wallet.displayName = citizen.citizenName || wallet.displayName;
+      wallet.updatedAt = citizen.updatedAt;
+    }
+    await Promise.all([writeGovernmentAccessStore(governmentStore), writeEconomyStore(economy)]);
+    await interaction.reply({ embeds: [dashboardReplyEmbed("Citizen Profile Linked", "Your Discord account is now linked to your WPU citizen profile. Use `/citizen-dashboard` to open your synced dashboard.")], ephemeral: true });
+    return true;
+  }
+
+  const identity = getVerifiedDiscordCitizen(governmentStore, economy, interaction.user);
+  if (!identity?.wallet) {
+    await interaction.reply({ embeds: [linkedCitizenPromptEmbed()], components: dashboardButtons("unlinked"), ephemeral: true });
+    return true;
+  }
+
+  const { citizen, wallet } = identity;
+  const now = new Date().toISOString();
+
+  if (action === "send-credits") {
+    const amount = parsePositiveNumberInput(modalValue(interaction, "amount"));
+    const recipient = findCitizenForDashboardTransfer(governmentStore, economy, modalValue(interaction, "recipient"));
+    const note = modalValue(interaction, "note") || "Discord dashboard transfer";
+    if (!recipient || !amount) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Needs Details", "Enter a valid recipient and amount, for example recipient `WPU-0000-0000` and amount `50`.")], ephemeral: true });
+      return true;
+    }
+    const taxRate = Number(economy.taxRates?.trade_tax || 0);
+    const taxAmount = Math.round(amount * taxRate * 100) / 100;
+    const total = amount + taxAmount;
+    if (total >= 5000) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Confirmation Required", `This transfer totals ${formatCredits(total)}. Use \`/pay\` with confirmation for large transfers.`)], ephemeral: true });
+      return true;
+    }
+    if (wallet.status !== "active" || recipient.wallet.status !== "active" || Number(wallet.balance || 0) < total) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Blocked", "A wallet restriction or insufficient balance prevents this transfer.")], ephemeral: true });
+      return true;
+    }
+    wallet.balance -= total;
+    recipient.wallet.balance = Number(recipient.wallet.balance || 0) + amount;
+    wallet.updatedAt = now;
+    recipient.wallet.updatedAt = now;
+    pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: recipient.wallet.id, amount, type: "transfer", reason: note, taxAmount, createdBy: interaction.user.id });
+    await writeEconomyStore(economy);
+    await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Complete", `${formatCredits(amount)} sent to ${recipient.citizen.citizenName || recipient.wallet.displayName}. Tax: ${formatCredits(taxAmount)}.`)], components: dashboardComponents("wallet"), ephemeral: true });
+    return true;
+  }
+
+  if (action === "sell-item") {
+    const itemInput = modalValue(interaction, "item");
+    const quantity = parsePositiveIntInput(modalValue(interaction, "quantity"));
+    const price = parsePositiveNumberInput(modalValue(interaction, "price"));
+    const item = (economy.inventoryItems || inventoryItemDefaults).find((entry) => entry.id === itemInput || String(entry.name || "").toLowerCase() === itemInput.toLowerCase()) ||
+      (economy.marketItems || []).find((entry) => entry.id === itemInput || String(entry.name || "").toLowerCase() === itemInput.toLowerCase());
+    if (!item || !quantity || wallet.status !== "active" || !removeEconomyHolding(wallet, item.id, quantity)) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Item Action Blocked", "That item could not be found in your inventory. Try the Inventory section first.")], ephemeral: true });
+      return true;
+    }
+    if (["rare", "epic", "legendary"].includes(inventoryRarity(item))) {
+      addEconomyHolding(wallet, item.id, quantity, inventoryItemValue(item, economy));
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Confirmation Required", `${item.name} is ${inventoryRarity(item)}. Use \`/sell\` or \`/list\` with confirmation to sell rare items.`)], ephemeral: true });
+      return true;
+    }
+    if (price) {
+      economy.listings = [{ id: createId("listing"), sellerWalletId: wallet.id, itemId: item.id, quantity, price, status: "active", createdAt: now }, ...(economy.listings || [])];
+      pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "market-listings", amount: quantity * price, type: "listing_created", reason: `${quantity} x ${item.name}`, createdBy: interaction.user.id, meta: { key: item.id } });
+      await writeEconomyStore(economy);
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Marketplace Listing Created", `${quantity} x ${item.name} listed at ${formatCredits(price)} each.`)], components: dashboardComponents("marketplace"), ephemeral: true });
+      return true;
+    }
+    const value = inventoryItemValue(item, economy) * quantity;
+    wallet.balance += value;
+    wallet.updatedAt = now;
+    pushEconomyTransaction(economy, { fromWalletId: "state-procurement", toWalletId: wallet.id, amount: value, type: "inventory_sell", reason: `${quantity} x ${item.name}`, createdBy: interaction.user.id, meta: { key: item.id, quantity } });
+    await writeEconomyStore(economy);
+    await interaction.reply({ embeds: [dashboardReplyEmbed("State Purchase Recorded", `${quantity} x ${item.name} sold for ${formatCredits(value)}.`)], components: dashboardComponents("inventory"), ephemeral: true });
+    return true;
+  }
+
+  if (action === "buy-item") {
+    const itemInput = modalValue(interaction, "item");
+    const quantity = parsePositiveIntInput(modalValue(interaction, "quantity"));
+    const item = (economy.marketItems || []).find((entry) => entry.id === itemInput || String(entry.name || "").toLowerCase() === itemInput.toLowerCase());
+    if (!item || !quantity || Number(item.stock || 0) < quantity || wallet.status !== "active") {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Purchase Rejected", "That marketplace good is unavailable, out of stock, or your wallet is restricted.")], ephemeral: true });
+      return true;
+    }
+    const subtotal = Number(item.currentPrice || item.basePrice || 0) * quantity;
+    const taxType = item.category === "Luxury Goods" ? "luxury_goods_tax" : "trade_tax";
+    const taxAmount = Math.round(subtotal * Number(economy.taxRates?.[taxType] || 0) * 100) / 100;
+    if (Number(wallet.balance || 0) < subtotal + taxAmount) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Purchase Rejected", `You need ${formatCredits(subtotal + taxAmount)} for this order.`)], ephemeral: true });
+      return true;
+    }
+    wallet.balance -= subtotal + taxAmount;
+    wallet.updatedAt = now;
+    item.stock -= quantity;
+    addEconomyHolding(wallet, item.id, quantity, Number(item.currentPrice || item.basePrice || 0));
+    pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "market", amount: subtotal, type: "market_buy", reason: `${quantity} x ${item.name}`, taxAmount, createdBy: interaction.user.id });
+    await writeEconomyStore(economy);
+    await interaction.reply({ embeds: [dashboardReplyEmbed("Purchase Approved", `${quantity} x ${item.name} purchased for ${formatCredits(subtotal + taxAmount)}.`)], components: dashboardComponents("marketplace"), ephemeral: true });
+    return true;
+  }
+
+  if (action === "stock-buy" || action === "stock-sell") {
+    const company = findStockCompany(economy, modalValue(interaction, "ticker"));
+    const shares = parsePositiveIntInput(modalValue(interaction, "shares"));
+    ensureStockCollections(wallet);
+    if (!company || company.status !== "active" || wallet.status !== "active" || wallet.portfolioFrozen || !shares) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("PSE Trade Rejected", "Ticker, trading status, wallet restrictions, or share amount prevented this trade.")], ephemeral: true });
+      return true;
+    }
+    const taxRate = Number(economy.stockSettings?.transactionTax || 0.015);
+    const fee = Number(economy.stockSettings?.transactionFee || 2);
+    const position = getDiscordStockPosition(wallet, company.ticker);
+    const subtotal = Math.round(Number(company.sharePrice || 0) * shares * 100) / 100;
+    const tax = Math.round(subtotal * taxRate * 100) / 100;
+    if (action === "stock-buy") {
+      const total = subtotal + tax + fee;
+      if (total >= 5000) {
+        await interaction.reply({ embeds: [dashboardReplyEmbed("Confirmation Required", `This stock order costs ${formatCredits(total)}. Use \`/buy-stock\` with confirmation for large orders.`)], ephemeral: true });
+        return true;
+      }
+      if (Number(wallet.balance || 0) < total) {
+        await interaction.reply({ embeds: [dashboardReplyEmbed("PSE Trade Rejected", `You need ${formatCredits(total)} for this order.`)], ephemeral: true });
+        return true;
+      }
+      discordMoveStock(company, Math.min(0.018, shares / 10000));
+      const previousShares = Number(position.shares || 0);
+      const previousCost = previousShares * Number(position.averagePrice || 0);
+      position.shares = previousShares + shares;
+      position.averagePrice = Math.round(((previousCost + subtotal) / position.shares) * 100) / 100;
+      wallet.balance -= total;
+      economy.stockTrades = [{ id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "buy", shares, price: company.sharePrice, subtotal, tax, fee, createdAt: now, createdBy: interaction.user.id }, ...(economy.stockTrades || [])].slice(0, 1000);
+      pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "pse", amount: total, type: "stock_buy", reason: `${shares} ${company.ticker} shares`, taxAmount: tax, createdBy: interaction.user.id, meta: { key: company.ticker } });
+      await writeEconomyStore(economy);
+      await interaction.reply({ embeds: [dashboardReplyEmbed("PSE Buy Order Filled", `${shares} ${company.ticker} shares purchased for ${formatCredits(total)}.`)], components: dashboardComponents("stocks"), ephemeral: true });
+      return true;
+    }
+    if (Number(position.shares || 0) < shares) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("PSE Trade Rejected", "You do not hold enough shares.")], ephemeral: true });
+      return true;
+    }
+    discordMoveStock(company, -Math.min(0.018, shares / 10000));
+    const proceeds = Math.max(0, subtotal - tax - fee);
+    position.shares -= shares;
+    wallet.stockPortfolio = wallet.stockPortfolio.filter((entry) => Number(entry.shares || 0) > 0);
+    wallet.balance += proceeds;
+    economy.stockTrades = [{ id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "sell", shares, price: company.sharePrice, subtotal, tax, fee, createdAt: now, createdBy: interaction.user.id }, ...(economy.stockTrades || [])].slice(0, 1000);
+    pushEconomyTransaction(economy, { fromWalletId: "pse", toWalletId: wallet.id, amount: proceeds, type: "stock_sell", reason: `${shares} ${company.ticker} shares`, taxAmount: tax, createdBy: interaction.user.id, meta: { key: company.ticker } });
+    await writeEconomyStore(economy);
+    await interaction.reply({ embeds: [dashboardReplyEmbed("PSE Sell Order Filled", `${shares} ${company.ticker} shares sold for ${formatCredits(proceeds)}.`)], components: dashboardComponents("stocks"), ephemeral: true });
+    return true;
+  }
+
+  if (action === "request") {
+    const request = {
+      id: createId("request"),
+      citizenId: citizen.id,
+      citizenName: citizen.citizenName,
+      district: citizen.district || wallet.district || "",
+      category: modalValue(interaction, "category") || "General",
+      priority: "Normal",
+      message: modalValue(interaction, "message"),
+      attachments: "Submitted from Discord citizen dashboard.",
+      status: "Submitted",
+      assignedMinistry: "Citizen Services",
+      governmentNotes: "",
+      citizenResponse: "",
+      escalation: "",
+      createdAt: now,
+      updatedAt: now
+    };
+    governmentStore.citizenRequests = [request, ...(governmentStore.citizenRequests || [])];
+    await writeGovernmentAccessStore(governmentStore);
+    await interaction.reply({ embeds: [dashboardReplyEmbed("Request Submitted", `Citizen Services request ${request.id} has been filed and will appear in the website portal.`)], components: dashboardComponents("requests"), ephemeral: true });
+    return true;
+  }
+
+  await interaction.reply({ embeds: [dashboardReplyEmbed("Dashboard Action", "That dashboard submission could not be processed.")], ephemeral: true });
+  return true;
+}
+
 function requireEconomyAdmin(interaction) {
   return hasSlashCommandAccess(interaction, PermissionsBitField.Flags.ManageGuild);
 }
@@ -585,6 +1109,7 @@ async function handleEconomySlashCommand(interaction) {
   const helpCommands = new Set(["help-economy", "help-market", "help-inventory", "help-stocks", "help-citizen", "help-mss"]);
   const citizenEconomyCommands = new Set([
     "balance",
+    "citizen-dashboard",
     "pay",
     "transactions",
     "daily",
@@ -725,13 +1250,8 @@ async function handleEconomySlashCommand(interaction) {
 
   const wallet = identity?.wallet;
 
-  if (name === "balance") {
-    await replyEconomy(
-      interaction,
-      ministryEmbed("Panem Credit Balance", `${identity.citizen.name}\n${wallet.displayName}\n${formatCredits(wallet.balance)}\n${wallet.title || titleForBalance(wallet.balance)} / ${wallet.status}`),
-      false,
-      economyQuickLinks("transactions", "marketplace", "inventory", "stocks")
-    );
+  if (name === "balance" || name === "citizen-dashboard") {
+    await replyCitizenDashboard(interaction, "overview");
     return true;
   }
 
@@ -3672,6 +4192,7 @@ function buildSlashCommands() {
         option.setName("user").setDescription("Member to inspect.").setRequired(true)
       ),
     new SlashCommandBuilder().setName("balance").setDescription("Show your Panem Credit balance."),
+    new SlashCommandBuilder().setName("citizen-dashboard").setDescription("Open your private interactive WPU citizen dashboard."),
     new SlashCommandBuilder()
       .setName("pay")
       .setDescription("Send Panem Credits to another citizen.")
@@ -4468,11 +4989,19 @@ client.on("messageCreate", async (message) => {
 });
 
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) {
-    return;
-  }
-
   try {
+    if (await handleCitizenDashboardComponent(interaction)) {
+      return;
+    }
+
+    if (await handleCitizenDashboardModal(interaction)) {
+      return;
+    }
+
+    if (!interaction.isChatInputCommand()) {
+      return;
+    }
+
     if (await handleEconomySlashCommand(interaction)) {
       return;
     }
