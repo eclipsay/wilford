@@ -156,10 +156,10 @@ function districtNumber(name) {
 }
 
 const governorNames = {
-  "The Capitol": "Governor Aurelia Venn",
-  "District 1": "Governor Cassian Vale",
+  "The Capitol": "Clyde Barrow",
+  "District 1": "Lady Aedra",
   "District 2": "Governor Marcellus Stone",
-  "District 3": "Governor Iona Circuit",
+  "District 3": "Hubert Skeletrix",
   "District 4": "Governor Nerida Quay",
   "District 5": "Governor Solen Grid",
   "District 6": "Governor Thaddeus Rail",
@@ -170,6 +170,12 @@ const governorNames = {
   "District 11": "Governor Amara Orchard",
   "District 12": "Governor Cole Ashford",
   "District 13": "Governor Severin Locke"
+};
+
+const governorPortraits = {
+  "The Capitol": "/ClydeBarrowPortrait.png",
+  "District 1": "/AedraPortrait.png",
+  "District 3": "/HubertSkeletrixPortrait.png"
 };
 
 export function defaultDistrictProfiles(economyDistricts = districtEconomyDefaults) {
@@ -183,7 +189,7 @@ export function defaultDistrictProfiles(economyDistricts = districtEconomyDefaul
       industry: district.productionType,
       governorName,
       governorTitle: number === 0 ? "Capitol Governor" : `${district.name} Governor`,
-      governorPortrait: "/wpu-grand-seal.png",
+      governorPortrait: governorPortraits[district.name] || "/wpu-grand-seal.png",
       governorBiography: `${governorName} administers ${district.name === "The Capitol" ? "central command, civic culture, and finance" : `${district.name} production, census order, and civic welfare`} under the Grand Seal.`,
       loyaltyStatement: number === 13 ? "Restricted service remains loyal through silence and precision." : "The district serves the Union through ordered production.",
       appointmentDate: "2026-04-28",
