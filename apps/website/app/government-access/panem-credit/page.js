@@ -27,6 +27,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
   const treasuryTaxReceipts = store.taxRecords.filter((record) => record.paidIntoWalletId === "treasury" || record.paidInto === "WPU State Treasury" || record.status === "paid");
   const treasuryGrants = treasuryTransactions.filter((transaction) => ["grant", "grant_payment", "rebate"].includes(transaction.type));
   const autoTax = store.autoTax || { enabled: false, frequency: "daily", executionTime: "09:00", lastRunAt: "", nextRunAt: "" };
+  const taxDistribution = store.taxDistribution || { stateShare: 80, districtShare: 20, lastUpdatedAt: "", updatedBy: "system" };
   const autoTaxEnabled = Boolean(autoTax.enabled);
   const formatDateTime = (value) => value ? new Date(value).toLocaleString("en-GB") : "Not recorded";
   const now = Date.now();
@@ -132,7 +133,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
         {params?.error ? (
           <section className="application-notice application-notice--error">
             <strong>Update Rejected</strong>
-            <p>{params.error === "tax-rate" ? "Confirm the tax change and enter a percentage from 0 to 100." : "The requested treasury update could not be saved."}</p>
+            <p>{params.error === "tax-rate" ? "Confirm the tax change and enter a percentage from 0 to 100." : params.error === "tax-distribution" ? "Tax Distribution must total 100%." : "The requested treasury update could not be saved."}</p>
           </section>
         ) : null}
 
@@ -167,7 +168,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
         <section className="panel government-user-panel">
           <p className="eyebrow">State Treasury</p>
           <h2>{treasuryWallet?.displayName || "WPU State Treasury"}: {formatCredits(treasuryWallet?.balance || 0)}</h2>
-          <p>All collected taxes are deposited into the WPU State Treasury.</p>
+          <p>Collected taxes are split between the WPU State Treasury and citizen district funds.</p>
           <div className="metric-grid">
             <span><strong>{formatCredits(treasuryIncome)}</strong> Income history</span>
             <span><strong>{formatCredits(treasurySpending)}</strong> Spending history</span>
@@ -231,6 +232,30 @@ export default async function PanemCreditControlPage({ searchParams }) {
                     </tbody>
                   </table>
                 </div>
+              </div>
+              <div className="treasury-tax-overview">
+                <div className="panel__header">
+                  <div>
+                    <p className="eyebrow">Tax Distribution</p>
+                    <h3>State Treasury and District Fund Split</h3>
+                  </div>
+                  <strong>{taxDistribution.stateShare}% / {taxDistribution.districtShare}%</strong>
+                </div>
+                <div className="metric-grid">
+                  <span><strong>{taxDistribution.stateShare}%</strong> State Treasury Share</span>
+                  <span><strong>{taxDistribution.districtShare}%</strong> District Fund Share</span>
+                  <span><strong>{formatDateTime(taxDistribution.lastUpdatedAt)}</strong> Last updated</span>
+                  <span><strong>{taxDistribution.updatedBy || "system"}</strong> Updated by</span>
+                </div>
+                <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
+                  <input name="intent" type="hidden" value="set-tax-distribution" />
+                  <div className="public-application-grid public-application-grid--three">
+                    <label className="public-application-field"><span>State Treasury Share</span><input defaultValue={taxDistribution.stateShare} max="100" min="0" name="stateSharePercent" required step="0.01" type="number" /></label>
+                    <label className="public-application-field"><span>District Share</span><input defaultValue={taxDistribution.districtShare} max="100" min="0" name="districtSharePercent" required step="0.01" type="number" /></label>
+                    <label className="public-application-toggle"><input name="confirmTaxDistribution" required type="checkbox" /><span>Confirm total equals 100%</span></label>
+                  </div>
+                  <button className="button button--solid-site" type="submit">Save Distribution</button>
+                </form>
               </div>
               <div className="panem-ledger-layout">
                 <form action="/government-access/panem-credit/action" className="public-application-form auto-tax-control" method="post">
@@ -522,7 +547,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
                       <span>
                         {taxLabel(tax.taxType)} / {tax.status}
                         <br />
-                        {tax.reason || tax.createdBy || "Treasury record"} / paid into: {tax.paidInto || "WPU State Treasury"}
+                        {tax.reason || tax.createdBy || "Treasury record"} / state: {formatCredits(tax.stateAmount ?? tax.amount)} / district: {formatCredits(tax.districtAmount || 0)} {tax.districtFund ? `(${tax.districtFund})` : ""}
                         {tax.createdAt ? ` / ${new Date(tax.createdAt).toLocaleString("en-GB")}` : ""}
                       </span>
                       <strong>{formatCredits(tax.amount)}</strong>
@@ -565,6 +590,16 @@ export default async function PanemCreditControlPage({ searchParams }) {
                 <input name="districtId" type="hidden" value={district.id} />
                 <h3>{district.name}</h3>
                 <p>{district.productionType}</p>
+                {(() => {
+                  const fund = store.districtFunds?.find((entry) => entry.district === district.name);
+                  return (
+                    <div className="metric-grid">
+                      <span><strong>{formatCredits(fund?.balance || 0)}</strong> District fund balance</span>
+                      <span><strong>{formatCredits(fund?.taxReceivedWeek || 0)}</strong> Tax this week</span>
+                      <span><strong>{formatCredits(fund?.taxReceivedMonth || 0)}</strong> Tax this month</span>
+                    </div>
+                  );
+                })()}
                 <div className="public-application-grid public-application-grid--three">
                   <label className="public-application-field"><span>Supply</span><input defaultValue={district.supplyLevel} disabled={!fullAccess} name="supplyLevel" type="number" /></label>
                   <label className="public-application-field"><span>Demand</span><input defaultValue={district.demandLevel} disabled={!fullAccess} name="demandLevel" type="number" /></label>
@@ -615,7 +650,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
               <ul className="government-mini-list">
                 {store.taxRecords.slice(0, 20).map((tax) => (
                   <li key={tax.id}>
-                    <span>{taxLabel(tax.taxType)} / {tax.status} / paid into: {tax.paidInto || "WPU State Treasury"}</span>
+                    <span>{taxLabel(tax.taxType)} / {tax.status} / state {formatCredits(tax.stateAmount ?? tax.amount)} / district {formatCredits(tax.districtAmount || 0)} {tax.districtFund ? `(${tax.districtFund})` : ""}</span>
                     <strong>{formatCredits(tax.amount)}</strong>
                   </li>
                 ))}

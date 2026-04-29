@@ -1,4 +1,9 @@
-import { addAuditEvent } from "./government-auth";
+import {
+  addAuditEvent,
+  hasSpecialGovernmentPermission,
+  inferAssignedDistrict,
+  normalizeDistrictName
+} from "./government-auth";
 import {
   citizenAlertAuthorities,
   citizenAlertTypes,
@@ -80,6 +85,28 @@ export function canIssueAlertAction(user, action = "none") {
   return ["Government Official", "Minister", "District Governor", "Citizen Clerk", "Judicial Officer"].includes(role);
 }
 
+export function allowedAlertAuthorityForUser(user = {}) {
+  const role = user?.role || "";
+  if (role === "Supreme Chairman") return "Supreme Chairman";
+  if (role === "Executive Director" || role === "Executive Command") return "Executive Director";
+  if (role === "Ministry of Credit & Records" || role === "Minister of Credit & Records") return "Ministry of Credit & Records";
+  if (["MSS Command", "Minister of State Security", "MSS Agent", "Security Command"].includes(role)) return "MSS";
+  if (role === "Judicial Officer") return "Supreme Court";
+  if (role === "District Governor") return "District Governor";
+  if (role === "Minister" || role === "Government Official" || role === "Citizen Clerk") return "Citizen Services";
+  return "";
+}
+
+export function alertAuthorityOptionsForUser(user = {}) {
+  const authority = allowedAlertAuthorityForUser(user);
+  return authority ? [authority] : [];
+}
+
+function isForbiddenAuthority(user, requestedAuthority) {
+  const allowed = allowedAlertAuthorityForUser(user);
+  return !allowed || requestedAuthority !== allowed;
+}
+
 export async function resolveAlertTargets({ targetMode, citizenId, district }) {
   const state = await getCitizenState();
   if (targetMode === "all") return { state, targets: state.citizenRecords };
@@ -98,9 +125,9 @@ export async function resolveAlertTargets({ targetMode, citizenId, district }) {
 export async function issueCitizenAlerts(fields, actor) {
   const targetMode = cleanText(fields.targetMode || "citizen", 40);
   const citizenId = cleanText(fields.citizenId || "", 120);
-  const district = cleanText(fields.district || "", 80);
+  let district = normalizeDistrictName(fields.district || "");
   const type = citizenAlertTypes.includes(fields.type) ? fields.type : "General Notice";
-  const issuingAuthority = citizenAlertAuthorities.includes(fields.issuingAuthority)
+  let issuingAuthority = citizenAlertAuthorities.includes(fields.issuingAuthority)
     ? fields.issuingAuthority
     : cleanText(fields.issuingAuthority || "Government", 160);
   const enforcementAction = citizenEnforcementActions.includes(fields.enforcementAction)
@@ -111,16 +138,59 @@ export async function issueCitizenAlerts(fields, actor) {
   const discordDeliveryRequested = fields.discordDelivery === "dm";
   const websiteOnly = !discordDeliveryRequested;
   const actorName = actor?.displayName || actor?.username || "system";
+  const state = await getCitizenState();
+  const governorDistrict = actor?.role === "District Governor"
+    ? inferAssignedDistrict(actor, state.districtProfiles)
+    : "";
+
+  if (actor?.role === "District Governor") {
+    issuingAuthority = "District Governor";
+    district = governorDistrict;
+  }
+
+  if (isForbiddenAuthority(actor, issuingAuthority)) {
+    await addAuditEvent(
+      actorName,
+      "authority mismatch attempt",
+      `Requested ${issuingAuthority || "unknown"} alert authority as ${actor?.role || "unknown"}.`,
+      "denied"
+    ).catch(() => {});
+    return { ok: false, reason: "authority-denied", alerts: [] };
+  }
 
   if (!canIssueAlertAction(actor, enforcementAction)) {
     return { ok: false, reason: "permission-denied", alerts: [] };
+  }
+
+  if (actor?.role === "District Governor") {
+    const canUnionWide = hasSpecialGovernmentPermission(actor, "union-wide-alerts");
+    if (!governorDistrict) {
+      await addAuditEvent(actorName, "district alert denied", "District Governor has no assigned district.", "denied").catch(() => {});
+      return { ok: false, reason: "district-denied", alerts: [] };
+    }
+    if (targetMode === "all" && !canUnionWide) {
+      await addAuditEvent(actorName, "authority mismatch attempt", "District Governor attempted Union-wide alert.", "denied").catch(() => {});
+      return { ok: false, reason: "authority-denied", alerts: [] };
+    }
   }
 
   if (["emergency_taxation", "fine", "asset_seizure"].includes(enforcementAction) && amount >= 5000 && fields.confirmLargeDeduction !== "on") {
     return { ok: false, reason: "confirmation-required", alerts: [] };
   }
 
-  const { state, targets } = await resolveAlertTargets({ targetMode, citizenId, district });
+  let targets = [];
+  if (targetMode === "all") {
+    targets = state.citizenRecords;
+  } else if (targetMode === "district") {
+    targets = state.citizenRecords.filter((citizen) => normalizeDistrictName(citizen.district) === district);
+  } else {
+    targets = state.citizenRecords.filter((citizen) => citizen.id === citizenId);
+  }
+
+  if (actor?.role === "District Governor") {
+    targets = targets.filter((citizen) => normalizeDistrictName(citizen.district) === governorDistrict);
+  }
+
   if (!targets.length) {
     return { ok: false, reason: "no-targets", alerts: [] };
   }
@@ -192,8 +262,8 @@ export async function issueCitizenAlerts(fields, actor) {
 
   await addAuditEvent(
     actorName,
-    enforcementAction === "none" ? "citizen alert issued" : `citizen enforcement: ${enforcementAction}`,
-    `${type} to ${targetMode} (${targets.length} target${targets.length === 1 ? "" : "s"})`,
+    actor?.role === "District Governor" ? "district alert issued" : enforcementAction === "none" ? "citizen alert issued" : `citizen enforcement: ${enforcementAction}`,
+    `${issuingAuthority} / ${type} to ${targetMode}${district ? ` / ${district}` : ""} (${targets.length} target${targets.length === 1 ? "" : "s"})`,
     targets.length ? "success" : "failed"
   );
 

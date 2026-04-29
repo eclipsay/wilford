@@ -49,8 +49,10 @@ export const citizenAlertAuthorities = [
   "Supreme Chairman",
   "Executive Director",
   "Ministry of Credit & Records",
+  "MSS",
   "Ministry of State Security",
   "Supreme Court",
+  "District Governor",
   "Citizen Services",
   "Marketplace Authority",
   "Panem Stock Exchange"

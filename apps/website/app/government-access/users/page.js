@@ -7,6 +7,7 @@ import {
   getGovernmentUsers,
   requireGovernmentUser
 } from "../../../lib/government-auth";
+import { getCitizenState } from "../../../lib/citizen-state";
 
 export const metadata = {
   title: "User Control Panel | Government Access"
@@ -18,7 +19,7 @@ export const revalidate = 0;
 export default async function GovernmentUserControlPage({ searchParams }) {
   await requireGovernmentUser("userControl");
   const params = await searchParams;
-  const users = await getGovernmentUsers();
+  const [users, citizenState] = await Promise.all([getGovernmentUsers(), getCitizenState()]);
 
   return (
     <SiteLayout>
@@ -94,6 +95,15 @@ export default async function GovernmentUserControlPage({ searchParams }) {
                 Stored as a hash only. The temporary password appears once after creation.
               </small>
             </label>
+            <label className="public-application-field">
+              <span>Assigned District</span>
+              <select name="assignedDistrict">
+                <option value="">None</option>
+                {citizenState.districtProfiles.map((district) => (
+                  <option key={district.id} value={district.canonicalName}>{district.canonicalName}</option>
+                ))}
+              </select>
+            </label>
             <label className="public-application-toggle">
               <input defaultChecked name="forcePasswordChange" type="checkbox" />
               <span>Force password change on first login</span>
@@ -146,6 +156,15 @@ export default async function GovernmentUserControlPage({ searchParams }) {
                   <label className="public-application-field">
                     <span>Account Status</span>
                     <input readOnly value={governmentUser.active ? "Active" : "Inactive"} />
+                  </label>
+                  <label className="public-application-field">
+                    <span>Assigned District</span>
+                    <select defaultValue={governmentUser.assignedDistrict || ""} name="assignedDistrict">
+                      <option value="">None</option>
+                      {citizenState.districtProfiles.map((district) => (
+                        <option key={district.id} value={district.canonicalName}>{district.canonicalName}</option>
+                      ))}
+                    </select>
                   </label>
                 </div>
                 <div className="public-application-grid">

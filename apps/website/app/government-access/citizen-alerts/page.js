@@ -9,6 +9,8 @@ import {
   getCitizenState
 } from "../../../lib/citizen-state";
 import { canAccess, requireGovernmentUser } from "../../../lib/government-auth";
+import { alertAuthorityOptionsForUser } from "../../../lib/citizen-alerts";
+import { inferAssignedDistrict } from "../../../lib/government-auth";
 
 export const metadata = {
   title: "Citizen Alerts | Government Access"
@@ -41,6 +43,13 @@ export default async function CitizenAlertsPage({ searchParams }) {
     .filter((alert) => !typeFilter || alert.type === typeFilter)
     .filter((alert) => !statusFilter || (alert.status || "open") === statusFilter || (statusFilter === "unread" && !alert.readByCitizen))
     .slice(0, 80);
+  const authorityOptions = alertAuthorityOptionsForUser(user);
+  const isGovernor = user.role === "District Governor";
+  const governorDistrict = isGovernor ? inferAssignedDistrict(user, state.districtProfiles) : "";
+  const visibleCitizens = isGovernor
+    ? state.citizenRecords.filter((citizen) => citizen.district === governorDistrict)
+    : state.citizenRecords;
+  const visibleDistricts = isGovernor && governorDistrict ? [governorDistrict] : districts;
 
   return (
     <SiteLayout>
@@ -62,7 +71,13 @@ export default async function CitizenAlertsPage({ searchParams }) {
         {params?.error ? (
           <section className="application-notice application-notice--error">
             <strong>Alert Failed</strong>
-            <p>{params.error === "confirmation" ? "Large deductions require confirmation before execution." : "Your role cannot issue that alert or no target was found."}</p>
+            <p>
+              {params.error === "confirmation"
+                ? "Large deductions require confirmation before execution."
+                : params.error === "authority"
+                  ? "You are not authorised to issue alerts under this authority."
+                  : "Your role cannot issue that alert or no target was found."}
+            </p>
           </section>
         ) : null}
 
@@ -80,16 +95,16 @@ export default async function CitizenAlertsPage({ searchParams }) {
             <div className="public-application-grid public-application-grid--three">
               <label className="public-application-field">
                 <span>Target mode</span>
-                <select name="targetMode">
+                <select defaultValue={isGovernor ? "district" : "citizen"} name="targetMode">
                   <option value="citizen">One citizen</option>
                   <option value="district">District</option>
-                  <option value="all">All citizens</option>
+                  {!isGovernor ? <option value="all">All citizens</option> : null}
                 </select>
               </label>
               <label className="public-application-field">
                 <span>Citizen</span>
                 <select name="citizenId">
-                  {state.citizenRecords.map((citizen) => (
+                  {visibleCitizens.map((citizen) => (
                     <option key={citizen.id} value={citizen.id}>{citizen.name} / {citizen.district}</option>
                   ))}
                 </select>
@@ -97,7 +112,7 @@ export default async function CitizenAlertsPage({ searchParams }) {
               <label className="public-application-field">
                 <span>District</span>
                 <select name="district">
-                  {districts.map((district) => <option key={district} value={district}>{district}</option>)}
+                  {visibleDistricts.map((district) => <option key={district} value={district}>{district}</option>)}
                 </select>
               </label>
             </div>
@@ -106,7 +121,7 @@ export default async function CitizenAlertsPage({ searchParams }) {
               <label className="public-application-field">
                 <span>Issuing authority</span>
                 <select name="issuingAuthority">
-                  {citizenAlertAuthorities.map((authority) => <option key={authority} value={authority}>{authority}</option>)}
+                  {(authorityOptions.length ? authorityOptions : citizenAlertAuthorities).map((authority) => <option key={authority} value={authority}>{authority}</option>)}
                 </select>
               </label>
               <label className="public-application-field">

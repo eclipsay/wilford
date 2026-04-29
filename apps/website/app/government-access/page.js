@@ -90,6 +90,14 @@ const systems = [
     permission: "citizenRequestControl"
   },
   {
+    group: "District Administration",
+    icon: "DG",
+    title: "District Governor Panel",
+    text: "Manage assigned district citizens, local alerts, district fund visibility, requests, and production summaries.",
+    href: "/government-access/district-governor",
+    permission: "districtGovernorPanel"
+  },
+  {
     group: "MSS",
     icon: "🛂",
     title: "Union Security Registry",

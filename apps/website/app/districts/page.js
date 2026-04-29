@@ -44,6 +44,7 @@ export default async function DistrictsPage() {
         <section className="district-profile-grid scroll-fade" aria-label="District profiles">
           {state.districtProfiles.map((district) => {
             const economyDistrict = economy.districts.find((item) => item.id === district.id || item.name === district.canonicalName);
+            const districtFund = economy.districtFunds?.find((fund) => fund.district === district.canonicalName);
             const goods = economy.marketItems.filter((item) => item.district === district.canonicalName).slice(0, 3);
             const citizens = state.citizenRecords.filter((citizen) => citizen.district === district.canonicalName || citizen.district === district.name);
             const isCapitol = district.name === "Capitol" || district.canonicalName === "The Capitol";
@@ -76,6 +77,7 @@ export default async function DistrictsPage() {
                     <span><strong>{district.industry}</strong> Industry</span>
                     <span><strong>{economyDistrict?.loyaltyScore ?? district.loyaltyRating}</strong> Loyalty</span>
                     <span><strong>{formatCredits(economyDistrict?.tradeVolume || 0)}</strong> Trade volume</span>
+                    <span><strong>{formatCredits(districtFund?.balance || 0)}</strong> District fund</span>
                     <span><strong>{citizens.length}</strong> Registered citizens</span>
                   </div>
                   <dl className="panem-ledger">

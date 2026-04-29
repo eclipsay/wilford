@@ -83,6 +83,7 @@ export const permissions = {
     "Executive Director",
     "Executive Command",
     "Ministry of Credit & Records",
+    "Minister of Credit & Records",
     "MSS Command",
     "Minister of State Security",
     "MSS Agent",
@@ -92,6 +93,7 @@ export const permissions = {
     "District Governor",
     "Citizen Clerk"
   ],
+  districtGovernorPanel: ["Supreme Chairman", "Executive Director", "District Governor"],
   identityRegistry: [
     "Supreme Chairman",
     "Executive Director",
@@ -103,6 +105,7 @@ export const permissions = {
     "Executive Director",
     "Executive Command",
     "Ministry of Credit & Records",
+    "Minister of Credit & Records",
     "MSS Command",
     "Minister of State Security",
     "MSS Agent"
@@ -154,6 +157,7 @@ const seedUsers = [
   passwordHash: hashPassword(devTemporaryPassword),
   createdAt: "2026-04-27T00:00:00.000Z",
   lastLoginAt: "",
+  assignedDistrict: "",
   notes: "Development seed user. Replace temporary password immediately."
 }));
 
@@ -315,6 +319,7 @@ function normalizeUser(user, index) {
     passwordHash: String(user?.passwordHash || "").trim(),
     createdAt: user?.createdAt || new Date().toISOString(),
     lastLoginAt: user?.lastLoginAt || "",
+    assignedDistrict: cleanText(user?.assignedDistrict || user?.district || "", 80),
     notes: cleanText(user?.notes || "", 1000)
   };
 }
@@ -506,6 +511,7 @@ export async function getCurrentGovernmentUser() {
       passwordHash: "",
       createdAt: "",
       lastLoginAt: "",
+      assignedDistrict: cleanText(session.assignedDistrict || "", 80),
       notes: "Session-backed user."
     };
   }
@@ -623,6 +629,7 @@ export async function createGovernmentUser(actor, fields) {
       passwordHash: hashPassword(password),
       createdAt: new Date().toISOString(),
       lastLoginAt: "",
+      assignedDistrict: cleanText(fields.assignedDistrict, 80),
       notes: cleanText(fields.notes, 1000)
     },
     content.governmentUsers.length
@@ -645,6 +652,7 @@ export async function updateGovernmentUser(actor, username, fields) {
             role: fields.role,
             active: fields.active,
             forcePasswordChange: fields.forcePasswordChange,
+            assignedDistrict: cleanText(fields.assignedDistrict, 80),
             notes: cleanText(fields.notes, 1000)
           },
           0
@@ -696,8 +704,51 @@ export function parseUserForm(formData) {
     active: formData.get("active") === "on",
     forcePasswordChange: formData.get("forcePasswordChange") === "on",
     temporaryPassword: String(formData.get("temporaryPassword") || "").trim(),
-    notes: String(formData.get("notes") || "").trim()
+    notes: String(formData.get("notes") || "").trim(),
+    assignedDistrict: String(formData.get("assignedDistrict") || "").trim()
   };
+}
+
+export function normalizeDistrictName(value = "") {
+  const district = cleanText(value, 80);
+  if (/^(capitol|the capitol)$/i.test(district)) return "The Capitol";
+  return district;
+}
+
+export function districtSlugForAuth(value = "") {
+  return normalizeDistrictName(value)
+    .toLowerCase()
+    .replace(/^the\s+/, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function inferAssignedDistrict(user = {}, districtProfiles = []) {
+  if (!user) return "";
+  const assigned = normalizeDistrictName(user.assignedDistrict || "");
+  if (assigned) return assigned;
+
+  const notes = String(user.notes || "");
+  const noteMatch = notes.match(/(?:assigned\s*)?district\s*[:=]\s*(the capitol|capitol|district\s*\d{1,2})/i);
+  if (noteMatch) return normalizeDistrictName(noteMatch[1].replace(/\s+/g, " "));
+
+  const usernameSlug = districtSlugForAuth(user.username || "");
+  const displaySlug = districtSlugForAuth(user.displayName || "");
+  const matchedProfile = (districtProfiles || []).find((district) => {
+    const governorSlug = districtSlugForAuth(district.governorName || "");
+    const districtSlug = districtSlugForAuth(district.canonicalName || district.name || "");
+    return [governorSlug, districtSlug, `${districtSlug}-governor`].filter(Boolean).some((slug) =>
+      slug === usernameSlug || slug === displaySlug || (governorSlug && displaySlug.includes(governorSlug))
+    );
+  });
+  return normalizeDistrictName(matchedProfile?.canonicalName || matchedProfile?.name || "");
+}
+
+export function hasSpecialGovernmentPermission(user = {}, permission = "") {
+  const needle = cleanText(permission, 80).toLowerCase();
+  if (!needle) return false;
+  const notes = String(user?.notes || "").toLowerCase();
+  return notes.includes(needle) || notes.includes(needle.replace(/-/g, " "));
 }
 
 export function generateTemporaryPassword() {

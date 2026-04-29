@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { safeAction } from "../../../../lib/action-routes";
-import { assertTrustedPostOrigin, requireGovernmentUser } from "../../../../lib/government-auth";
+import { addAuditEvent, assertTrustedPostOrigin, inferAssignedDistrict, requireGovernmentUser } from "../../../../lib/government-auth";
 import { getCitizenState, updateCitizenRequest } from "../../../../lib/citizen-state";
 import { createCitizenAlert } from "../../../../lib/citizen-alerts";
 import { getEconomyStore, getWallet, grantWorkPermit } from "../../../../lib/panem-credit";
@@ -18,9 +18,16 @@ export const POST = safeAction("government-access/citizen-requests/action", "/go
   const formData = await request.formData();
   const id = String(formData.get("requestId") || "").trim();
   const intent = String(formData.get("intent") || "save").trim();
+  const stateForScope = await getCitizenState();
+  const requestForScope = stateForScope.citizenRequests.find((item) => item.id === id);
+  const governorDistrict = actor.role === "District Governor" ? inferAssignedDistrict(actor, stateForScope.districtProfiles) : "";
+  if (governorDistrict && requestForScope?.district !== governorDistrict && requestForScope?.targetDistrict !== governorDistrict) {
+    await addAuditEvent(actor.username, "district governor access denied", `Attempted request ${id}`, "denied").catch(() => {});
+    return redirectTo(request, "/government-access?denied=1");
+  }
 
   if (intent === "approve-work-permit") {
-    const state = await getCitizenState();
+    const state = stateForScope;
     const requestRecord = state.citizenRequests.find((item) => item.id === id);
     const citizen = state.citizenRecords.find((record) => record.id === requestRecord?.citizenId);
     const economy = await getEconomyStore();

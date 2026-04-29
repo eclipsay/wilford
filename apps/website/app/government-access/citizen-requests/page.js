@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
-import { requireGovernmentUser } from "../../../lib/government-auth";
+import { inferAssignedDistrict, requireGovernmentUser } from "../../../lib/government-auth";
 import {
   assignedMinistries,
   getCitizenState,
@@ -23,10 +23,12 @@ function matches(value, filter) {
 
 export default async function CitizenRequestsControlPage({ searchParams }) {
   const params = await searchParams;
-  await requireGovernmentUser("citizenRequestControl");
+  const user = await requireGovernmentUser("citizenRequestControl");
   const state = await getCitizenState();
-  const districts = [...new Set(state.citizenRecords.map((record) => record.district).filter(Boolean))];
+  const governorDistrict = user.role === "District Governor" ? inferAssignedDistrict(user, state.districtProfiles) : "";
+  const districts = governorDistrict ? [governorDistrict] : [...new Set(state.citizenRecords.map((record) => record.district).filter(Boolean))];
   const requests = state.citizenRequests.filter((request) =>
+    (!governorDistrict || request.district === governorDistrict || request.targetDistrict === governorDistrict) &&
     matches(request.category, params?.category) &&
     matches(request.status, params?.status) &&
     matches(request.district, params?.district) &&

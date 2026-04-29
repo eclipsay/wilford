@@ -38,7 +38,11 @@ export const POST = safeAction("government-access/citizen-alerts/action", "/gove
   const result = await issueCitizenAlerts(Object.fromEntries(formData.entries()), actor);
 
   if (!result.ok) {
-    const error = result.reason === "confirmation-required" ? "confirmation" : "permission";
+    const error = result.reason === "confirmation-required"
+      ? "confirmation"
+      : result.reason === "authority-denied"
+        ? "authority"
+        : "permission";
     return redirectTo(request, `/government-access/citizen-alerts?error=${error}`);
   }
 

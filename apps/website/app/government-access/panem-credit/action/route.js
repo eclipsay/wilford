@@ -213,6 +213,16 @@ export const POST = safeAction("government-access/panem-credit/action", "/govern
     await updateEconomyAdmin({ ...Object.fromEntries(formData.entries()), taxRate: rate }, actorName);
   }
 
+  if (intent === "set-tax-distribution") {
+    if (formData.get("confirmTaxDistribution") !== "on") {
+      return redirectTo(request, "/government-access/panem-credit?error=tax-distribution");
+    }
+    const result = await updateEconomyAdmin(Object.fromEntries(formData.entries()), actorName);
+    if (!result.ok) {
+      return redirectTo(request, "/government-access/panem-credit?error=tax-distribution");
+    }
+  }
+
   if (intent === "district" || intent === "item") {
     await updateEconomyAdmin(Object.fromEntries(formData.entries()), actorName);
   }

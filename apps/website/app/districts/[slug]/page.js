@@ -37,6 +37,7 @@ export default async function DistrictPage({ params }) {
 
   const governor = governorProfileFromDistrict(district);
   const economyDistrict = economy.districts.find((item) => item.id === district.id || item.name === district.canonicalName);
+  const districtFund = economy.districtFunds?.find((fund) => fund.district === district.canonicalName);
   const goods = economy.marketItems.filter((item) => item.district === district.canonicalName).slice(0, 6);
   const relatedArticles = articles
     .filter((article) => {
@@ -96,6 +97,11 @@ export default async function DistrictPage({ params }) {
             <h3>{formatCredits(economyDistrict?.tradeVolume || 0)}</h3>
             <p>Loyalty rating: {economyDistrict?.loyaltyScore ?? district.loyaltyRating}</p>
           </article>
+          <article className="premium-card">
+            <p className="eyebrow">District Fund</p>
+            <h3>{formatCredits(districtFund?.balance || 0)}</h3>
+            <p>Tax received this month: {formatCredits(districtFund?.taxReceivedMonth || 0)}</p>
+          </article>
         </section>
 
         <section className="state-section scroll-fade">
@@ -106,6 +112,8 @@ export default async function DistrictPage({ params }) {
             <div><dt>Landmarks</dt><dd>{district.keyLandmarks.join(", ")}</dd></div>
             <div><dt>Development status</dt><dd>{district.developmentStatus}</dd></div>
             <div><dt>Governor</dt><dd>{district.governorName}</dd></div>
+            <div><dt>Tax received this week</dt><dd>{formatCredits(districtFund?.taxReceivedWeek || 0)}</dd></div>
+            <div><dt>Production value</dt><dd>{formatCredits(economyDistrict?.tradeVolume || 0)}</dd></div>
           </dl>
         </section>
 

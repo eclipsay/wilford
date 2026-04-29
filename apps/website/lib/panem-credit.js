@@ -460,6 +460,13 @@ function defaultTaxRateSettings(taxRates = defaultTaxRates()) {
   ]));
 }
 
+const defaultTaxDistribution = {
+  stateShare: 80,
+  districtShare: 20,
+  lastUpdatedAt: "",
+  updatedBy: "system"
+};
+
 function normalizeTaxRateSettings(settings = {}, taxRates = defaultTaxRates()) {
   const defaults = defaultTaxRateSettings(taxRates);
   return Object.fromEntries(taxTypes.map((tax) => {
@@ -552,12 +559,95 @@ function ensureStateTreasury(store) {
   return wallet;
 }
 
+function districtFundId(districtName = "") {
+  const normalized = normalizeEconomyDistrict(districtName);
+  if (normalized === "The Capitol") return "capitol";
+  return normalized.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unassigned";
+}
+
+function districtFundName(districtName = "") {
+  const normalized = normalizeEconomyDistrict(districtName);
+  return normalized === "The Capitol" ? "Capitol Fund" : `${normalized} Fund`;
+}
+
+function normalizeDistrictFund(fund = {}, district = {}) {
+  const name = normalizeEconomyDistrict(fund.district || district.name || "The Capitol");
+  return {
+    id: cleanText(fund.id || districtFundId(name), 80),
+    district: name,
+    name: cleanText(fund.name || districtFundName(name), 120),
+    balance: Math.max(0, Number(fund.balance || 0)),
+    taxReceivedWeek: Math.max(0, Number(fund.taxReceivedWeek || 0)),
+    taxReceivedMonth: Math.max(0, Number(fund.taxReceivedMonth || 0)),
+    spendingHistory: Array.isArray(fund.spendingHistory) ? fund.spendingHistory.slice(0, 100) : [],
+    updatedAt: fund.updatedAt || new Date().toISOString()
+  };
+}
+
+function normalizeTaxDistribution(settings = {}) {
+  const stateShare = Math.max(0, Math.min(100, Number(settings.stateShare ?? defaultTaxDistribution.stateShare)));
+  const districtShare = Math.max(0, Math.min(100, Number(settings.districtShare ?? 100 - stateShare)));
+  const balancedDistrictShare = stateShare + districtShare === 100 ? districtShare : 100 - stateShare;
+  return {
+    stateShare,
+    districtShare: balancedDistrictShare,
+    lastUpdatedAt: cleanText(settings.lastUpdatedAt || "", 80),
+    updatedBy: cleanText(settings.updatedBy || "system", 120)
+  };
+}
+
+function ensureDistrictFunds(store) {
+  const existing = Array.isArray(store.districtFunds) ? store.districtFunds : [];
+  const existingByDistrict = new Map(existing.map((fund) => [normalizeEconomyDistrict(fund.district), fund]));
+  store.districtFunds = (store.districts || districtEconomyDefaults).map((district) =>
+    normalizeDistrictFund(existingByDistrict.get(normalizeEconomyDistrict(district.name)), district)
+  );
+  return store.districtFunds;
+}
+
+function getDistrictFund(store, districtName = "") {
+  ensureDistrictFunds(store);
+  const normalized = normalizeEconomyDistrict(districtName);
+  let fund = store.districtFunds.find((entry) => normalizeEconomyDistrict(entry.district) === normalized);
+  if (!fund) {
+    fund = normalizeDistrictFund({}, { name: normalized });
+    store.districtFunds.push(fund);
+  }
+  return fund;
+}
+
 function recordTaxReceipt(store, { wallet, taxType, amount, rate = 0, status = "paid", reason = "", actor = "treasury" }) {
   const numericAmount = Math.max(0, Number(amount || 0));
   const treasury = ensureStateTreasury(store);
+  store.taxDistribution = normalizeTaxDistribution(store.taxDistribution || {});
+  const districtFund = getDistrictFund(store, wallet?.district || "The Capitol");
+  const stateAmount = status === "paid" ? Math.round(numericAmount * store.taxDistribution.stateShare) / 100 : 0;
+  const districtAmount = status === "paid" ? Math.round((numericAmount - stateAmount) * 100) / 100 : 0;
   if (status === "paid" && numericAmount > 0) {
-    treasury.balance += numericAmount;
+    treasury.balance += stateAmount;
     treasury.updatedAt = new Date().toISOString();
+    districtFund.balance += districtAmount;
+    districtFund.taxReceivedWeek += districtAmount;
+    districtFund.taxReceivedMonth += districtAmount;
+    districtFund.updatedAt = new Date().toISOString();
+    pushTransaction(store, {
+      fromWalletId: wallet.id,
+      toWalletId: stateTreasuryWalletId,
+      amount: stateAmount,
+      type: "tax_treasury_deposit",
+      reason: `${taxType} state share`,
+      createdBy: actor,
+      meta: { taxType, sourceWalletId: wallet.id, totalTaxAmount: numericAmount }
+    });
+    pushTransaction(store, {
+      fromWalletId: wallet.id,
+      toWalletId: districtFund.id,
+      amount: districtAmount,
+      type: "district_fund_deposit",
+      reason: `${taxType} district fund share`,
+      createdBy: actor,
+      meta: { taxType, sourceWalletId: wallet.id, district: districtFund.district, totalTaxAmount: numericAmount }
+    });
   }
   store.taxRecords = Array.isArray(store.taxRecords) ? store.taxRecords : [];
   const record = {
@@ -565,11 +655,16 @@ function recordTaxReceipt(store, { wallet, taxType, amount, rate = 0, status = "
     walletId: wallet.id,
     taxType,
     amount: numericAmount,
+    stateAmount,
+    districtAmount,
     rate,
     status,
-    reason: cleanText(reason || "Paid into WPU State Treasury", 300),
+    reason: cleanText(reason || "Paid into WPU State Treasury and district fund", 300),
     paidIntoWalletId: stateTreasuryWalletId,
     paidInto: stateTreasuryWalletName,
+    districtFundId: districtFund.id,
+    districtFund: districtFund.name,
+    district: districtFund.district,
     createdAt: new Date().toISOString(),
     createdBy: actor
   };
@@ -610,6 +705,11 @@ export function normalizeEconomyStore(economy = {}) {
       ...item,
       currentPrice: calculateMarketPrice(item, district)
     };
+  });
+  const storedDistrictFunds = Array.isArray(economy.districtFunds) ? economy.districtFunds : [];
+  const districtFunds = districts.map((district) => {
+    const storedFund = storedDistrictFunds.find((fund) => normalizeEconomyDistrict(fund.district) === normalizeEconomyDistrict(district.name));
+    return normalizeDistrictFund(storedFund, district);
   });
 
   return {
@@ -656,6 +756,8 @@ export function normalizeEconomyStore(economy = {}) {
     taxRates: { ...defaultTaxRates(), ...(economy.taxRates || {}) },
     taxRateSettings: normalizeTaxRateSettings(economy.taxRateSettings || {}, { ...defaultTaxRates(), ...(economy.taxRates || {}) }),
     districts,
+    districtFunds,
+    taxDistribution: normalizeTaxDistribution(economy.taxDistribution || {}),
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
     raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs : [],
     lootboxAllocationDate: cleanText(economy.lootboxAllocationDate || "", 20),
@@ -912,12 +1014,15 @@ async function createIncomeTaxCitizenAlerts(taxEvents = [], actor = "treasury") 
       issuingAuthority: "Ministry of Credit & Records",
       severity: "notice",
       category: "Tax Notice",
-      message: `The Ministry of Credit & Records has collected ${event.amount} PC in income tax. Funds have been deposited into the WPU State Treasury. Tax rate: ${(event.rate * 100).toFixed(2)}%. Date/time: ${event.createdAt}. Transaction ID: ${event.transactionId}. Remaining balance: ${event.remainingBalance} PC.`,
+      message: `The Ministry of Credit & Records has collected ${event.amount} PC in income tax. State Treasury share: ${event.stateAmount ?? event.amount} PC. District fund share: ${event.districtAmount ?? 0} PC to ${event.districtFund || "district fund"}. Tax rate: ${(event.rate * 100).toFixed(2)}%. Date/time: ${event.createdAt}. Transaction ID: ${event.transactionId}. Remaining balance: ${event.remainingBalance} PC.`,
       enforcementAction: "none",
-      actionTaken: `${event.amount} PC income tax collected into WPU State Treasury`,
+      actionTaken: `${event.amount} PC income tax collected: ${event.stateAmount ?? event.amount} PC to WPU State Treasury, ${event.districtAmount ?? 0} PC to ${event.districtFund || "district fund"}`,
       amount: event.amount,
       taxRate: event.rate,
+      stateAmount: event.stateAmount,
+      districtAmount: event.districtAmount,
       treasuryDestination: stateTreasuryWalletName,
+      districtFund: event.districtFund,
       remainingBalance: event.remainingBalance,
       linkedRecordType: "tax_record",
       linkedRecordId: event.taxRecordId,
@@ -2447,6 +2552,9 @@ export async function applyTax({ walletId, taxType, amount, actor = "treasury", 
         createdAt: transaction.createdAt,
         taxRecordId: taxRecord.id,
         transactionId: transaction.id,
+        stateAmount: taxRecord.stateAmount,
+        districtAmount: taxRecord.districtAmount,
+        districtFund: taxRecord.districtFund,
         remainingBalance: Math.max(0, Number(wallet.balance || 0))
       }], actor);
     } catch (error) {
@@ -2505,6 +2613,9 @@ export async function runAutomaticTaxation(actor = "treasury") {
       createdAt: transaction.createdAt,
       taxRecordId: taxRecord.id,
       transactionId: transaction.id,
+      stateAmount: taxRecord.stateAmount,
+      districtAmount: taxRecord.districtAmount,
+      districtFund: taxRecord.districtFund,
       remainingBalance: Math.max(0, Number(wallet.balance || 0))
     });
   }
@@ -2900,6 +3011,30 @@ export async function triggerRandomEconomyEvent({ actor = "treasury", durationHo
 
 export async function updateEconomyAdmin(fields, actor = "treasury") {
   const store = await getEconomyStore();
+  if (fields.intent === "set-tax-distribution") {
+    const stateShare = Number(fields.stateSharePercent ?? fields.stateShare ?? defaultTaxDistribution.stateShare);
+    const districtShare = Number(fields.districtSharePercent ?? fields.districtShare ?? defaultTaxDistribution.districtShare);
+    if (!Number.isFinite(stateShare) || !Number.isFinite(districtShare) || Math.round((stateShare + districtShare) * 100) / 100 !== 100) {
+      return { ok: false, reason: "distribution-total", store };
+    }
+    const previous = normalizeTaxDistribution(store.taxDistribution || {});
+    store.taxDistribution = {
+      stateShare: Math.max(0, Math.min(100, stateShare)),
+      districtShare: Math.max(0, Math.min(100, districtShare)),
+      lastUpdatedAt: new Date().toISOString(),
+      updatedBy: actor
+    };
+    pushTransaction(store, {
+      fromWalletId: "treasury",
+      toWalletId: "ledger",
+      amount: 0,
+      type: "tax_distribution_update",
+      reason: `Tax distribution: State ${previous.stateShare}% -> ${store.taxDistribution.stateShare}%, District ${previous.districtShare}% -> ${store.taxDistribution.districtShare}%`,
+      createdBy: actor,
+      meta: { previous, next: store.taxDistribution }
+    });
+    return { ok: true, store: await saveEconomyStore(store) };
+  }
   if (fields.taxType && fields.taxRate !== undefined) {
     const taxType = cleanText(fields.taxType, 120);
     const previousRate = Number(store.taxRates[taxType] || 0);
