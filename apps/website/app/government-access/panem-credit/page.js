@@ -37,6 +37,8 @@ export default async function PanemCreditControlPage({ searchParams }) {
   const taxDescriptions = {
     income_tax: "Applied to eligible citizen wallet balances during automatic taxation.",
     trade_tax: "Applied to citizen payments and marketplace purchases.",
+    inventory_tax: "Applied to inventory holdings and item-related civic assessments.",
+    market_sale_tax: "Applied to citizen marketplace listing sales before seller payout.",
     stock_trade_tax: "Applied to Panem Stock Exchange buy and sell orders.",
     gambling_winnings_tax: "Applied to gambling winnings before payout.",
     emergency_state_levy: "Applied during emergency taxation directives.",
@@ -48,6 +50,8 @@ export default async function PanemCreditControlPage({ searchParams }) {
   const treasuryTaxNames = {
     income_tax: "Income Tax",
     trade_tax: "Marketplace Trade Tax",
+    inventory_tax: "Inventory Tax",
+    market_sale_tax: "Market Sale Tax",
     stock_trade_tax: "Stock Trade Tax",
     gambling_winnings_tax: "Gambling Winnings Tax",
     emergency_state_levy: "Emergency Taxation Rate",
@@ -59,6 +63,8 @@ export default async function PanemCreditControlPage({ searchParams }) {
   const treasuryTaxIds = [
     "income_tax",
     "trade_tax",
+    "inventory_tax",
+    "market_sale_tax",
     "stock_trade_tax",
     "gambling_winnings_tax",
     "emergency_state_levy",
