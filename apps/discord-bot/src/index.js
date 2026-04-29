@@ -162,10 +162,16 @@ async function readEconomyStore() {
     throw new Error("ADMIN_API_KEY is required for Panem Credit commands.");
   }
 
-  const response = await fetch(`${apiUrl}/api/admin/economy-store`, {
-    headers: { "x-admin-key": adminApiKey },
-    cache: "no-store"
-  });
+  let response;
+  try {
+    response = await fetch(`${apiUrl}/api/admin/economy-store`, {
+      headers: { "x-admin-key": adminApiKey },
+      cache: "no-store"
+    });
+  } catch (error) {
+    console.error("[economy-read]", { apiUrl, message: error?.message || String(error) });
+    throw new Error("Economy service unavailable.");
+  }
 
   if (!response.ok) {
     throw new Error(`Panem Credit ledger unavailable (${response.status}).`);
@@ -181,15 +187,22 @@ async function writeEconomyStore(economy) {
   }
 
   const compactEconomy = compactEconomyStoreForWrite(economy);
-  const response = await fetch(`${apiUrl}/api/admin/economy-store`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-key": adminApiKey
-    },
-    body: JSON.stringify({ economy: compactEconomy }),
-    cache: "no-store"
-  });
+  let response;
+  try {
+    response = await fetch(`${apiUrl}/api/admin/economy-store`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-key": adminApiKey
+      },
+      body: JSON.stringify({ economy: compactEconomy }),
+      cache: "no-store"
+    });
+  } catch (error) {
+    const payloadSize = Buffer.byteLength(JSON.stringify({ economy: compactEconomy }), "utf8");
+    console.error("[economy-write]", { apiUrl, payloadSize, message: error?.message || String(error) });
+    throw new Error("Economy update failed. Please try again later.");
+  }
 
   if (!response.ok) {
     const payloadSize = Buffer.byteLength(JSON.stringify({ economy: compactEconomy }), "utf8");
@@ -6931,7 +6944,7 @@ client.on("interactionCreate", async (interaction) => {
     }
   } catch (error) {
     console.error("[interaction]", error);
-    const message = error instanceof Error && /Panem Credit ledger write failed|Economy store write failed/i.test(error.message)
+    const message = error instanceof Error && /Panem Credit ledger write failed|Economy store write failed|Economy service unavailable|Economy update failed|fetch failed/i.test(error.message)
       ? "Economy update failed. Please try again later."
       : error instanceof Error
         ? error.message

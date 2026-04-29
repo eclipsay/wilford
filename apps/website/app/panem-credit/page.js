@@ -10,6 +10,7 @@ import {
   taxLabel,
   titleForBalance
 } from "@wilford/shared";
+import Link from "next/link";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getEconomyStore, getSecurityDashboard, getWallet } from "../../lib/panem-credit";
