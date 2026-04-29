@@ -47,6 +47,8 @@ async function submitPetitionAction(formData) {
     redirect("/citizenship/petition?error=Valid%20Discord%20User%20ID%20is%20required%20to%20apply%20for%20citizenship.");
   }
 
+  let submissionError = "";
+
   try {
     const response = await fetch(`${baseUrl}/api/applications`, {
       method: "POST",
@@ -60,11 +62,14 @@ async function submitPetitionAction(formData) {
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      const error = encodeURIComponent(data?.error || "Petition submission failed.");
-      redirect(`/citizenship/petition?error=${error}`);
+      submissionError = data?.error || "Petition submission failed.";
     }
   } catch {
-    redirect("/citizenship/petition?error=Unable%20to%20reach%20the%20petition%20service.");
+    submissionError = "Unable to reach the petition service.";
+  }
+
+  if (submissionError) {
+    redirect(`/citizenship/petition?error=${encodeURIComponent(submissionError)}`);
   }
 
   redirect("/citizenship/petition?submitted=1");
