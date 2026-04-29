@@ -1241,7 +1241,7 @@ function helpEmbed(title, lines) {
 
 function dashboardSelect(section = "overview") {
   const options = [
-    ["jobs", "Jobs", "Choose work, earn credits, and manage risk", "âš’"],
+    ["jobs", "💼 Jobs & Work", "Choose work, earn credits, and manage risk", "💼"],
     ["overview", "Overview", "Balance, status, inventory, stocks, and requests", "🏛"],
     ["wallet", "Wallet", "Panem Credit wallet details", "💳"],
     ["transactions", "Transactions", "Recent ledger activity", "🪙"],
@@ -1266,6 +1266,46 @@ function dashboardSelect(section = "overview") {
         default: value === section
       })))
   );
+}
+
+const noSelectedJobMessage = "You have not selected a job yet. Use /jobs or Browse Jobs to choose one.";
+
+function selectedJobForWallet(wallet, district = "") {
+  const job = economyJobDefaults.find((entry) => entry.id === wallet?.selectedJobId);
+  if (!job) return null;
+  return discordJobAccess(wallet, job, district).allowed ? job : null;
+}
+
+function nativeDistrictJobsForWallet(wallet, district = "") {
+  const resolvedDistrict = normalizeEconomyDistrict(district || wallet?.district || "The Capitol");
+  return [...economyJobDefaults]
+    .filter((job) => {
+      const access = discordJobAccess(wallet, job, resolvedDistrict);
+      return access.allowed && access.native;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function lockedForeignJobsNote(wallet, district = "") {
+  const resolvedDistrict = normalizeEconomyDistrict(district || wallet?.district || "The Capitol");
+  const lockedForeignCount = economyJobDefaults.filter((job) => {
+    const access = discordJobAccess(wallet, job, resolvedDistrict);
+    return access.requiresWorkPermit && !access.allowed;
+  }).length;
+  const restrictedCount = economyJobDefaults.filter((job) => {
+    const access = discordJobAccess(wallet, job, resolvedDistrict);
+    return access.restricted && !access.allowed;
+  }).length;
+  return `Foreign district jobs are locked unless you have an approved work permit${lockedForeignCount ? ` (${lockedForeignCount} locked)` : ""}. Restricted jobs require government or MSS permission${restrictedCount ? ` (${restrictedCount} restricted)` : ""}.`;
+}
+
+function jobSummaryLine(job) {
+  return `${job.name}: ${job.riskLevel} risk, ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)}, ${job.cooldownHours}h`;
+}
+
+function jobDetailText(job, wallet, district = "") {
+  const access = discordJobAccess(wallet, job, district);
+  return `${job.name}\n${job.description}\nDistrict: ${job.district}\nPayout: ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)}\nRisk: ${job.riskLevel} / ${(Number(job.failureChance || 0) * 100).toFixed(0)}% failure\nCooldown: ${job.cooldownHours}h\nAccess: ${access.label || (access.allowed ? "Allowed" : "Locked")}${access.allowed ? "" : `\n${access.message || "This job is locked for your wallet."}`}\nPossible items: ${(job.itemRewards || []).join(", ") || "None"}`;
 }
 
 function dashboardJobSelect(context) {
@@ -1313,7 +1353,11 @@ function dashboardButtons(section = "overview") {
   if (section === "jobs") {
     return [
       new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("citizen-dashboard:browse-jobs").setLabel("Browse Jobs").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("citizen-dashboard:work").setLabel("Work Shift").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("citizen-dashboard:current-job").setLabel("Current Job").setStyle(ButtonStyle.Secondary)
+      ),
+      new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("citizen-dashboard:overtime").setLabel("Overtime").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("citizen-dashboard:district-work").setLabel("District Work").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("citizen-dashboard:special-task").setLabel("Special Task").setStyle(ButtonStyle.Danger)
@@ -1407,10 +1451,12 @@ function citizenDashboardEmbed(section, context, user) {
     const rows = wallet.holdings.slice(0, 8).map((holding) => `${itemDisplayName(holding.itemId, economy)} x${holding.quantity} (${holding.rarity || "common"})`).join("\n") || "Your inventory is empty. Try fishing, mining, or farming.";
     description += `Worth: ${formatCredits(metrics.inventoryValue)}\nSlots: ${occupiedInventorySlots(wallet)} / ${wallet.inventorySlots}\n\n${rows}`;
   } else if (section === "jobs") {
-    const jobs = availableJobsForWallet(wallet, displayDistrict);
-    const selectedJob = jobs.find((job) => job.id === wallet.selectedJobId) || jobs[0] || economyJobDefaults[0];
-    const rows = jobs.slice(0, 8).map((job) => `${job.name}: ${job.riskLevel} risk, ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)}, ${job.cooldownHours}h`).join("\n") || "No district jobs are available.";
-    description += `District: ${displayDistrict}\nSelected: ${selectedJob.name}\nRisk: ${selectedJob.riskLevel} / ${(Number(selectedJob.failureChance || 0) * 100).toFixed(0)}% failure\nPayout: ${formatCredits(selectedJob.minReward)}-${formatCredits(selectedJob.maxReward)}\nCooldown: ${selectedJob.cooldownHours}h\n\n${rows}`;
+    const selectedJob = selectedJobForWallet(wallet, displayDistrict);
+    const nativeJobs = nativeDistrictJobsForWallet(wallet, displayDistrict);
+    const rows = nativeJobs.slice(0, 10).map(jobSummaryLine).join("\n") || "No native district jobs are available.";
+    description += selectedJob
+      ? `Current job: ${selectedJob.name}\nDistrict: ${displayDistrict}\nPayout range: ${formatCredits(selectedJob.minReward)}-${formatCredits(selectedJob.maxReward)}\nRisk level: ${selectedJob.riskLevel} / ${(Number(selectedJob.failureChance || 0) * 100).toFixed(0)}% failure\nCooldown: ${selectedJob.cooldownHours}h\n\nAvailable native district jobs:\n${rows}\n\n${lockedForeignJobsNote(wallet, displayDistrict)}`
+      : `Current job: None selected\nDistrict: ${displayDistrict}\nPayout range: Select a job to view payout.\nRisk level: Select a job to view risk.\nCooldown: Select a job to view cooldown.\n\n${noSelectedJobMessage}\n\nAvailable native district jobs:\n${rows}\n\n${lockedForeignJobsNote(wallet, displayDistrict)}`;
   } else if (section === "stocks") {
     const rows = wallet.stockPortfolio.slice(0, 8).map((position) => {
       const company = findStockCompany(economy, position.ticker);
@@ -1448,7 +1494,7 @@ async function replyCitizenDashboard(interaction, section = "overview", update =
 function citizenHubSelect(section = "wallet") {
   const options = [
     ["wallet", "Wallet", "Balance, payments, and recent transactions"],
-    ["jobs", "Work", "Earn credits with your current job"],
+    ["jobs", "💼 Jobs & Work", "Browse jobs, choose work, and earn credits"],
     ["inventory", "Inventory", "Items, resources, and selling basics"],
     ["marketplace", "Marketplace", "Buy, sell, and browse goods"],
     ["stocks", "Stocks", "Portfolio and market news"],
@@ -1472,9 +1518,9 @@ function citizenHubButtons(section = "wallet") {
   const openSite = linkButton("Citizen Hub", `${websiteUrl}/citizen-portal`, "🌐");
   if (section === "jobs") {
     return [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("citizen-dashboard:work").setLabel("Work").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("citizen-dashboard:district-work").setLabel("District Work").setStyle(ButtonStyle.Secondary),
-      openSite
+      new ButtonBuilder().setCustomId("citizen-dashboard:browse-jobs").setLabel("Browse Jobs").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("citizen-dashboard:work").setLabel("Work Shift").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("citizen-dashboard:current-job").setLabel("Current Job").setStyle(ButtonStyle.Secondary)
     )];
   }
   if (section === "wallet") {
@@ -1500,21 +1546,24 @@ function citizenHubEmbed(section, context, user) {
   const { citizen, wallet } = identity;
   const metrics = dashboardMetricSummary(economy, governmentStore, identity);
   const district = normalizeCitizenDistrict(citizen, wallet);
-  const selectedJob = economyJobDefaults.find((job) => job.id === wallet.selectedJobId) || economyJobDefaults.find((job) => job.district === district) || economyJobDefaults[0];
+  const selectedJob = selectedJobForWallet(wallet, district);
+  const currentJobName = selectedJob?.name || "None selected";
   const alertsUnread = metrics.alerts.filter((alert) => !alert.readByCitizen).length;
   const sectionText = {
     wallet: `Balance: ${formatCredits(wallet.balance)}\nUse Send Money with a mention, username, or public handle.`,
-    jobs: `Current job: ${selectedJob.name}\nWork earns Panem Credits. Native district jobs are safest and most efficient.`,
+    jobs: selectedJob
+      ? `Current job: ${selectedJob.name}\nWork earns Panem Credits. Native district jobs are safest and most efficient.`
+      : `${noSelectedJobMessage}\nNative district jobs are safest and most efficient.`,
     inventory: `Inventory: ${wallet.holdings.length} item types worth about ${formatCredits(metrics.inventoryValue)}.\nGather, craft, sell, or list items when ready.`,
     marketplace: `Marketplace listings: ${(economy.listings || []).filter((listing) => listing.status === "active").length} active.\nBuy official goods first; advanced trades live on the website.`,
     stocks: `Portfolio: ${wallet.stockPortfolio.length} positions worth about ${formatCredits(metrics.stockValue)}.\nStocks are optional; start small.`,
     "requests-alerts": `Unread alerts: ${alertsUnread}\nActive requests: ${metrics.activeRequests.length}\nUse requests for appeals, help, and official support.`,
     help: "What should I do next? Work for credits, check Inventory, then open Marketplace. Risky actions ask for confirmation before they run."
   }[section] || "";
-  return ministryEmbed("Citizen Hub", `${citizen.name || citizen.citizenName || wallet.displayName}\nDistrict: ${district}\nJob: ${selectedJob.name}\nAlerts: ${alertsUnread} unread\nStatus: ${wallet.status || "active"} / ${wallet.securityStatus || "Clear"}\n\n${sectionText}`, [
+  return ministryEmbed("Citizen Hub", `${citizen.name || citizen.citizenName || wallet.displayName}\nDistrict: ${district}\nJob: ${currentJobName}\nAlerts: ${alertsUnread} unread\nStatus: ${wallet.status || "active"} / ${wallet.securityStatus || "Clear"}\n\n${sectionText}`, [
     { name: "Balance", value: formatCredits(wallet.balance), inline: true },
     { name: "District", value: district, inline: true },
-    { name: "Current Job", value: selectedJob.name, inline: true }
+    { name: "Current Job", value: currentJobName, inline: true }
   ]).setAuthor({ name: `WPU Citizen Hub - ${user.username}` }).setFooter({ text: "Beginner mode: use the dropdown, then press the main button." });
 }
 
@@ -1708,6 +1757,7 @@ async function handleCitizenDashboardComponent(interaction) {
 
   const action = interaction.customId.split(":")[1];
   const sectionMap = {
+    "browse-jobs": "jobs",
     transactions: "transactions",
     "view-items": "inventory",
     "browse-listings": "marketplace",
@@ -1716,6 +1766,23 @@ async function handleCitizenDashboardComponent(interaction) {
 
   if (sectionMap[action]) {
     await replyCitizenDashboard(interaction, sectionMap[action], true);
+    return true;
+  }
+
+  if (action === "current-job") {
+    const context = await getCitizenDashboardContext(interaction.user);
+    if (!context.identity?.wallet) {
+      await interaction.reply({ embeds: [linkedCitizenPromptEmbed()], components: dashboardButtons("unlinked"), ephemeral: true });
+      return true;
+    }
+    const { citizen, wallet } = context.identity;
+    const district = normalizeCitizenDistrict(citizen, wallet);
+    const selectedJob = selectedJobForWallet(wallet, district);
+    if (!selectedJob) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Current Job", noSelectedJobMessage)], components: dashboardComponents("jobs", context), ephemeral: true });
+      return true;
+    }
+    await interaction.reply({ embeds: [dashboardReplyEmbed("Current Job", jobDetailText(selectedJob, wallet, district))], components: dashboardComponents("jobs", context), ephemeral: true });
     return true;
   }
 
@@ -2119,6 +2186,12 @@ async function handleEconomySlashCommand(interaction) {
   if (name === "help-economy") {
     await replyEconomy(interaction, helpEmbed("Economy Help", [
       "💳 `/balance` checks your Panem Credit wallet.",
+      "💼 `/jobs` — browse available jobs.",
+      "✅ `/setjob` — choose your job.",
+      "🛠 `/work` — work a shift.",
+      "⏱ `/overtime` — riskier extra work.",
+      "ℹ️ `/jobinfo` — view job payout/risk.",
+      "📣 `/events` — view active economy events.",
       "🪙 `/pay amount:50 user:@citizen` or `/pay amount:50 recipient:@handle` sends credits.",
       "🏪 `/market` and `/prices` show goods and district prices.",
       "🎒 `/inventory` shows gathered items and resources.",
@@ -2377,7 +2450,7 @@ async function handleEconomySlashCommand(interaction) {
       await replyEconomy(interaction, ministryEmbed("Job Not Found", "Use `/jobs` to see available job names."), true);
       return true;
     }
-    await replyEconomy(interaction, ministryEmbed("Job Details", `${job.name}\n${job.description}\nDistrict: ${job.district}\nRisk: ${job.riskLevel} / ${(Number(job.failureChance || 0) * 100).toFixed(0)}% failure\nPayout: ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)}\nCooldown: ${job.cooldownHours}h\nPossible items: ${(job.itemRewards || []).join(", ") || "None"}`), true);
+    await replyEconomy(interaction, ministryEmbed("Job Details", jobDetailText(job, wallet, district)), true);
     return true;
   }
 
