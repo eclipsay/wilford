@@ -26,6 +26,7 @@ import {
   getContent,
   getDiscordBroadcasts,
   getEconomyStore,
+  getEconomyDebugSnapshot,
   getEnemyOfStateEntries,
   getPendingEnemyOfStateDiscordEvents,
   getPendingApplicationDiscordEvents,
@@ -108,6 +109,15 @@ function createId(prefix) {
   return `${prefix}-${Date.now().toString(36)}`;
 }
 
+function sendApiError(res, label, error) {
+  console.error(`[${label}]`, error);
+  return res.status(500).json({
+    ok: false,
+    error: label,
+    message: error instanceof Error ? error.message : String(error)
+  });
+}
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "api" });
 });
@@ -168,37 +178,40 @@ app.get("/api/content", async (_req, res) => {
 });
 
 app.get("/api/economy", async (_req, res) => {
-  const economy = await getEconomyStore();
-  res.json({
-    wallets: economy.wallets.map(({ transactionHistory, ...wallet }) => wallet),
-    marketItems: economy.marketItems,
-    listings: economy.listings.filter((listing) => listing.status === "active"),
-    taxRates: economy.taxRates,
-    districts: economy.districts,
-    events: economy.events,
-    inventoryItems: economy.inventoryItems,
-    gatheringActions: economy.gatheringActions,
-    craftingRecipes: economy.craftingRecipes,
-    craftingQualityTiers: economy.craftingQualityTiers,
-    blackMarketGoods: economy.blackMarketGoods,
-    inventoryChallenges: economy.inventoryChallenges,
-    stockCompanies: economy.stockCompanies,
-    stockEvents: economy.stockEvents,
-    stockSettings: economy.stockSettings,
-    lootboxAllocationDate: economy.lootboxAllocationDate,
-    globalLootboxesOpenedToday: economy.globalLootboxesOpenedToday,
-    perUserLootboxesOpenedToday: economy.perUserLootboxesOpenedToday,
-    gamblingJackpot: economy.gamblingJackpot
-  });
+  try {
+    const economy = await getEconomyStore();
+    res.json({
+      wallets: economy.wallets.map(({ transactionHistory, ...wallet }) => wallet),
+      marketItems: economy.marketItems,
+      listings: economy.listings.filter((listing) => listing.status === "active"),
+      taxRates: economy.taxRates,
+      districts: economy.districts,
+      events: economy.events,
+      inventoryItems: economy.inventoryItems,
+      gatheringActions: economy.gatheringActions,
+      craftingRecipes: economy.craftingRecipes,
+      craftingQualityTiers: economy.craftingQualityTiers,
+      blackMarketGoods: economy.blackMarketGoods,
+      inventoryChallenges: economy.inventoryChallenges,
+      stockCompanies: economy.stockCompanies,
+      stockEvents: economy.stockEvents,
+      stockSettings: economy.stockSettings,
+      lootboxAllocationDate: economy.lootboxAllocationDate,
+      globalLootboxesOpenedToday: economy.globalLootboxesOpenedToday,
+      perUserLootboxesOpenedToday: economy.perUserLootboxesOpenedToday,
+      gamblingJackpot: economy.gamblingJackpot
+    });
+  } catch (error) {
+    sendApiError(res, "economy-public-read", error);
+  }
 });
 
 app.get("/api/economy-debug", async (_req, res) => {
-  const economy = await getEconomyStore();
-  res.json({
-    ok: true,
-    walletCount: economy.wallets.length,
-    walletNames: economy.wallets.map((wallet) => wallet.displayName || wallet.userId || wallet.id)
-  });
+  try {
+    res.json(await getEconomyDebugSnapshot());
+  } catch (error) {
+    sendApiError(res, "economy-debug", error);
+  }
 });
 
 app.get("/api/settings", async (_req, res) => {
@@ -588,67 +601,79 @@ app.post("/api/admin/government-access-store", requireAdmin, async (req, res) =>
 });
 
 app.get("/api/admin/economy-store", requireAdmin, async (_req, res) => {
-  const economy = await getEconomyStore();
-  res.json({ economy });
+  try {
+    const economy = await getEconomyStore();
+    res.json({ economy });
+  } catch (error) {
+    sendApiError(res, "economy-admin-read", error);
+  }
 });
 
 app.post("/api/admin/economy-store", requireAdmin, async (req, res) => {
-  const economy = await updateEconomyStore(req.body?.economy || req.body || {});
-  if (req.query?.minimal === "1" || req.get("x-minimal-response") === "1") {
-    return res.json({ ok: true });
+  try {
+    const economy = await updateEconomyStore(req.body?.economy || req.body || {});
+    if (req.query?.minimal === "1" || req.get("x-minimal-response") === "1") {
+      return res.json({ ok: true });
+    }
+    res.json({ economy });
+  } catch (error) {
+    sendApiError(res, "economy-admin-write", error);
   }
-  res.json({ economy });
 });
 
 app.post("/api/admin/economy-wallet-patch", requireAdmin, async (req, res) => {
-  const patch = req.body || {};
-  const economy = await getEconomyStore();
+  try {
+    const patch = req.body || {};
+    const economy = await getEconomyStore();
 
-  if (Array.isArray(patch.wallets)) {
-    const nextWallets = new Map((economy.wallets || []).map((wallet) => [wallet.id, wallet]));
-    for (const wallet of patch.wallets) {
-      if (wallet?.id) nextWallets.set(wallet.id, wallet);
+    if (Array.isArray(patch.wallets)) {
+      const nextWallets = new Map((economy.wallets || []).map((wallet) => [wallet.id, wallet]));
+      for (const wallet of patch.wallets) {
+        if (wallet?.id) nextWallets.set(wallet.id, wallet);
+      }
+      economy.wallets = [...nextWallets.values()];
     }
-    economy.wallets = [...nextWallets.values()];
-  }
 
-  const prependUnique = (existing = [], incoming = [], limit = 500) => {
-    const seen = new Set();
-    return [...incoming, ...existing].filter((entry) => {
-      const key = entry?.id || JSON.stringify(entry);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, limit);
-  };
+    const prependUnique = (existing = [], incoming = [], limit = 500) => {
+      const seen = new Set();
+      return [...incoming, ...existing].filter((entry) => {
+        const key = entry?.id || JSON.stringify(entry);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, limit);
+    };
 
-  if (Array.isArray(patch.transactions)) {
-    economy.transactions = prependUnique(economy.transactions, patch.transactions, 600);
-  }
-  if (Array.isArray(patch.taxRecords)) {
-    economy.taxRecords = prependUnique(economy.taxRecords, patch.taxRecords, 600);
-  }
-  if (Array.isArray(patch.alerts)) {
-    economy.alerts = prependUnique(economy.alerts, patch.alerts, 300);
-  }
-  if (Array.isArray(patch.raidLogs)) {
-    economy.raidLogs = prependUnique(economy.raidLogs, patch.raidLogs, 250);
-  }
-  if (Array.isArray(patch.lootboxLogs)) {
-    economy.lootboxLogs = prependUnique(economy.lootboxLogs, patch.lootboxLogs, 300);
-  }
+    if (Array.isArray(patch.transactions)) {
+      economy.transactions = prependUnique(economy.transactions, patch.transactions, 600);
+    }
+    if (Array.isArray(patch.taxRecords)) {
+      economy.taxRecords = prependUnique(economy.taxRecords, patch.taxRecords, 600);
+    }
+    if (Array.isArray(patch.alerts)) {
+      economy.alerts = prependUnique(economy.alerts, patch.alerts, 300);
+    }
+    if (Array.isArray(patch.raidLogs)) {
+      economy.raidLogs = prependUnique(economy.raidLogs, patch.raidLogs, 250);
+    }
+    if (Array.isArray(patch.lootboxLogs)) {
+      economy.lootboxLogs = prependUnique(economy.lootboxLogs, patch.lootboxLogs, 300);
+    }
 
-  for (const key of [
-    "lootboxAllocationDate",
-    "globalLootboxesOpenedToday",
-    "perUserLootboxesOpenedToday",
-    "gamblingJackpot"
-  ]) {
-    if (Object.hasOwn(patch, key)) economy[key] = patch[key];
-  }
+    for (const key of [
+      "lootboxAllocationDate",
+      "globalLootboxesOpenedToday",
+      "perUserLootboxesOpenedToday",
+      "gamblingJackpot"
+    ]) {
+      if (Object.hasOwn(patch, key)) economy[key] = patch[key];
+    }
 
-  await updateEconomyStore(economy);
-  res.json({ ok: true });
+    await updateEconomyStore(economy);
+    res.json({ ok: true });
+  } catch (error) {
+    sendApiError(res, "economy-wallet-patch", error);
+  }
 });
 
 app.get("/api/admin/supreme-court-store", requireAdmin, async (_req, res) => {

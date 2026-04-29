@@ -586,6 +586,19 @@ export async function getEconomyStore() {
   return normalizeEconomyStore(content.economy || defaultContent.economy);
 }
 
+export async function getEconomyDebugSnapshot() {
+  const content = await readContentFile();
+  const economy = content.economy || {};
+  const wallets = Array.isArray(economy.wallets) ? economy.wallets : [];
+  return {
+    ok: true,
+    dataFile: config.dataFile,
+    walletCount: wallets.length,
+    transactionCount: Array.isArray(economy.transactions) ? economy.transactions.length : 0,
+    walletNames: wallets.map((wallet) => wallet.displayName || wallet.userId || wallet.discordId || wallet.id || "Unknown Wallet")
+  };
+}
+
 export async function updateEconomyStore(fields) {
   const content = await readContentFile();
   content.economy = compactEconomyStoreForWrite(normalizeEconomyStore({
