@@ -100,7 +100,9 @@ export const POST = safeAction("panem-credit/action", "/panem-credit", async fun
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "daily stipend claimed", `${result.amount || 0} PC / streak ${result.streak || 1}`);
     }
-    return redirectTo(request, `/panem-credit?${result.ok ? "saved=daily" : `error=${result.reason || "daily"}`}`);
+    return redirectTo(request, fromEconomyHub
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=daily" : `error=${result.reason || "daily"}`}#missions-game`
+      : `/panem-credit?${result.ok ? "saved=daily" : `error=${result.reason || "daily"}`}`);
   }
 
   if (intent === "work") {
