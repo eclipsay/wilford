@@ -184,7 +184,20 @@ app.get("/api/economy", async (_req, res) => {
     inventoryChallenges: economy.inventoryChallenges,
     stockCompanies: economy.stockCompanies,
     stockEvents: economy.stockEvents,
-    stockSettings: economy.stockSettings
+    stockSettings: economy.stockSettings,
+    lootboxAllocationDate: economy.lootboxAllocationDate,
+    globalLootboxesOpenedToday: economy.globalLootboxesOpenedToday,
+    perUserLootboxesOpenedToday: economy.perUserLootboxesOpenedToday,
+    gamblingJackpot: economy.gamblingJackpot
+  });
+});
+
+app.get("/api/economy-debug", async (_req, res) => {
+  const economy = await getEconomyStore();
+  res.json({
+    ok: true,
+    walletCount: economy.wallets.length,
+    walletNames: economy.wallets.map((wallet) => wallet.displayName || wallet.userId || wallet.id)
   });
 });
 

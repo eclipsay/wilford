@@ -186,15 +186,46 @@ async function readEconomyStore() {
     });
   } catch (error) {
     console.error("[economy-read]", { apiUrl, message: error?.message || String(error) });
-    throw new Error("Economy service unavailable.");
+    return readPublicEconomyStore();
   }
 
   if (!response.ok) {
-    throw new Error(`Panem Credit ledger unavailable (${response.status}).`);
+    console.error("[economy-read]", { apiUrl, status: response.status });
+    return readPublicEconomyStore();
   }
 
   const parsed = await response.json();
   return parsed.economy || parsed;
+}
+
+async function readPublicEconomyStore() {
+  let response;
+  try {
+    response = await fetch(`${apiUrl}/api/economy`, {
+      cache: "no-store"
+    });
+  } catch (error) {
+    console.error("[economy-read-public]", { apiUrl, message: error?.message || String(error) });
+    throw new Error("Economy service unavailable.");
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error("[economy-read-public]", { apiUrl, status: response.status, detail: detail.slice(0, 200) });
+    throw new Error(`Panem Credit ledger unavailable (${response.status}).`);
+  }
+
+  const parsed = await response.json();
+  return {
+    ...parsed,
+    transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+    taxRecords: Array.isArray(parsed.taxRecords) ? parsed.taxRecords : [],
+    alerts: Array.isArray(parsed.alerts) ? parsed.alerts : [],
+    raidLogs: Array.isArray(parsed.raidLogs) ? parsed.raidLogs : [],
+    listings: Array.isArray(parsed.listings) ? parsed.listings : [],
+    lootboxLogs: Array.isArray(parsed.lootboxLogs) ? parsed.lootboxLogs : [],
+    perUserLootboxesOpenedToday: parsed.perUserLootboxesOpenedToday && typeof parsed.perUserLootboxesOpenedToday === "object" ? parsed.perUserLootboxesOpenedToday : {}
+  };
 }
 
 async function writeEconomyStore(economy) {
