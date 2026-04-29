@@ -104,17 +104,20 @@ export const POST = safeAction("government-access/panem-credit/action", "/govern
     const store = await getEconomyStore();
     const wallet = getWallet(store, String(formData.get("walletId") || "").trim());
     if (wallet) {
+      const isStateTreasury = wallet.id === "treasury";
       wallet.balance = Math.max(0, Number(formData.get("balance") || 0));
-      wallet.salary = Math.max(0, Number(formData.get("salary") ?? wallet.salary ?? 125));
-      wallet.displayName = String(formData.get("displayName") || wallet.displayName || "").replace(/[<>]/g, "").trim().slice(0, 120);
-      wallet.discordId = String(formData.get("discordId") || "").replace(/[<>]/g, "").trim().slice(0, 80);
-      wallet.district = String(formData.get("district") || "").replace(/[<>]/g, "").trim().slice(0, 80);
-      wallet.title = String(formData.get("title") || "").replace(/[<>]/g, "").trim().slice(0, 80);
-      wallet.taxStatus = String(formData.get("taxStatus") || wallet.taxStatus || "compliant").replace(/[<>]/g, "").trim().slice(0, 80);
+      wallet.salary = isStateTreasury ? 0 : Math.max(0, Number(formData.get("salary") ?? wallet.salary ?? 125));
+      wallet.displayName = isStateTreasury ? "WPU State Treasury" : String(formData.get("displayName") || wallet.displayName || "").replace(/[<>]/g, "").trim().slice(0, 120);
+      wallet.userId = isStateTreasury ? "state-treasury" : wallet.userId;
+      wallet.discordId = isStateTreasury ? "" : String(formData.get("discordId") || "").replace(/[<>]/g, "").trim().slice(0, 80);
+      wallet.district = isStateTreasury ? "The Capitol" : String(formData.get("district") || "").replace(/[<>]/g, "").trim().slice(0, 80);
+      wallet.title = isStateTreasury ? "State Treasury" : String(formData.get("title") || "").replace(/[<>]/g, "").trim().slice(0, 80);
+      wallet.taxStatus = isStateTreasury ? "state account" : String(formData.get("taxStatus") || wallet.taxStatus || "compliant").replace(/[<>]/g, "").trim().slice(0, 80);
+      wallet.exempt = isStateTreasury ? true : wallet.exempt;
       wallet.updatedAt = new Date().toISOString();
       await saveEconomyStore(store);
       const citizenId = String(formData.get("citizenId") || "").trim();
-      if (citizenId) {
+      if (citizenId && !isStateTreasury) {
         await updateCitizenRecord(citizenId, {
           walletId: wallet.id,
           discordId: wallet.discordId,

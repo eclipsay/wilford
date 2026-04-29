@@ -348,7 +348,12 @@ export default async function PanemCreditControlPage({ searchParams }) {
           <h2>Citizen Accounts</h2>
           <div className="government-user-list">
             {store.wallets.map((wallet) => {
-              const linkedCitizen = citizenState.citizenRecords.find((citizen) => citizen.walletId === wallet.id || citizen.discordId === wallet.discordId || citizen.userId === wallet.userId);
+              const isStateTreasury = wallet.id === "treasury";
+              const linkedCitizen = isStateTreasury ? null : citizenState.citizenRecords.find((citizen) =>
+                (citizen.walletId && citizen.walletId === wallet.id) ||
+                (citizen.discordId && wallet.discordId && citizen.discordId === wallet.discordId) ||
+                (citizen.userId && wallet.userId && citizen.userId === wallet.userId)
+              );
               return (
               <article className="panel government-user-card panem-admin-wallet" key={wallet.id}>
                 <div className="panel__header">
@@ -367,7 +372,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
                   <span><strong>{wallet.district || "Unassigned"}</strong> District</span>
                   <span><strong>{wallet.taxStatus}</strong> Tax status</span>
                   <span><strong>{wallet.title || titleForBalance(wallet.balance)}</strong> Title</span>
-                  <span><strong>{linkedCitizen?.name || "Unlinked"}</strong> Citizen record</span>
+                  <span><strong>{isStateTreasury ? "State account / no citizen link" : linkedCitizen?.name || "Unlinked"}</strong> Citizen record</span>
                   <span><strong>{wallet.wanted ? "Wanted" : wallet.underReview ? "Under Review" : "Clear"}</strong> MSS status</span>
                   <span><strong>{formatCredits(wallet.bounty || 0)}</strong> Bounty</span>
                 </div>
@@ -393,15 +398,19 @@ export default async function PanemCreditControlPage({ searchParams }) {
                       </label>
                       <label className="public-application-field"><span>Custom title</span><input defaultValue={wallet.title || ""} name="title" placeholder={titleForBalance(wallet.balance)} /></label>
                       <label className="public-application-field"><span>Tax status</span><input defaultValue={wallet.taxStatus} name="taxStatus" /></label>
-                      <label className="public-application-field">
-                        <span>Linked citizen</span>
-                        <select defaultValue={linkedCitizen?.id || ""} name="citizenId">
-                          <option value="">None</option>
-                          {citizenState.citizenRecords.map((citizen) => (
-                            <option key={citizen.id} value={citizen.id}>{citizen.name} / {citizen.unionSecurityId}</option>
-                          ))}
-                        </select>
-                      </label>
+                      {isStateTreasury ? (
+                        <label className="public-application-field"><span>Linked citizen</span><input disabled value="State account / no citizen link" /></label>
+                      ) : (
+                        <label className="public-application-field">
+                          <span>Linked citizen</span>
+                          <select defaultValue={linkedCitizen?.id || ""} name="citizenId">
+                            <option value="">None</option>
+                            {citizenState.citizenRecords.map((citizen) => (
+                              <option key={citizen.id} value={citizen.id}>{citizen.name} / {citizen.unionSecurityId}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                     </div>
                     <button className="button button--solid-site" type="submit">Save Wallet Profile</button>
                   </form>
