@@ -49,7 +49,18 @@ export default async function MarketplacePage({ searchParams }) {
         {params?.error ? (
           <section className="application-notice application-notice--error">
             <strong>Market Action Rejected</strong>
-            <p>Balance, holdings, stock, listing status, or account restrictions prevented that trade.</p>
+            <p>
+              {params.detail ||
+                (params.error === "listing-missing"
+                  ? "That listing is no longer active."
+                  : params.error === "seller-wallet"
+                    ? "The seller wallet could not be found."
+                    : params.error === "listing-quantity"
+                      ? "The listing no longer has enough quantity available."
+                      : params.error === "balance"
+                        ? "Your wallet does not have enough Panem Credit for that trade."
+                        : "Balance, holdings, stock, listing status, or account restrictions prevented that trade.")}
+            </p>
           </section>
         ) : null}
 

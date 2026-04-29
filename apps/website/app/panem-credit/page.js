@@ -3,7 +3,9 @@ import {
   economyGambleDefaults,
   economyJobDefaults,
   formatCredits,
+  getJobAccess,
   investmentFundDefaults,
+  normalizeEconomyDistrict,
   prestigeItemDefaults,
   taxLabel,
   titleForBalance
@@ -109,12 +111,18 @@ export default async function PanemCreditPage({ searchParams }) {
   const activeEvent = store.events.find((event) => event.status === "active") || store.events[0];
   const activeEvents = store.events.filter((event) => event.status === "active").slice(0, 5);
   const security = getSecurityDashboard(store, selectedWallet);
-  const selectedJob = economyJobDefaults.find((job) => job.id === selectedWallet.selectedJobId) || economyJobDefaults.find((job) => job.district === selectedWallet.district) || economyJobDefaults[0];
+  const currentDistrict = normalizeEconomyDistrict(citizen.district || selectedWallet.district || "The Capitol");
+  const jobWallet = { ...selectedWallet, district: currentDistrict };
+  const selectedJobCandidate = economyJobDefaults.find((job) => job.id === selectedWallet.selectedJobId);
+  const selectedJob = selectedJobCandidate && getJobAccess(jobWallet, selectedJobCandidate, { district: currentDistrict }).allowed
+    ? selectedJobCandidate
+    : economyJobDefaults.find((job) => getJobAccess(jobWallet, job, { district: currentDistrict }).allowed) || economyJobDefaults[0];
+  const jobView = params?.jobs === "my" ? "my" : "all";
   const availableJobs = [...economyJobDefaults].sort((a, b) => {
-    const aNative = a.district === "Any" || a.district === selectedWallet.district;
-    const bNative = b.district === "Any" || b.district === selectedWallet.district;
-    return Number(bNative) - Number(aNative);
-  });
+    const aAccess = getJobAccess(jobWallet, a, { district: currentDistrict });
+    const bAccess = getJobAccess(jobWallet, b, { district: currentDistrict });
+    return Number(bAccess.allowed) - Number(aAccess.allowed) || Number(bAccess.native) - Number(aAccess.native) || a.district.localeCompare(b.district) || a.name.localeCompare(b.name);
+  }).filter((job) => jobView === "all" || getJobAccess(jobWallet, job, { district: currentDistrict }).allowed);
   const richest = [...store.wallets].sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0)).slice(0, 6);
   const wanted = store.wallets.filter((wallet) => wallet.wanted || wallet.underReview || Number(wallet.bounty || 0) > 0).slice(0, 6);
   const districtChampions = store.districts.map((district) => {
@@ -156,6 +164,10 @@ export default async function PanemCreditPage({ searchParams }) {
                 ? "This wallet has already received its daily civic salary today."
                 : params.error === "confirm-transfer"
                   ? "Large public-handle transfers require the confirmation checkbox before execution."
+                : params.error === "work-permit-required"
+                  ? "You cannot select this job outside your district without a work permit."
+                : params.error === "restricted-job"
+                  ? "This restricted role requires special government or MSS permission."
                 : params.error === "session"
                   ? "Your citizen banking session has expired. Please identify yourself again."
                 : "The wallet, balance, stock, or account status could not support that request."}
@@ -245,6 +257,14 @@ export default async function PanemCreditPage({ searchParams }) {
         <section className="state-section scroll-fade" id="jobs-work">
           <p className="eyebrow">Civic Earnings</p>
           <h2>Job Desk</h2>
+          <div className="application-notice">
+            <strong>Current district: {currentDistrict}</strong>
+            <p>Native district jobs are open at full payout. Foreign jobs are visible in All Jobs, but require a Work Permit before they can be selected.</p>
+          </div>
+          <div className="government-action-row">
+            <Link className={`button ${jobView === "my" ? "button--solid-site" : ""}`} href="/panem-credit?jobs=my#jobs-work">My District Jobs</Link>
+            <Link className={`button ${jobView === "all" ? "button--solid-site" : ""}`} href="/panem-credit?jobs=all#jobs-work">All Jobs</Link>
+          </div>
           <article className="finance-panel">
             <p className="eyebrow">Selected Role</p>
             <h3>{selectedJob.name}</h3>
@@ -263,22 +283,23 @@ export default async function PanemCreditPage({ searchParams }) {
           </article>
           <div className="panem-market-grid">
             {availableJobs.map((job) => {
-              const nativeJob = job.district === "Any" || job.district === selectedWallet.district;
+              const jobAccess = getJobAccess(jobWallet, job, { district: currentDistrict });
+              const nativeJob = jobAccess.native;
               return (
-              <article className="premium-card panem-market-card" key={job.id}>
-                <span className="court-role-badge">{nativeJob ? "Native" : "Foreign"} / {job.district}</span>
+              <article className={`premium-card panem-market-card ${jobAccess.allowed ? "" : "panem-market-card--locked"}`} key={job.id}>
+                <span className="court-role-badge">{jobAccess.allowed ? (nativeJob ? "Native" : "Permit") : jobAccess.label} / {job.district}</span>
                 <h3>{job.name}</h3>
                 <p>{job.description}</p>
                 <dl className="panem-ledger">
                   <div><dt>Payout</dt><dd>{formatCredits(job.minReward)} - {formatCredits(job.maxReward)}</dd></div>
                   <div><dt>Cooldown</dt><dd>{job.cooldownHours}h</dd></div>
                   <div><dt>Risk</dt><dd>{job.riskLevel} / {(Number(job.failureChance || 0) * 100).toFixed(0)}% failure</dd></div>
-                  <div><dt>District rule</dt><dd>{nativeJob ? "100% reward" : "40-60% reward, +15% risk"}</dd></div>
+                  <div><dt>District rule</dt><dd>{nativeJob ? "100% reward" : jobAccess.allowed ? "Work permit active" : jobAccess.label}</dd></div>
                 </dl>
                 <form action="/panem-credit/action" method="post">
                   <input name="intent" type="hidden" value="set-job" />
                   <input name="jobId" type="hidden" value={job.id} />
-                  <button className="button button--solid-site" type="submit">{selectedJob.id === job.id ? "Selected" : "Select Job"}</button>
+                  <button className="button button--solid-site" disabled={!jobAccess.allowed} type="submit">{jobAccess.allowed ? selectedJob.id === job.id ? "Selected" : "Select Job" : jobAccess.label}</button>
                 </form>
               </article>
             )})}

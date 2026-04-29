@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../../lib/action-routes";
 import {
   addAuditEvent,
   assertTrustedPostOrigin,
@@ -17,7 +18,7 @@ function clean(value, maxLength = 1000) {
   return String(value || "").replace(/[<>]/g, "").trim().slice(0, maxLength);
 }
 
-export async function POST(request) {
+export const POST = safeAction("government-access/broadcast-approvals/action", "/government-access/broadcast-approvals", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/government-access?denied=1");
   }
@@ -68,4 +69,4 @@ export async function POST(request) {
       `/government-access/broadcast-approvals?error=storage&detail=${encodeURIComponent(error.message)}`
     );
   }
-}
+});

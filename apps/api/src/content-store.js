@@ -2,6 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
+  compactEconomyStoreForWrite,
   craftingQualityTiers,
   blackMarketGoodsDefaults,
   craftingRecipeDefaults,
@@ -230,6 +231,10 @@ function normalizeEconomyStore(economy = {}) {
     districts,
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
     raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs : [],
+    lootboxAllocationDate: cleanText(economy.lootboxAllocationDate || "", 20),
+    globalLootboxesOpenedToday: Math.max(0, Number(economy.globalLootboxesOpenedToday || 0)),
+    perUserLootboxesOpenedToday: economy.perUserLootboxesOpenedToday && typeof economy.perUserLootboxesOpenedToday === "object" ? economy.perUserLootboxesOpenedToday : {},
+    lootboxLogs: Array.isArray(economy.lootboxLogs) ? economy.lootboxLogs : [],
     gamblingJackpot: Math.max(500, Number(economy.gamblingJackpot || 2500)),
     blackMarketGoods:
       Array.isArray(economy.blackMarketGoods) && economy.blackMarketGoods.length
@@ -583,10 +588,10 @@ export async function getEconomyStore() {
 
 export async function updateEconomyStore(fields) {
   const content = await readContentFile();
-  content.economy = normalizeEconomyStore({
+  content.economy = compactEconomyStoreForWrite(normalizeEconomyStore({
     ...(content.economy || defaultContent.economy),
     ...(fields || {})
-  });
+  }));
   await writeContentFile(content);
   return content.economy;
 }

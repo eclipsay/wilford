@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../lib/action-routes";
 import { assertTrustedPostOrigin } from "../../../lib/government-auth";
 import {
   getCitizenState,
@@ -25,7 +26,7 @@ function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
 }
 
-export async function POST(request) {
+export const POST = safeAction("panem-credit/action", "/panem-credit", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/panem-credit?error=origin");
   }
@@ -81,7 +82,8 @@ export async function POST(request) {
     const result = await performEconomyJob({
       walletId,
       jobId: String(formData.get("jobId") || "work-shift").trim(),
-      actor: citizen.unionSecurityId
+      actor: citizen.unionSecurityId,
+      district: citizen.district
     });
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "economy work completed", `${result.job?.name || "Work"} / ${result.amount || 0} PC`);
@@ -93,7 +95,8 @@ export async function POST(request) {
     const result = await setCitizenJob({
       walletId,
       jobId: String(formData.get("jobId") || "").trim(),
-      actor: citizen.unionSecurityId
+      actor: citizen.unionSecurityId,
+      district: citizen.district
     });
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "job selected", result.job?.name || "Citizen job");
@@ -182,4 +185,4 @@ export async function POST(request) {
   }
 
   return redirectTo(request, "/panem-credit");
-}
+});

@@ -63,7 +63,7 @@ export default async function MssConsolePage({ searchParams }) {
         {params?.raidSaved ? (
           <section className="application-notice">
             <strong>MSS Raid Complete</strong>
-            <p>{params.count || "0"} citizen inventory record{params.count === "1" ? "" : "s"} inspected.</p>
+            <p>{params.detail || `${params.count || "0"} citizen inventory record${params.count === "1" ? "" : "s"} inspected.`}</p>
           </section>
         ) : null}
         {params?.error ? (

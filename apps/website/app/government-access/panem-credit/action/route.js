@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../../lib/action-routes";
 import {
   assertTrustedPostOrigin,
   canAccess,
@@ -32,7 +33,7 @@ function deny(request) {
   return redirectTo(request, "/government-access?denied=1");
 }
 
-export async function POST(request) {
+export const POST = safeAction("government-access/panem-credit/action", "/government-access/panem-credit", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return deny(request);
   }
@@ -198,4 +199,4 @@ export async function POST(request) {
   }
 
   return redirectTo(request, "/government-access/panem-credit?saved=1");
-}
+});

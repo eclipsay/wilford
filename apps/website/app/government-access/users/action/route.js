@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../../lib/action-routes";
 import {
   createGovernmentUser,
   assertTrustedPostOrigin,
@@ -19,7 +20,7 @@ function storageErrorPath(error) {
   return `/government-access/users?error=storage&detail=${detail}`;
 }
 
-export async function POST(request) {
+export const POST = safeAction("government-access/users/action", "/government-access/users", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/government-access?denied=1");
   }
@@ -65,4 +66,4 @@ export async function POST(request) {
   }
 
   return redirectTo(request, "/government-access/users");
-}
+});

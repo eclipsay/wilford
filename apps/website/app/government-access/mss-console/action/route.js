@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../../lib/action-routes";
 import {
   addAuditEvent,
   assertTrustedPostOrigin,
@@ -46,7 +47,7 @@ function mapDistribution(value) {
   return "mss_only";
 }
 
-export async function POST(request) {
+export const POST = safeAction("government-access/mss-console/action", "/government-access/mss-console", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/government-access?denied=1");
   }
@@ -128,7 +129,11 @@ export async function POST(request) {
       actor: user.username
     });
     await addAuditEvent(user.username, "mss raid executed", `${result.raidId} / ${result.logs.length} target(s)`, result.ok ? "success" : "failed").catch(() => {});
-    return redirectTo(request, `/government-access/mss-console?raidSaved=1&count=${result.logs.length}`);
+    if (!result.ok) {
+      return redirectTo(request, `/government-access/mss-console?error=raid&detail=${encodeURIComponent(result.reason || "Raid failed: citizen record not found")}`);
+    }
+    const emptyRaid = result.logs.every((log) => !log.seizedItems?.length && !Number(log.fineAmount || 0));
+    return redirectTo(request, `/government-access/mss-console?raidSaved=1&count=${result.logs.length}&detail=${encodeURIComponent(emptyRaid ? "Raid completed: no contraband found" : "Raid completed")}`);
   }
 
   if (intent !== "create-security-alert") {
@@ -210,4 +215,4 @@ export async function POST(request) {
       `/government-access/mss-console?error=storage&detail=${encodeURIComponent(error.message)}`
     );
   }
-}
+});

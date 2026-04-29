@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../../lib/action-routes";
 import { assertTrustedPostOrigin, requireGovernmentUser } from "../../../../lib/government-auth";
 import { updateCitizenRequest } from "../../../../lib/citizen-state";
 
@@ -6,7 +7,7 @@ function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
 }
 
-export async function POST(request) {
+export const POST = safeAction("government-access/citizen-requests/action", "/government-access/citizen-requests", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/government-access?denied=1");
   }
@@ -24,4 +25,4 @@ export async function POST(request) {
   });
 
   return redirectTo(request, `/government-access/citizen-requests?saved=1&actor=${encodeURIComponent(actor.username)}`);
-}
+});

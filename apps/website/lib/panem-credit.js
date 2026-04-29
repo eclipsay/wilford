@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   calculateMarketPrice,
   blackMarketGoodsDefaults,
+  compactEconomyStoreForWrite,
   craftingQualityTiers,
   craftingRecipeDefaults,
   dynamicEconomyEventDefaults,
@@ -16,9 +17,13 @@ import {
   economyGambleDefaults,
   economyJobDefaults,
   gatheringActionDefaults,
+  getJobAccess,
+  getLootboxCrate,
   investmentFundDefaults,
   inventoryItemDefaults,
   inventoryRarityTiers,
+  lootboxDailyGlobalLimit,
+  lootboxDailyUserLimit,
   marketItemDefaults,
   prestigeItemDefaults,
   stockCompanyDefaults,
@@ -229,16 +234,7 @@ function levelForXp(xp) {
 }
 
 function jobAccessForWallet(wallet, job) {
-  if (!job || job.district === "Any" || job.district === wallet?.district) {
-    return { native: true, rewardMultiplier: 1, riskModifier: 0, label: "Native assignment" };
-  }
-  const permit = (wallet?.holdings || []).some((holding) => holding.itemId === "work-permit" && Number(holding.quantity || 0) > 0);
-  return {
-    native: false,
-    rewardMultiplier: permit ? 0.6 : 0.5,
-    riskModifier: permit ? 0.08 : 0.15,
-    label: permit ? "Foreign work permit" : "Foreign assignment"
-  };
+  return getJobAccess(wallet, job);
 }
 
 function recipeDistrictMatch(wallet, recipe) {
@@ -259,6 +255,34 @@ function rollCraftQuality(level = 1, specialist = false) {
     if (roll <= 0) return tier;
   }
   return tiers[0];
+}
+
+function resetLootboxAllocation(store) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (store.lootboxAllocationDate !== today) {
+    store.lootboxAllocationDate = today;
+    store.globalLootboxesOpenedToday = 0;
+    store.perUserLootboxesOpenedToday = {};
+  }
+  store.perUserLootboxesOpenedToday = store.perUserLootboxesOpenedToday && typeof store.perUserLootboxesOpenedToday === "object"
+    ? store.perUserLootboxesOpenedToday
+    : {};
+}
+
+function rollLootboxReward(store, crate) {
+  const roll = Math.random();
+  if (roll < Number(crate.lowRollChance || 0)) {
+    const item = inventoryItemDefaults.find((entry) => entry.id === "grain-sack") || inventoryItemDefaults[0];
+    return { item, quantity: 1, rarity: "common", lowRoll: true, taxPenalty: Math.round(Number(crate.price || 0) * 0.08) };
+  }
+  const legendaryCutoff = 1 - Number(crate.legendaryChance || 0);
+  const epicCutoff = legendaryCutoff - Number(crate.epicChance || 0);
+  const rareCutoff = epicCutoff - Number(crate.rareChance || 0);
+  const rarity = roll > legendaryCutoff ? "legendary" : roll > epicCutoff ? "epic" : roll > rareCutoff ? "rare" : roll > 0.45 ? "uncommon" : "common";
+  const pool = inventoryItemDefaults.filter((item) => item.rarity === rarity && !item.contraband);
+  const item = pool[randomInt(0, Math.max(0, pool.length - 1))] || inventoryItemDefaults[0];
+  const quantity = rarity === "common" ? randomInt(1, 3) : rarity === "uncommon" ? randomInt(1, 2) : 1;
+  return { item, quantity, rarity, lowRoll: false, taxPenalty: 0 };
 }
 
 function hasMaterials(wallet, materials = []) {
@@ -487,6 +511,10 @@ export function normalizeEconomyStore(economy = {}) {
     districts,
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
     raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs : [],
+    lootboxAllocationDate: cleanText(economy.lootboxAllocationDate || "", 20),
+    globalLootboxesOpenedToday: Math.max(0, Number(economy.globalLootboxesOpenedToday || 0)),
+    perUserLootboxesOpenedToday: economy.perUserLootboxesOpenedToday && typeof economy.perUserLootboxesOpenedToday === "object" ? economy.perUserLootboxesOpenedToday : {},
+    lootboxLogs: Array.isArray(economy.lootboxLogs) ? economy.lootboxLogs : [],
     gamblingJackpot: Math.max(500, Number(economy.gamblingJackpot || 2500)),
     categories: Array.isArray(economy.categories) && economy.categories.length
       ? economy.categories
@@ -608,7 +636,7 @@ async function writeRemoteStore(economy) {
       "Content-Type": "application/json",
       "x-admin-key": key
     },
-    body: JSON.stringify({ economy }),
+    body: JSON.stringify({ economy: compactEconomyStoreForWrite(economy) }),
     cache: "no-store",
     signal: AbortSignal.timeout(5000)
   });
@@ -640,7 +668,7 @@ export async function getEconomyStore() {
 }
 
 export async function saveEconomyStore(economy) {
-  const normalized = normalizeEconomyStore(economy);
+  const normalized = compactEconomyStoreForWrite(normalizeEconomyStore(economy));
 
   try {
     return normalizeEconomyStore(await writeRemoteStore(normalized));
@@ -871,7 +899,7 @@ export async function claimDailyReward({ walletId, actor = "citizen" }) {
   return { ok: true, amount, streak: wallet.streak, store: await saveEconomyStore(store) };
 }
 
-export async function performEconomyJob({ walletId, jobId, actor = "citizen" }) {
+export async function performEconomyJob({ walletId, jobId, actor = "citizen", district = "" }) {
   const store = await getEconomyStore();
   const wallet = getWallet(store, walletId);
   const selectedJobId = jobId || wallet?.selectedJobId || "work-shift";
@@ -879,10 +907,12 @@ export async function performEconomyJob({ walletId, jobId, actor = "citizen" }) 
   if (!wallet || wallet.status !== "active") return { ok: false, store };
   if (!isCooldownReady(store, wallet.id, "work", job.id, job.cooldownHours)) return { ok: false, store, reason: "cooldown" };
   ensureWalletCollections(wallet);
-  const jobAccess = jobAccessForWallet(wallet, job);
-  const district = store.districts.find((entry) => entry.name === (jobAccess.native ? wallet.district : job.district)) || store.districts.find((entry) => entry.name === wallet.district);
+  const jobWallet = district ? { ...wallet, district } : wallet;
+  const jobAccess = jobAccessForWallet(jobWallet, job);
+  if (!jobAccess.allowed) return { ok: false, store, reason: jobAccess.reason || "job-restricted", message: jobAccess.message, job, jobAccess };
+  const economyDistrict = store.districts.find((entry) => entry.name === (jobAccess.native ? jobWallet.district : job.district)) || store.districts.find((entry) => entry.name === jobWallet.district);
   const districtFit = jobAccess.native ? 1.18 : jobAccess.rewardMultiplier;
-  const prosperity = 1 + (Number(district?.prosperityRating || 70) - 70) / 300;
+  const prosperity = 1 + (Number(economyDistrict?.prosperityRating || 70) - 70) / 300;
   const event = activeEvent(store);
   const eventBoost = event?.boostedDistricts?.includes(wallet.district) ? 1.2 : 1;
   const jobEventBoost = 1 + activeModifierSum(store, (entry) => eventAffectsDistrict(entry, job.district), "jobPayoutPercent");
@@ -927,10 +957,10 @@ export async function performEconomyJob({ walletId, jobId, actor = "citizen" }) 
     }
   }
   wallet.updatedAt = new Date().toISOString();
-  if (district) {
-    district.tradeVolume = Math.round(Number(district.tradeVolume || 0) + Math.max(1, amount) * 1.6);
-    district.taxContribution = Math.round(Number(district.taxContribution || 0) + amount * 0.08);
-    district.supplyLevel = clampNumber(Number(district.supplyLevel || 0) + (failed ? -1 : 1), 0, 130);
+  if (economyDistrict) {
+    economyDistrict.tradeVolume = Math.round(Number(economyDistrict.tradeVolume || 0) + Math.max(1, amount) * 1.6);
+    economyDistrict.taxContribution = Math.round(Number(economyDistrict.taxContribution || 0) + amount * 0.08);
+    economyDistrict.supplyLevel = clampNumber(Number(economyDistrict.supplyLevel || 0) + (failed ? -1 : 1), 0, 130);
   }
   pushTransaction(store, {
     fromWalletId: failed ? wallet.id : "district-production",
@@ -939,16 +969,22 @@ export async function performEconomyJob({ walletId, jobId, actor = "citizen" }) 
     type: "work",
     reason: `${job.name}: ${failed ? "failed assignment" : job.description}${itemReward ? ` / item: ${itemReward.name}` : ""}${jobAccess.native ? "" : " / foreign work penalty applied"}`,
     createdBy: actor,
-    meta: { key: job.id, district: wallet.district, jobDistrict: job.district, eventId: event?.id, failed, riskLevel: job.riskLevel, illegalOffer, itemRewardId: itemReward?.id || "", nativeDistrict: jobAccess.native, rewardMultiplier: jobAccess.rewardMultiplier, riskModifier: jobAccess.riskModifier }
+    meta: { key: job.id, district: jobWallet.district, jobDistrict: job.district, eventId: event?.id, failed, riskLevel: job.riskLevel, illegalOffer, itemRewardId: itemReward?.id || "", nativeDistrict: jobAccess.native, rewardMultiplier: jobAccess.rewardMultiplier, riskModifier: jobAccess.riskModifier }
   });
   return { ok: true, amount, penalty, failed, job, itemReward, illegalOffer, jobAccess, store: await saveEconomyStore(store) };
 }
 
-export async function setCitizenJob({ walletId, jobId, actor = "citizen" }) {
+export async function setCitizenJob({ walletId, jobId, actor = "citizen", district = "" }) {
   const store = await getEconomyStore();
   const wallet = getWallet(store, walletId);
   const job = economyJobDefaults.find((entry) => entry.id === jobId);
   if (!wallet || !job || wallet.status !== "active") return { ok: false, store, reason: "job" };
+  ensureWalletCollections(wallet);
+  const jobWallet = district ? { ...wallet, district } : wallet;
+  const jobAccess = jobAccessForWallet(jobWallet, job);
+  if (!jobAccess.allowed) {
+    return { ok: false, store, reason: jobAccess.reason || "job-restricted", message: jobAccess.message, job, jobAccess };
+  }
   if (wallet.jobChangedAt && Date.now() - Date.parse(wallet.jobChangedAt) < Number(job.switchCooldownHours || 24) * 60 * 60 * 1000) {
     return { ok: false, store, reason: "job-cooldown" };
   }
@@ -961,7 +997,7 @@ export async function setCitizenJob({ walletId, jobId, actor = "citizen" }) {
     type: "set_job",
     reason: `${wallet.displayName} selected ${job.name}.`,
     createdBy: actor,
-    meta: { key: job.id, district: wallet.district }
+    meta: { key: job.id, district: jobWallet.district }
   });
   return { ok: true, job, store: await saveEconomyStore(store) };
 }
@@ -1368,30 +1404,67 @@ export async function sellInventoryToState({ walletId, itemId, quantity, actor =
   return { ok: true, item, quantity: count, value, store: await saveEconomyStore(store) };
 }
 
-export async function openInventoryCrate({ walletId, actor = "citizen" }) {
+export async function openInventoryCrate({ walletId, actor = "citizen", crateId = "standard" }) {
   const store = await getEconomyStore();
   const wallet = getWallet(store, walletId);
-  const cost = 150;
-  if (!wallet || wallet.status !== "active" || Number(wallet.balance || 0) < cost) return { ok: false, store };
+  const crate = getLootboxCrate(crateId);
+  const cost = Number(crate.price || 250);
+  if (!wallet) return { ok: false, store, reason: "wallet" };
+  if (wallet.status !== "active") return { ok: false, store, reason: "wallet-status" };
   ensureWalletCollections(wallet);
+  resetLootboxAllocation(store);
+  const userOpened = Number(store.perUserLootboxesOpenedToday[wallet.id] || 0);
+  if (Number(store.globalLootboxesOpenedToday || 0) >= lootboxDailyGlobalLimit || userOpened >= lootboxDailyUserLimit) {
+    return { ok: false, store, reason: "crate-allocation" };
+  }
+  if (Number(wallet.balance || 0) < cost) return { ok: false, store, reason: "balance" };
+  if (occupiedInventorySlots(wallet) >= wallet.inventorySlots) return { ok: false, store, reason: "inventory-full" };
   wallet.balance -= cost;
-  const roll = Math.random();
-  const rarity = roll > 0.985 ? "legendary" : roll > 0.93 ? "epic" : roll > 0.78 ? "rare" : roll > 0.48 ? "uncommon" : "common";
-  const pool = inventoryItemDefaults.filter((item) => item.rarity === rarity && !item.contraband);
-  const item = pool[randomInt(0, Math.max(0, pool.length - 1))] || inventoryItemDefaults[0];
-  const quantity = rarity === "common" ? randomInt(1, 4) : 1;
+  const { item, quantity, rarity, lowRoll, taxPenalty } = rollLootboxReward(store, crate);
+  if (taxPenalty) {
+    wallet.balance = Math.max(0, Number(wallet.balance || 0) - taxPenalty);
+  }
   addHolding(wallet, item.id, quantity, itemValue(item, store), "Lucky Crate");
   wallet.collectionScore += Math.round(quantity * rarityMultiplier(rarity) * 10);
+  store.globalLootboxesOpenedToday = Number(store.globalLootboxesOpenedToday || 0) + 1;
+  store.perUserLootboxesOpenedToday[wallet.id] = userOpened + 1;
+  store.lootboxLogs = [{
+    id: createId("crate"),
+    date: store.lootboxAllocationDate,
+    userId: wallet.userId || wallet.discordId || wallet.id,
+    walletId: wallet.id,
+    crateId: crate.id,
+    rewardItemId: item.id,
+    rewardName: item.name,
+    rarity,
+    quantity,
+    cost,
+    taxPenalty,
+    lowRoll,
+    createdAt: new Date().toISOString()
+  }, ...(store.lootboxLogs || [])].slice(0, 300);
   pushTransaction(store, {
     fromWalletId: "lucky-crate",
     toWalletId: wallet.id,
     amount: itemValue(item, store) * quantity,
     type: "lootbox",
-    reason: `Lucky Crate: ${quantity} x ${item.name}`,
+    reason: `${crate.label}: ${quantity} x ${item.name}${lowRoll ? " / low roll" : ""}${taxPenalty ? ` / ${taxPenalty} PC penalty` : ""}`,
     createdBy: actor,
-    meta: { key: item.id, rarity, quantity }
+    meta: { key: item.id, rarity, quantity, crateId: crate.id, cost, taxPenalty, lowRoll }
   });
-  return { ok: true, item, quantity, cost, store: await saveEconomyStore(store) };
+  return {
+    ok: true,
+    item,
+    quantity,
+    cost,
+    crate,
+    rarity,
+    lowRoll,
+    taxPenalty,
+    remainingGlobal: Math.max(0, lootboxDailyGlobalLimit - Number(store.globalLootboxesOpenedToday || 0)),
+    remainingUser: Math.max(0, lootboxDailyUserLimit - Number(store.perUserLootboxesOpenedToday[wallet.id] || 0)),
+    store: await saveEconomyStore(store)
+  };
 }
 
 export async function craftInventoryItem({ walletId, recipeId, actor = "citizen" }) {
@@ -1551,6 +1624,10 @@ export async function conductMssRaid({
   const now = new Date().toISOString();
   const raidId = createId("raid");
   const logs = [];
+
+  if (!targets.length) {
+    return { ok: false, reason: "Raid failed: citizen record not found", raidId, logs, store };
+  }
 
   for (const wallet of targets) {
     ensureWalletCollections(wallet);
@@ -2100,13 +2177,17 @@ export async function buyCitizenListing({ buyerWalletId, listingId, quantity, ac
   const seller = listing ? getWallet(store, listing.sellerWalletId) : null;
   const item = listing ? store.marketItems.find((entry) => entry.id === listing.itemId) || getInventoryItem(listing.itemId) : null;
   const count = Math.max(1, Number.parseInt(quantity || "1", 10));
-  if (!buyer || !seller || !listing || !item || buyer.status !== "active" || seller.id === buyer.id || Number(listing.quantity || 0) < count) {
-    return { ok: false, store };
-  }
+  if (!listing) return { ok: false, store, reason: "listing-missing" };
+  if (!buyer) return { ok: false, store, reason: "wallet" };
+  if (!seller) return { ok: false, store, reason: "seller-wallet" };
+  if (!item) return { ok: false, store, reason: "item" };
+  if (buyer.status !== "active") return { ok: false, store, reason: "wallet-status" };
+  if (seller.id === buyer.id) return { ok: false, store, reason: "self-purchase" };
+  if (Number(listing.quantity || 0) < count) return { ok: false, store, reason: "listing-quantity" };
   const subtotal = Number(listing.price || 0) * count;
   const taxType = item.category === "Luxury Goods" || item.type === "luxury" ? "luxury_goods_tax" : "trade_tax";
   const taxAmount = buyer.exempt ? 0 : Math.round(subtotal * Number(store.taxRates[taxType] || 0) * 100) / 100;
-  if (Number(buyer.balance || 0) < subtotal + taxAmount) return { ok: false, store };
+  if (Number(buyer.balance || 0) < subtotal + taxAmount) return { ok: false, store, reason: "balance" };
   const sellerTaxRate = item.contraband ? 0.25 : itemRarity(item) === "legendary" || itemRarity(item) === "epic" ? 0.2 : 0.15;
   const sellerTax = seller.exempt ? 0 : Math.round(subtotal * sellerTaxRate * 100) / 100;
   buyer.balance -= subtotal + taxAmount;

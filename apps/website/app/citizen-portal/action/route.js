@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../lib/action-routes";
 import {
   changeCitizenPassword,
   createCitizenRequest,
@@ -13,7 +14,7 @@ function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
 }
 
-export async function POST(request) {
+export const POST = safeAction("citizen-portal/action", "/citizen-portal", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/citizen-portal?error=origin");
   }
@@ -63,4 +64,4 @@ export async function POST(request) {
   await recordCitizenActivity(citizen.id, "request submitted", `${submitted.category} / ${submitted.id}`);
 
   return redirectTo(request, "/citizen-portal?saved=request");
-}
+});

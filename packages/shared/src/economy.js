@@ -14,6 +14,133 @@ export const taxTypes = [
 
 export const walletStatuses = ["active", "frozen", "restricted"];
 
+export const workPermitItemId = "work-permit";
+
+export const lootboxDailyGlobalLimit = 15;
+export const lootboxDailyUserLimit = 3;
+
+export const lootboxCrateDefaults = [
+  { id: "standard", label: "Standard Lootbox", price: 250, legendaryChance: 0.006, epicChance: 0.04, rareChance: 0.16, lowRollChance: 0.16 },
+  { id: "premium", label: "Premium Lootbox", price: 750, legendaryChance: 0.018, epicChance: 0.09, rareChance: 0.28, lowRollChance: 0.1 },
+  { id: "state-crate", label: "State Crate", price: 1500, legendaryChance: 0.04, epicChance: 0.16, rareChance: 0.36, lowRollChance: 0.06 }
+];
+
+export function economyTodayKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function getLootboxCrate(crateId = "standard") {
+  return lootboxCrateDefaults.find((crate) => crate.id === crateId) || lootboxCrateDefaults[0];
+}
+
+export function compactEconomyStoreForWrite(economy = {}) {
+  return {
+    ...economy,
+    transactions: Array.isArray(economy.transactions) ? economy.transactions.slice(0, 600) : [],
+    taxRecords: Array.isArray(economy.taxRecords) ? economy.taxRecords.slice(0, 600) : [],
+    alerts: Array.isArray(economy.alerts) ? economy.alerts.slice(0, 300) : [],
+    raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs.slice(0, 250) : [],
+    listings: Array.isArray(economy.listings) ? economy.listings.slice(0, 300) : [],
+    lootboxLogs: Array.isArray(economy.lootboxLogs) ? economy.lootboxLogs.slice(0, 300) : [],
+    wallets: Array.isArray(economy.wallets)
+      ? economy.wallets.map((wallet) => ({
+          ...wallet,
+          loginDays: Array.isArray(wallet.loginDays) ? wallet.loginDays.slice(0, 21) : [],
+          actionBans: Array.isArray(wallet.actionBans) ? wallet.actionBans.slice(0, 20) : [],
+          inventoryFlags: Array.isArray(wallet.inventoryFlags) ? wallet.inventoryFlags.slice(0, 20) : [],
+          achievements: Array.isArray(wallet.achievements) ? wallet.achievements.slice(0, 50) : [],
+          holdings: Array.isArray(wallet.holdings)
+            ? wallet.holdings.map((holding) => ({
+                ...holding,
+                acquisitionHistory: Array.isArray(holding.acquisitionHistory)
+                  ? holding.acquisitionHistory.slice(0, 5)
+                  : []
+              }))
+            : [],
+          stockPortfolio: Array.isArray(wallet.stockPortfolio)
+            ? wallet.stockPortfolio.map((position) => ({
+                ...position,
+                tradeHistory: Array.isArray(position.tradeHistory) ? position.tradeHistory.slice(0, 10) : []
+              }))
+            : []
+        }))
+      : []
+  };
+}
+
+export function normalizeEconomyDistrict(district = "") {
+  const value = String(district || "").trim();
+  if (!value) return "The Capitol";
+  if (/^(capitol|the capitol)$/i.test(value)) return "The Capitol";
+  return value;
+}
+
+export function walletHasWorkPermit(wallet) {
+  return (wallet?.holdings || []).some(
+    (holding) => holding.itemId === workPermitItemId && Number(holding.quantity || 0) > 0
+  );
+}
+
+export function walletHasRestrictedJobPermission(wallet, job = {}) {
+  const permissions = new Set([
+    ...(wallet?.permissions || []),
+    ...(wallet?.roles || []),
+    ...(wallet?.specialPermissions || [])
+  ].map((entry) => String(entry || "").toLowerCase()));
+  return permissions.has("restricted-jobs") ||
+    permissions.has("district-13") ||
+    permissions.has("mss") ||
+    permissions.has("government");
+}
+
+export function getJobAccess(wallet, job, options = {}) {
+  const walletDistrict = normalizeEconomyDistrict(wallet?.district || options.district || "");
+  const jobDistrict = normalizeEconomyDistrict(job?.district || "");
+  const native = !job || jobDistrict === "Any" || jobDistrict === walletDistrict;
+  const restricted = jobDistrict === "District 13" || job?.riskLevel === "Restricted" || Boolean(job?.restricted);
+  const hasRestrictedPermission = walletHasRestrictedJobPermission(wallet, job);
+  if (restricted && !hasRestrictedPermission) {
+    return {
+      allowed: false,
+      native,
+      restricted: true,
+      requiresWorkPermit: false,
+      hasWorkPermit: walletHasWorkPermit(wallet),
+      rewardMultiplier: 0,
+      riskModifier: 0,
+      label: "Restricted role",
+      reason: "restricted-job",
+      message: "This restricted role requires special government or MSS permission."
+    };
+  }
+  if (native) {
+    return {
+      allowed: true,
+      native: true,
+      restricted,
+      requiresWorkPermit: false,
+      hasWorkPermit: walletHasWorkPermit(wallet),
+      rewardMultiplier: 1,
+      riskModifier: 0,
+      label: "Native assignment"
+    };
+  }
+  const permit = walletHasWorkPermit(wallet);
+  const allowForeignWithPermit = options.allowForeignWithPermit !== false;
+  return {
+    allowed: permit && allowForeignWithPermit,
+    native: false,
+    restricted,
+    requiresWorkPermit: true,
+    hasWorkPermit: permit,
+    rewardMultiplier: permit ? 0.6 : 0.5,
+    riskModifier: permit ? 0.08 : 0.15,
+    label: permit ? "Foreign work permit" : "Requires Work Permit",
+    reason: permit && allowForeignWithPermit ? "" : "work-permit-required",
+    message: "You cannot select this job outside your district without a work permit."
+  };
+}
+
 export const economyEventDefaults = [
   {
     id: "chairman-prosperity-week",

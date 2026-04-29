@@ -62,8 +62,8 @@ export const publicBotCommands = [
   {
     name: "/inventory, /fish, /mine, /farm, /scavenge, /log, /extract, /inspect, /lootbox, /crate",
     access: "Citizens",
-    description: "Gather resources, discover rare items, inspect values, open crates, and manage inventory.",
-    usage: "/inventory"
+    description: "Gather resources, discover rare items, inspect values, open scarce daily crates, and manage inventory.",
+    usage: "/crate type:standard"
   },
   {
     name: "/stocks, /stock, /buy-stock, /sell-stock, /portfolio, /watchlist, /market-news, /dividends",

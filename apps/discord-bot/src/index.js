@@ -23,6 +23,7 @@ import {
   applicationQuestions,
   blackMarketGoodsDefaults,
   brand,
+  compactEconomyStoreForWrite,
   craftingQualityTiers,
   craftingRecipeDefaults,
   dynamicEconomyEventDefaults,
@@ -33,9 +34,15 @@ import {
   formatCredits,
   formatShortSha,
   gatheringActionDefaults,
+  getJobAccess,
+  getLootboxCrate,
   investmentFundDefaults,
   inventoryItemDefaults,
   inventoryRarityTiers,
+  lootboxCrateDefaults,
+  lootboxDailyGlobalLimit,
+  lootboxDailyUserLimit,
+  normalizeEconomyDistrict,
   publicBotCommands,
   staffApplicationCommands,
   stockCompanyDefaults,
@@ -173,17 +180,20 @@ async function writeEconomyStore(economy) {
     throw new Error("ADMIN_API_KEY is required for Panem Credit commands.");
   }
 
+  const compactEconomy = compactEconomyStoreForWrite(economy);
   const response = await fetch(`${apiUrl}/api/admin/economy-store`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-admin-key": adminApiKey
     },
-    body: JSON.stringify({ economy }),
+    body: JSON.stringify({ economy: compactEconomy }),
     cache: "no-store"
   });
 
   if (!response.ok) {
+    const payloadSize = Buffer.byteLength(JSON.stringify({ economy: compactEconomy }), "utf8");
+    console.error("[economy-write]", { status: response.status, payloadSize });
     throw new Error(`Panem Credit ledger write failed (${response.status}).`);
   }
 
@@ -568,6 +578,35 @@ function inventoryItemValue(item, economy) {
   return Math.max(1, Math.round(base * rarityMultiplierFor(inventoryRarity(item)) * pressure));
 }
 
+function resetDiscordLootboxAllocation(economy) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (economy.lootboxAllocationDate !== today) {
+    economy.lootboxAllocationDate = today;
+    economy.globalLootboxesOpenedToday = 0;
+    economy.perUserLootboxesOpenedToday = {};
+  }
+  economy.perUserLootboxesOpenedToday = economy.perUserLootboxesOpenedToday && typeof economy.perUserLootboxesOpenedToday === "object"
+    ? economy.perUserLootboxesOpenedToday
+    : {};
+  economy.lootboxLogs = Array.isArray(economy.lootboxLogs) ? economy.lootboxLogs : [];
+}
+
+function discordRollLootboxReward(economy, crate) {
+  const roll = Math.random();
+  if (roll < Number(crate.lowRollChance || 0)) {
+    const item = inventoryItemById("grain-sack", economy) || inventoryItemDefaults[0];
+    return { item, quantity: 1, rarity: "common", lowRoll: true, taxPenalty: Math.round(Number(crate.price || 0) * 0.08) };
+  }
+  const legendaryCutoff = 1 - Number(crate.legendaryChance || 0);
+  const epicCutoff = legendaryCutoff - Number(crate.epicChance || 0);
+  const rareCutoff = epicCutoff - Number(crate.rareChance || 0);
+  const rarity = roll > legendaryCutoff ? "legendary" : roll > epicCutoff ? "epic" : roll > rareCutoff ? "rare" : roll > 0.45 ? "uncommon" : "common";
+  const pool = (economy.inventoryItems || inventoryItemDefaults).filter((item) => inventoryRarity(item) === rarity && !item.contraband);
+  const item = pool[randomEconomyAmount(0, Math.max(0, pool.length - 1))] || inventoryItemDefaults[0];
+  const quantity = rarity === "common" ? randomEconomyAmount(1, 3) : rarity === "uncommon" ? randomEconomyAmount(1, 2) : 1;
+  return { item, quantity, rarity, lowRoll: false, taxPenalty: 0 };
+}
+
 function addEconomyHolding(wallet, itemId, quantity, unitPrice = 0) {
   ensureEconomyHoldings(wallet);
   const count = Math.max(1, Number(quantity || 1));
@@ -790,7 +829,7 @@ function economyQuickLinks(...keys) {
 }
 
 function normalizeCitizenDistrict(citizen, wallet = null) {
-  return String(citizen?.district || wallet?.district || "Capitol").trim() || "Capitol";
+  return normalizeEconomyDistrict(citizen?.district || wallet?.district || "The Capitol");
 }
 
 function economyHasMaterials(wallet, materials = []) {
@@ -827,25 +866,24 @@ function rollDiscordCraftQuality(level = 1, specialist = false) {
 }
 
 function availableJobsForDistrict(district) {
-  return economyJobDefaults.filter((job) => job.district === "Any" || job.district === district);
+  const resolvedDistrict = normalizeEconomyDistrict(district || "The Capitol");
+  return economyJobDefaults.filter((job) => getJobAccess({ district: resolvedDistrict }, job).allowed);
 }
 
 function availableJobsForWallet(wallet, district = "") {
-  const resolvedDistrict = district || wallet?.district || "Capitol";
-  return [...economyJobDefaults].sort((a, b) => {
-    const aNative = a.district === "Any" || a.district === resolvedDistrict;
-    const bNative = b.district === "Any" || b.district === resolvedDistrict;
-    return Number(bNative) - Number(aNative);
-  });
+  const resolvedDistrict = normalizeEconomyDistrict(district || wallet?.district || "The Capitol");
+  return [...economyJobDefaults]
+    .filter((job) => getJobAccess({ ...wallet, district: resolvedDistrict }, job).allowed)
+    .sort((a, b) => {
+      const aAccess = getJobAccess({ ...wallet, district: resolvedDistrict }, a);
+      const bAccess = getJobAccess({ ...wallet, district: resolvedDistrict }, b);
+      return Number(bAccess.native) - Number(aAccess.native) || a.name.localeCompare(b.name);
+    });
 }
 
 function discordJobAccess(wallet, job, district = "") {
-  const resolvedDistrict = district || wallet?.district || "Capitol";
-  if (!job || job.district === "Any" || job.district === resolvedDistrict) {
-    return { native: true, rewardMultiplier: 1, riskModifier: 0, label: "native" };
-  }
-  const permit = (wallet?.holdings || []).some((holding) => holding.itemId === "work-permit" && Number(holding.quantity || 0) > 0);
-  return { native: false, rewardMultiplier: permit ? 0.6 : 0.5, riskModifier: permit ? 0.08 : 0.15, label: permit ? "foreign permit" : "foreign" };
+  const resolvedDistrict = normalizeEconomyDistrict(district || wallet?.district || "The Capitol");
+  return getJobAccess({ ...wallet, district: resolvedDistrict }, job, { district: resolvedDistrict });
 }
 
 function findEconomyJob(input, wallet = null, district = "") {
@@ -871,6 +909,13 @@ async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "w
 
   ensureEconomyHoldings(wallet);
   const jobAccess = discordJobAccess(wallet, job, resolvedDistrict);
+  if (!jobAccess.allowed) {
+    return {
+      ok: false,
+      title: "Work Permit Required",
+      message: jobAccess.message || "You cannot select this job outside your district without a work permit."
+    };
+  }
   const district = (economy.districts || []).find((entry) => entry.name === (jobAccess.native ? resolvedDistrict : job.district)) || (economy.districts || []).find((entry) => entry.name === resolvedDistrict);
   const event = economyActiveEvent(economy);
   const districtFit = jobAccess.native ? 1.18 : jobAccess.rewardMultiplier;
@@ -1432,6 +1477,11 @@ async function handleCitizenDashboardComponent(interaction) {
       await interaction.reply({ embeds: [dashboardReplyEmbed("Job Selection Rejected", "That job is not available for your district.")], ephemeral: true });
       return true;
     }
+    const jobAccess = discordJobAccess(wallet, job, district);
+    if (!jobAccess.allowed) {
+      await interaction.reply({ embeds: [dashboardReplyEmbed("Work Permit Required", jobAccess.message || "You cannot select this job outside your district without a work permit.")], ephemeral: true });
+      return true;
+    }
     if (wallet.jobChangedAt && Date.now() - Date.parse(wallet.jobChangedAt) < Number(job.switchCooldownHours || 24) * 60 * 60 * 1000) {
       await interaction.reply({ embeds: [dashboardReplyEmbed("Job Selection Cooldown", "You recently changed jobs. Try again after the labour registry cooldown.")], ephemeral: true });
       return true;
@@ -1884,7 +1934,7 @@ async function handleEconomySlashCommand(interaction) {
       "🎒 `/inventory` shows your items, value, rarity, and slots.",
       "🎣 `/fish`, ⛏ `/mine`, 🌾 `/farm`, `/scavenge`, `/log`, `/extract` gather goods.",
       "🔎 `/inspect item` shows rarity and value.",
-      "📦 `/crate` opens a paid reward crate.",
+      "📦 `/crate type:standard` opens a paid reward crate. Daily Union allocation is limited.",
       "Warning: risky gathering can fine you, lose items, or trigger MSS review."
     ]), false, economyQuickLinks("inventory", "marketplace"));
     return true;
@@ -2067,6 +2117,11 @@ async function handleEconomySlashCommand(interaction) {
     const job = findEconomyJob(jobInput, wallet, district);
     if (!job) {
       await replyEconomy(interaction, ministryEmbed("Job Selection Rejected", "That job is not available for your district. Use `/jobs` first."), true);
+      return true;
+    }
+    const jobAccess = discordJobAccess(wallet, job, district);
+    if (!jobAccess.allowed) {
+      await replyEconomy(interaction, ministryEmbed("Work Permit Required", jobAccess.message || "You cannot select this job outside your district without a work permit."), true);
       return true;
     }
     if (wallet.jobChangedAt && Date.now() - Date.parse(wallet.jobChangedAt) < Number(job.switchCooldownHours || 24) * 60 * 60 * 1000) {
@@ -2625,21 +2680,48 @@ async function handleEconomySlashCommand(interaction) {
 
   if (name === "lootbox" || name === "crate") {
     ensureEconomyHoldings(wallet);
-    const cost = 150;
+    resetDiscordLootboxAllocation(economy);
+    const crate = getLootboxCrate(interaction.options.getString("type") || "standard");
+    const cost = Number(crate.price || 250);
+    const userOpened = Number(economy.perUserLootboxesOpenedToday[wallet.id] || 0);
+    const remainingGlobal = Math.max(0, lootboxDailyGlobalLimit - Number(economy.globalLootboxesOpenedToday || 0));
+    const remainingUser = Math.max(0, lootboxDailyUserLimit - userOpened);
+    if (remainingGlobal <= 0 || remainingUser <= 0) {
+      await replyEconomy(interaction, ministryEmbed("Daily Union Crate Allocation Exhausted", "Daily Union crate allocation has been exhausted. Return tomorrow."), true);
+      return true;
+    }
+    if (cost >= 750 && !interaction.options.getBoolean("confirm")) {
+      await replyEconomy(interaction, ministryEmbed("Crate Confirmation Required", `${crate.label} costs ${formatCredits(cost)}.\nRemaining today: ${remainingGlobal} Union crates / ${remainingUser} for you.\nRun again with \`confirm: True\` to open it.`), true);
+      return true;
+    }
     if (wallet.status !== "active" || Number(wallet.balance || 0) < cost || occupiedInventorySlots(wallet) >= wallet.inventorySlots) {
-      await replyEconomy(interaction, ministryEmbed("Crate Rejected", "Balance, wallet status, or inventory slots prevent opening a crate."));
+      await replyEconomy(interaction, ministryEmbed("Crate Rejected", "Balance, wallet status, or inventory slots prevent opening a crate."), true);
       return true;
     }
     wallet.balance -= cost;
-    const roll = Math.random();
-    const rarity = roll > 0.985 ? "legendary" : roll > 0.93 ? "epic" : roll > 0.78 ? "rare" : roll > 0.48 ? "uncommon" : "common";
-    const pool = (economy.inventoryItems || inventoryItemDefaults).filter((item) => item.rarity === rarity && !item.contraband);
-    const item = pool[randomEconomyAmount(0, Math.max(0, pool.length - 1))] || inventoryItemDefaults[0];
-    const quantity = rarity === "common" ? randomEconomyAmount(1, 4) : 1;
+    const { item, quantity, rarity, lowRoll, taxPenalty } = discordRollLootboxReward(economy, crate);
+    if (taxPenalty) wallet.balance = Math.max(0, Number(wallet.balance || 0) - taxPenalty);
     addEconomyHolding(wallet, item.id, quantity, inventoryItemValue(item, economy));
-    pushEconomyTransaction(economy, { fromWalletId: "lucky-crate", toWalletId: wallet.id, amount: inventoryItemValue(item, economy) * quantity, type: "lootbox", reason: `${quantity} x ${item.name}`, createdBy: interaction.user.id, meta: { key: item.id, rarity, quantity } });
+    economy.globalLootboxesOpenedToday = Number(economy.globalLootboxesOpenedToday || 0) + 1;
+    economy.perUserLootboxesOpenedToday[wallet.id] = userOpened + 1;
+    economy.lootboxLogs = [{
+      id: createId("crate"),
+      date: economy.lootboxAllocationDate,
+      userId: interaction.user.id,
+      walletId: wallet.id,
+      crateId: crate.id,
+      rewardItemId: item.id,
+      rewardName: item.name,
+      rarity,
+      quantity,
+      cost,
+      taxPenalty,
+      lowRoll,
+      createdAt: new Date().toISOString()
+    }, ...(economy.lootboxLogs || [])].slice(0, 300);
+    pushEconomyTransaction(economy, { fromWalletId: "lucky-crate", toWalletId: wallet.id, amount: inventoryItemValue(item, economy) * quantity, type: "lootbox", reason: `${crate.label}: ${quantity} x ${item.name}${lowRoll ? " / low roll" : ""}${taxPenalty ? ` / ${formatCredits(taxPenalty)} penalty` : ""}`, createdBy: interaction.user.id, meta: { key: item.id, rarity, quantity, crateId: crate.id, cost, taxPenalty, lowRoll } });
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed("Lucky Crate Opened", `${quantity} x ${item.name}\nRarity: ${rarity}\nValue: ${formatCredits(inventoryItemValue(item, economy) * quantity)}`));
+    await replyEconomy(interaction, ministryEmbed("Lucky Crate Opened", `${crate.label} opened for ${formatCredits(cost)}.\nReward: ${quantity} x ${item.name}\nRarity: ${rarity}${lowRoll ? "\nLow roll: minimal reward" : ""}${taxPenalty ? `\nPenalty: ${formatCredits(taxPenalty)}` : ""}\nRemaining today: ${Math.max(0, lootboxDailyGlobalLimit - Number(economy.globalLootboxesOpenedToday || 0))} Union crates / ${Math.max(0, lootboxDailyUserLimit - Number(economy.perUserLootboxesOpenedToday[wallet.id] || 0))} for you.`), false, economyQuickLinks("inventory", "portal"));
     return true;
   }
 
@@ -5719,8 +5801,26 @@ function buildSlashCommands() {
       .setName("inspect")
       .setDescription("Inspect an inventory item value and rarity.")
       .addStringOption((option) => option.setName("item").setDescription("Item ID or name.").setRequired(true)),
-    new SlashCommandBuilder().setName("lootbox").setDescription("Open a paid inventory reward crate."),
-    new SlashCommandBuilder().setName("crate").setDescription("Open a paid inventory reward crate."),
+    new SlashCommandBuilder()
+      .setName("lootbox")
+      .setDescription("Open a paid inventory reward crate.")
+      .addStringOption((option) =>
+        option
+          .setName("type")
+          .setDescription("Crate type.")
+          .addChoices(...lootboxCrateDefaults.map((crate) => ({ name: `${crate.label} / ${formatCredits(crate.price)}`, value: crate.id })))
+      )
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm premium or state crate purchase.")),
+    new SlashCommandBuilder()
+      .setName("crate")
+      .setDescription("Open a paid inventory reward crate.")
+      .addStringOption((option) =>
+        option
+          .setName("type")
+          .setDescription("Crate type.")
+          .addChoices(...lootboxCrateDefaults.map((crate) => ({ name: `${crate.label} / ${formatCredits(crate.price)}`, value: crate.id })))
+      )
+      .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm premium or state crate purchase.")),
     new SlashCommandBuilder().setName("stocks").setDescription("Show Panem Stock Exchange overview."),
     new SlashCommandBuilder()
       .setName("stock")
@@ -6830,20 +6930,19 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
   } catch (error) {
+    console.error("[interaction]", error);
+    const message = error instanceof Error && /Panem Credit ledger write failed|Economy store write failed/i.test(error.message)
+      ? "Economy update failed. Please try again later."
+      : error instanceof Error
+        ? error.message
+        : "Something went wrong while running that command.";
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong while running that command."
-      );
+      await interaction.editReply(message);
       return;
     }
 
     await interaction.reply({
-      content:
-        error instanceof Error
-          ? error.message
-          : "Something went wrong while running that command.",
+      content: message,
       ephemeral: true
     });
   }

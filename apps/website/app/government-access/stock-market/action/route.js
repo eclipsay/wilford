@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../../lib/action-routes";
 import { assertTrustedPostOrigin, canAccess, requireGovernmentUser } from "../../../../lib/government-auth";
 import { getEconomyStore, getWallet, issueStockDividends, saveEconomyStore, triggerStockMarketEvent, updateStockAdmin } from "../../../../lib/panem-credit";
 
@@ -10,7 +11,7 @@ function deny(request) {
   return redirectTo(request, "/government-access?denied=1");
 }
 
-export async function POST(request) {
+export const POST = safeAction("government-access/stock-market/action", "/government-access/stock-market", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) return deny(request);
   const actor = await requireGovernmentUser("economyView");
   const formData = await request.formData();
@@ -41,4 +42,4 @@ export async function POST(request) {
     await issueStockDividends({ ticker: String(formData.get("ticker") || "").trim(), actor: actor.username });
   }
   return redirectTo(request, "/government-access/stock-market?saved=1");
-}
+});

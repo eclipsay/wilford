@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertTrustedPostOrigin } from "../../../lib/government-auth";
+import { safeAction } from "../../../lib/action-routes";
 import { getCurrentCitizen, recordCitizenActivity } from "../../../lib/citizen-state";
 import { buyStock, getEconomyStore, getWallet, sellStock, updateStockWatchlist } from "../../../lib/panem-credit";
 
@@ -7,7 +8,7 @@ function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
 }
 
-export async function POST(request) {
+export const POST = safeAction("stock-market/action", "/stock-market", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) return redirectTo(request, "/stock-market?error=origin");
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();
@@ -32,4 +33,4 @@ export async function POST(request) {
     return redirectTo(request, `/stock-market?${result.ok ? "saved=watch" : "error=watch"}`);
   }
   return redirectTo(request, "/stock-market");
-}
+});

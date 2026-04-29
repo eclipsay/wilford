@@ -1,4 +1,4 @@
-import { formatCredits } from "@wilford/shared";
+import { formatCredits, lootboxCrateDefaults, lootboxDailyGlobalLimit, lootboxDailyUserLimit } from "@wilford/shared";
 import { PageHero } from "../../components/PageHero";
 import { SiteLayout } from "../../components/SiteLayout";
 import { getCurrentCitizen } from "../../lib/citizen-state";
@@ -20,6 +20,8 @@ export default async function InventoryPage({ searchParams }) {
   const [store, citizen] = await Promise.all([getEconomyStore(), getCurrentCitizen()]);
   const wallet = citizen ? getWallet(store, citizen.walletId || citizen.userId || citizen.discordId) : null;
   const dashboard = getInventoryDashboard(store, wallet);
+  const today = new Date().toISOString().slice(0, 10);
+  const globalOpenedToday = store.lootboxAllocationDate === today ? Number(store.globalLootboxesOpenedToday || 0) : 0;
 
   return (
     <SiteLayout>
@@ -45,7 +47,7 @@ export default async function InventoryPage({ searchParams }) {
         {params?.error ? (
           <section className="application-notice application-notice--error">
             <strong>Action Rejected</strong>
-            <p>Cooldown, slot limits, wallet status, balance, or item quantity prevented that action.</p>
+            <p>{params.error === "crate-allocation" ? "Daily Union crate allocation has been exhausted. Return tomorrow." : "Cooldown, slot limits, wallet status, balance, or item quantity prevented that action."}</p>
           </section>
         ) : null}
 
@@ -69,10 +71,18 @@ export default async function InventoryPage({ searchParams }) {
           <article className="finance-panel">
             <p className="eyebrow">Lucky Crate</p>
             <h2>State Reward Crate</h2>
-            <p>Costs {formatCredits(150)} and may reveal common goods, rare items, epic finds, or legendary artifacts.</p>
+            <p>Daily Union crate allocation: {Math.max(0, lootboxDailyGlobalLimit - globalOpenedToday)} global / {lootboxDailyUserLimit} per citizen.</p>
             {wallet ? (
               <form action="/inventory/action" method="post">
                 <input name="intent" type="hidden" value="crate" />
+                <label className="public-application-field">
+                  <span>Crate type</span>
+                  <select name="crateId">
+                    {lootboxCrateDefaults.map((crate) => (
+                      <option key={crate.id} value={crate.id}>{crate.label} / {formatCredits(crate.price)}</option>
+                    ))}
+                  </select>
+                </label>
                 <button className="button button--solid-site" type="submit">Open Crate</button>
               </form>
             ) : null}

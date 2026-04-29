@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../../lib/action-routes";
 import { assertTrustedPostOrigin, canAccess, requireGovernmentUser } from "../../../../lib/government-auth";
 import { createCitizenRecord, updateCitizenRecord, updateDistrictProfile } from "../../../../lib/citizen-state";
 import { createWallet, getEconomyStore, getWallet, saveEconomyStore } from "../../../../lib/panem-credit";
@@ -41,7 +42,7 @@ async function syncLinkedWallet(record, fields, actorName) {
   await saveEconomyStore(store);
 }
 
-export async function POST(request) {
+export const POST = safeAction("government-access/union-security-registry/action", "/government-access/union-security-registry", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/government-access?denied=1");
   }
@@ -79,4 +80,4 @@ export async function POST(request) {
     await syncLinkedWallet(record, fields, actor.username);
   }
   return redirectTo(request, `/government-access/union-security-registry?saved=record&citizen=${encodeURIComponent(id)}`);
-}
+});

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAction } from "../../../../lib/action-routes";
 import {
   createBulletin,
   deleteBulletin,
@@ -92,7 +93,7 @@ async function enqueueBulletinBroadcast(user, formData, fields, linkedId = "") {
   });
 }
 
-export async function POST(request) {
+export const POST = safeAction("government-access/bulletins/action", "/government-access/bulletins", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/government-access?denied=1");
   }
@@ -186,4 +187,4 @@ export async function POST(request) {
   }
 
   return redirectTo(request, "/government-access/bulletins");
-}
+});

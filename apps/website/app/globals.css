@@ -6876,6 +6876,15 @@ body {
     rgba(5, 5, 5, 0.58);
 }
 
+.panem-market-card--locked {
+  opacity: 0.68;
+}
+
+.panem-market-card--locked .button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.45);
+}
+
 .market-category-food {
   border-color: rgba(105, 210, 155, 0.2);
 }

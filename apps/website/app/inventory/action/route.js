@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertTrustedPostOrigin } from "../../../lib/government-auth";
+import { safeAction } from "../../../lib/action-routes";
 import { getCurrentCitizen, recordCitizenActivity } from "../../../lib/citizen-state";
 import {
   createListing,
@@ -14,7 +15,7 @@ function redirectTo(request, path) {
   return NextResponse.redirect(new URL(path, request.url));
 }
 
-export async function POST(request) {
+export const POST = safeAction("inventory/action", "/inventory", async function POST(request) {
   if (!(await assertTrustedPostOrigin())) {
     return redirectTo(request, "/inventory?error=origin");
   }
@@ -68,13 +69,14 @@ export async function POST(request) {
   if (intent === "crate") {
     const result = await openInventoryCrate({
       walletId,
+      crateId: String(formData.get("crateId") || "standard").trim(),
       actor: citizen.unionSecurityId
     });
     if (result.ok) {
       await recordCitizenActivity(citizen.id, "inventory crate opened", `${result.quantity} x ${result.item.name}`);
     }
-    return redirectTo(request, `/inventory?${result.ok ? "saved=crate" : "error=crate"}`);
+    return redirectTo(request, `/inventory?${result.ok ? "saved=crate" : `error=${result.reason || "crate"}`}`);
   }
 
   return redirectTo(request, "/inventory");
-}
+});
