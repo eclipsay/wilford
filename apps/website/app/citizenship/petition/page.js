@@ -7,7 +7,9 @@ import { SiteLayout } from "../../../components/SiteLayout";
 const baseUrl = (
   process.env.API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:4000"
+  (process.env.NODE_ENV === "production"
+    ? "https://api.wilfordindustries.org"
+    : "http://localhost:4000")
 ).replace(/\/+$/, "");
 
 function normalizeDiscordUserId(value) {
