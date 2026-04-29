@@ -43,7 +43,8 @@ export default async function CitizenRequestsControlPage({ searchParams }) {
 
       <main className="content content--wide portal-page government-command-page">
         <Link className="button" href="/government-access">Back to Dashboard</Link>
-        {params?.saved ? <section className="application-notice"><strong>Request Updated</strong><p>The citizen request record has been saved.</p></section> : null}
+        {params?.saved ? <section className="application-notice"><strong>{params.saved === "permit" ? "Work Permit Approved" : "Request Updated"}</strong><p>{params.saved === "permit" ? "The citizen permit has been issued and the job restriction will now recognise it." : "The citizen request record has been saved."}</p></section> : null}
+        {params?.error === "permit" ? <section className="application-notice application-notice--error"><strong>Permit Approval Failed</strong><p>The citizen, wallet, or work permit request could not be verified.</p></section> : null}
 
         <section className="panel public-application-form">
           <p className="eyebrow">Filters</p>
@@ -87,6 +88,10 @@ export default async function CitizenRequestsControlPage({ searchParams }) {
                     <span><strong>{request.createdAt.slice(0, 10)}</strong> Created</span>
                     <span><strong>{request.escalation || "None"}</strong> Escalation</span>
                     <span><strong>{citizen?.unionSecurityId || "Unlinked"}</strong> Citizen ID</span>
+                    {request.category === "Work Permit Request" ? <span><strong>{request.targetDistrict || "Unspecified"}</strong> Target district</span> : null}
+                    {request.category === "Work Permit Request" ? <span><strong>{request.targetJobName || "Any district job"}</strong> Requested job</span> : null}
+                    {request.category === "Work Permit Request" ? <span><strong>{request.governorName || "District Governor"}</strong> Governor</span> : null}
+                    {request.permitId ? <span><strong>{request.permitId}</strong> Permit</span> : null}
                   </div>
                   <form action="/government-access/citizen-requests/action" className="public-application-form" method="post">
                     <input name="requestId" type="hidden" value={request.id} />
@@ -99,6 +104,12 @@ export default async function CitizenRequestsControlPage({ searchParams }) {
                     <label className="public-application-field"><span>Response to citizen</span><textarea defaultValue={request.citizenResponse} name="citizenResponse" rows="3" /></label>
                     <div className="bulletin-editor-card__actions">
                       <button className="button button--solid-site" name="intent" type="submit" value="save">Save Request</button>
+                      {request.category === "Work Permit Request" && request.status !== "Approved" ? (
+                        <>
+                          <input name="durationDays" type="hidden" value="30" />
+                          <button className="button button--solid-site" name="intent" type="submit" value="approve-work-permit">Approve Permit</button>
+                        </>
+                      ) : null}
                       <button className="button" name="intent" type="submit" value="close">Close Request</button>
                       {citizen ? <Link className="button" href={`/government-access/union-security-registry?citizen=${encodeURIComponent(citizen.id)}`}>Citizen Profile</Link> : null}
                     </div>

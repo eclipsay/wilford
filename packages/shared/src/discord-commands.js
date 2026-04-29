@@ -54,10 +54,10 @@ export const publicBotCommands = [
     usage: "/citizen"
   },
   {
-    name: "/work, /overtime, /crime, /rob, /gamble, /lottery, /invest",
+    name: "/work, /jobs, /setjob, /work-permit, /work-permits, /overtime, /crime, /rob, /gamble, /lottery, /invest",
     access: "Citizens",
-    description: "Earn, risk, wager, and invest Panem Credits through the gamified state economy.",
-    usage: "/work job:Power Plant Shift"
+    description: "Choose native work, request foreign work permits, earn, risk, wager, and invest Panem Credits through the gamified state economy.",
+    usage: "/work-permit target_district:District 3 reason:temporary electronics contract"
   },
   {
     name: "/inventory, /fish, /mine, /farm, /scavenge, /log, /extract, /inspect, /lootbox, /crate",

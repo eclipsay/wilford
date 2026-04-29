@@ -22,6 +22,7 @@ export const requestCategories = [
   "Ministry Support Request",
   "Housing Request",
   "District Transfer Request",
+  "Work Permit Request",
   "Financial Assistance Request",
   "Citizenship Issue",
   "Legal Petition",
@@ -404,6 +405,12 @@ function normalizeCitizenRequest(entry = {}) {
     priority: requestPriorities.includes(entry.priority) ? entry.priority : "Normal",
     message: cleanText(entry.message || "", 2400),
     attachments: cleanText(entry.attachments || "", 1000),
+    targetDistrict: cleanText(entry.targetDistrict || "", 80),
+    targetJobId: cleanText(entry.targetJobId || "", 120),
+    targetJobName: cleanText(entry.targetJobName || "", 160),
+    governorName: cleanText(entry.governorName || "", 160),
+    permitId: cleanText(entry.permitId || "", 120),
+    permitExpiresAt: cleanText(entry.permitExpiresAt || "", 80),
     status: requestStatuses.includes(entry.status) ? entry.status : "Submitted",
     assignedMinistry: cleanText(entry.assignedMinistry || "Citizen Services", 120),
     governmentNotes: cleanText(entry.governmentNotes || "", 2400),
@@ -586,7 +593,11 @@ export async function createCitizenRequest(fields) {
     priority: fields.priority,
     message: fields.message,
     attachments: fields.attachments,
-    assignedMinistry: ministryForCategory(fields.category)
+    targetDistrict: fields.targetDistrict,
+    targetJobId: fields.targetJobId,
+    targetJobName: fields.targetJobName,
+    governorName: fields.governorName,
+    assignedMinistry: fields.assignedMinistry || ministryForCategory(fields.category)
   });
   state.citizenRequests = [request, ...state.citizenRequests].slice(0, 500);
   await saveCitizenState(state);
@@ -624,6 +635,8 @@ export async function updateCitizenRequest(id, fields) {
           governmentNotes: fields.governmentNotes ?? request.governmentNotes,
           citizenResponse: fields.citizenResponse ?? request.citizenResponse,
           escalation: fields.escalation ?? request.escalation,
+          permitId: fields.permitId ?? request.permitId,
+          permitExpiresAt: fields.permitExpiresAt ?? request.permitExpiresAt,
           closedAt: fields.close ? new Date().toISOString() : request.closedAt,
           updatedAt: new Date().toISOString()
         })
@@ -716,6 +729,7 @@ export function ministryForCategory(category) {
     "Ministry Support Request": "Citizen Services",
     "Housing Request": "Ministry of Public Works",
     "District Transfer Request": "District Administration",
+    "Work Permit Request": "District Administration",
     "Financial Assistance Request": "Ministry of Credit & Records",
     "Citizenship Issue": "Ministry of Credit & Records",
     "Legal Petition": "Supreme Court",

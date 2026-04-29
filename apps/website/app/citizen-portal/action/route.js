@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { economyJobDefaults, normalizeEconomyDistrict } from "@wilford/shared";
 import { safeAction } from "../../../lib/action-routes";
 import {
   changeCitizenPassword,
   createCitizenRequest,
+  getCitizenState,
   getCurrentCitizen,
   loginCitizen,
   logoutCitizen,
@@ -50,6 +52,38 @@ export const POST = safeAction("citizen-portal/action", "/citizen-portal", async
       formData.get("newPassword")
     );
     return redirectTo(request, result.ok ? "/citizen-portal?saved=password" : "/citizen-portal?error=password");
+  }
+
+  if (intent === "work_permit") {
+    const rawTargetDistrict = String(formData.get("targetDistrict") || "").trim();
+    const targetDistrict = rawTargetDistrict ? normalizeEconomyDistrict(rawTargetDistrict) : "";
+    const targetJobId = String(formData.get("targetJobId") || "").trim();
+    const job = economyJobDefaults.find((entry) => entry.id === targetJobId);
+    const state = await getCitizenState();
+    const districtProfile = state.districtProfiles.find((district) => district.canonicalName === targetDistrict || district.name === targetDistrict);
+    if (
+      !targetDistrict ||
+      targetDistrict === normalizeEconomyDistrict(citizen.district) ||
+      (targetJobId && (!job || normalizeEconomyDistrict(job.district) !== targetDistrict))
+    ) {
+      return redirectTo(request, "/panem-credit?error=work-permit-invalid#jobs-work");
+    }
+    const submitted = await createCitizenRequest({
+      citizenName: citizen.name,
+      citizenId: citizen.id,
+      district: citizen.district,
+      category: "Work Permit Request",
+      priority: "Normal",
+      assignedMinistry: "District Administration",
+      targetDistrict,
+      targetJobId,
+      targetJobName: job?.name || "All district jobs",
+      governorName: districtProfile?.governorName || "District Governor",
+      message: `Work permit requested for ${targetDistrict}${job ? ` / ${job.name}` : ""}. Reason: ${formData.get("reason") || "No reason supplied."}`,
+      attachments: ""
+    });
+    await recordCitizenActivity(citizen.id, "work permit requested", `${targetDistrict} / ${job?.name || "All jobs"} / ${submitted.id}`);
+    return redirectTo(request, "/panem-credit?saved=permit-request#jobs-work");
   }
 
   const submitted = await createCitizenRequest({

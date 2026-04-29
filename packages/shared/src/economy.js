@@ -34,36 +34,47 @@ export function getLootboxCrate(crateId = "standard") {
 }
 
 export function compactEconomyStoreForWrite(economy = {}) {
+  const compactArray = (value, limit) => Array.isArray(value) ? value.slice(0, limit) : [];
+  const compactWallet = (wallet = {}) => {
+    const compacted = {
+      ...wallet,
+      loginDays: compactArray(wallet.loginDays, 14),
+      actionBans: compactArray(wallet.actionBans, 10),
+      inventoryFlags: compactArray(wallet.inventoryFlags, 10),
+      achievements: compactArray(wallet.achievements, 25),
+      workPermits: compactArray(wallet.workPermits, 10),
+      holdings: Array.isArray(wallet.holdings)
+        ? wallet.holdings.map((holding) => ({
+            ...holding,
+            acquisitionHistory: Array.isArray(holding.acquisitionHistory)
+              ? holding.acquisitionHistory.slice(0, 2)
+              : []
+          }))
+        : [],
+      stockPortfolio: Array.isArray(wallet.stockPortfolio)
+        ? wallet.stockPortfolio.map((position) => ({
+            ...position,
+            tradeHistory: Array.isArray(position.tradeHistory) ? position.tradeHistory.slice(0, 3) : []
+          }))
+        : []
+    };
+    for (const [key, value] of Object.entries(compacted)) {
+      if (Array.isArray(value) && key !== "holdings" && key !== "stockPortfolio") {
+        compacted[key] = value.slice(0, 50);
+      }
+    }
+    return compacted;
+  };
   return {
     ...economy,
-    transactions: Array.isArray(economy.transactions) ? economy.transactions.slice(0, 600) : [],
-    taxRecords: Array.isArray(economy.taxRecords) ? economy.taxRecords.slice(0, 600) : [],
-    alerts: Array.isArray(economy.alerts) ? economy.alerts.slice(0, 300) : [],
-    raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs.slice(0, 250) : [],
-    listings: Array.isArray(economy.listings) ? economy.listings.slice(0, 300) : [],
-    lootboxLogs: Array.isArray(economy.lootboxLogs) ? economy.lootboxLogs.slice(0, 300) : [],
+    transactions: compactArray(economy.transactions, 250),
+    taxRecords: compactArray(economy.taxRecords, 250),
+    alerts: compactArray(economy.alerts, 150),
+    raidLogs: compactArray(economy.raidLogs, 100),
+    listings: compactArray(economy.listings, 150),
+    lootboxLogs: compactArray(economy.lootboxLogs, 100),
     wallets: Array.isArray(economy.wallets)
-      ? economy.wallets.map((wallet) => ({
-          ...wallet,
-          loginDays: Array.isArray(wallet.loginDays) ? wallet.loginDays.slice(0, 21) : [],
-          actionBans: Array.isArray(wallet.actionBans) ? wallet.actionBans.slice(0, 20) : [],
-          inventoryFlags: Array.isArray(wallet.inventoryFlags) ? wallet.inventoryFlags.slice(0, 20) : [],
-          achievements: Array.isArray(wallet.achievements) ? wallet.achievements.slice(0, 50) : [],
-          holdings: Array.isArray(wallet.holdings)
-            ? wallet.holdings.map((holding) => ({
-                ...holding,
-                acquisitionHistory: Array.isArray(holding.acquisitionHistory)
-                  ? holding.acquisitionHistory.slice(0, 5)
-                  : []
-              }))
-            : [],
-          stockPortfolio: Array.isArray(wallet.stockPortfolio)
-            ? wallet.stockPortfolio.map((position) => ({
-                ...position,
-                tradeHistory: Array.isArray(position.tradeHistory) ? position.tradeHistory.slice(0, 10) : []
-              }))
-            : []
-        }))
+      ? economy.wallets.map(compactWallet)
       : []
   };
 }
@@ -76,9 +87,23 @@ export function normalizeEconomyDistrict(district = "") {
 }
 
 export function walletHasWorkPermit(wallet) {
-  return (wallet?.holdings || []).some(
+  return walletHasActiveWorkPermit(wallet) || (wallet?.holdings || []).some(
     (holding) => holding.itemId === workPermitItemId && Number(holding.quantity || 0) > 0
   );
+}
+
+export function walletHasActiveWorkPermit(wallet, job = {}, options = {}) {
+  const rawTargetDistrict = String(options.targetDistrict || job?.district || "").trim();
+  const targetDistrict = rawTargetDistrict ? normalizeEconomyDistrict(rawTargetDistrict) : "";
+  const jobId = String(options.jobId || job?.id || "").trim();
+  const now = Date.now();
+  return (wallet?.workPermits || []).some((permit) => {
+    if (String(permit.status || "approved").toLowerCase() !== "approved") return false;
+    if (permit.expiresAt && Date.parse(permit.expiresAt) <= now) return false;
+    const permitDistrict = normalizeEconomyDistrict(permit.targetDistrict || permit.district || "");
+    const permitJobId = String(permit.jobId || "").trim();
+    return (!targetDistrict || permitDistrict === targetDistrict) && (!permitJobId || !jobId || permitJobId === jobId);
+  });
 }
 
 export function walletHasRestrictedJobPermission(wallet, job = {}) {
@@ -125,7 +150,11 @@ export function getJobAccess(wallet, job, options = {}) {
       label: "Native assignment"
     };
   }
-  const permit = walletHasWorkPermit(wallet);
+  const structuredPermit = walletHasActiveWorkPermit(wallet, job, { targetDistrict: jobDistrict, jobId: job?.id });
+  const legacyPermit = (wallet?.holdings || []).some(
+    (holding) => holding.itemId === workPermitItemId && Number(holding.quantity || 0) > 0
+  );
+  const permit = structuredPermit || legacyPermit;
   const allowForeignWithPermit = options.allowForeignWithPermit !== false;
   return {
     allowed: permit && allowForeignWithPermit,
@@ -133,9 +162,9 @@ export function getJobAccess(wallet, job, options = {}) {
     restricted,
     requiresWorkPermit: true,
     hasWorkPermit: permit,
-    rewardMultiplier: permit ? 0.6 : 0.5,
-    riskModifier: permit ? 0.08 : 0.15,
-    label: permit ? "Foreign work permit" : "Requires Work Permit",
+    rewardMultiplier: structuredPermit ? 0.8 : permit ? 0.6 : 0.5,
+    riskModifier: structuredPermit ? 0.04 : permit ? 0.08 : 0.15,
+    label: permit ? "Work permit active" : "Requires Work Permit",
     reason: permit && allowForeignWithPermit ? "" : "work-permit-required",
     message: "You cannot select this job outside your district without a work permit."
   };

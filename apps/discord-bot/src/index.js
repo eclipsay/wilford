@@ -87,6 +87,22 @@ const applicationGuildId = String(
 const applicationCommandUrl =
   process.env.DISCORD_COMMANDS_URL || "https://wilfordindustries.org/commands";
 const websiteUrl = (process.env.WEBSITE_URL || "https://wilfordindustries.org").replace(/\/+$/, "");
+const workPermitDistrictChoices = [
+  "The Capitol",
+  "District 1",
+  "District 2",
+  "District 3",
+  "District 4",
+  "District 5",
+  "District 6",
+  "District 7",
+  "District 8",
+  "District 9",
+  "District 10",
+  "District 11",
+  "District 12",
+  "District 13"
+];
 const pollIntervalMs = Math.max(
   15000,
   Number(process.env.DISCORD_COMMITS_POLL_INTERVAL_MS || 60000)
@@ -187,6 +203,8 @@ async function writeEconomyStore(economy) {
   }
 
   const compactEconomy = compactEconomyStoreForWrite(economy);
+  const payload = JSON.stringify({ economy: compactEconomy });
+  const payloadSize = Buffer.byteLength(payload, "utf8");
   let response;
   try {
     response = await fetch(`${apiUrl}/api/admin/economy-store`, {
@@ -195,22 +213,29 @@ async function writeEconomyStore(economy) {
         "Content-Type": "application/json",
         "x-admin-key": adminApiKey
       },
-      body: JSON.stringify({ economy: compactEconomy }),
+      body: payload,
       cache: "no-store"
     });
   } catch (error) {
-    const payloadSize = Buffer.byteLength(JSON.stringify({ economy: compactEconomy }), "utf8");
-    console.error("[economy-write]", { apiUrl, payloadSize, message: error?.message || String(error) });
+    console.error("[economy-write]", {
+      apiUrl,
+      payloadSize,
+      message: error?.message || String(error),
+      cause: error?.cause?.code || error?.code || ""
+    });
     throw new Error("Economy update failed. Please try again later.");
   }
 
   if (!response.ok) {
-    const payloadSize = Buffer.byteLength(JSON.stringify({ economy: compactEconomy }), "utf8");
-    console.error("[economy-write]", { status: response.status, payloadSize });
+    const detail = await response.text().catch(() => "");
+    console.error("[economy-write]", { status: response.status, payloadSize, detail: detail.slice(0, 400) });
     throw new Error(`Panem Credit ledger write failed (${response.status}).`);
   }
 
-  const parsed = await response.json();
+  const parsed = await response.json().catch((error) => {
+    console.error("[economy-write-parse]", { payloadSize, message: error?.message || String(error) });
+    return { economy: compactEconomy };
+  });
   return parsed.economy || parsed;
 }
 
@@ -843,6 +868,26 @@ function economyQuickLinks(...keys) {
 
 function normalizeCitizenDistrict(citizen, wallet = null) {
   return normalizeEconomyDistrict(citizen?.district || wallet?.district || "The Capitol");
+}
+
+function districtGovernorName(districtName) {
+  const district = normalizeEconomyDistrict(districtName);
+  const governors = {
+    "The Capitol": "Clyde Barrow",
+    "District 1": "Lady Aedra",
+    "District 3": "Hubert Skeletrix"
+  };
+  return governors[district] || "District Governor";
+}
+
+function activeWorkPermitsForWallet(wallet = {}) {
+  const now = Date.now();
+  return (wallet.workPermits || []).filter((permit) => {
+    if (permit?.status !== "approved") return false;
+    if (!permit.expiresAt) return true;
+    const expiresAt = Date.parse(permit.expiresAt);
+    return Number.isNaN(expiresAt) || expiresAt > now;
+  });
 }
 
 function economyHasMaterials(wallet, materials = []) {
@@ -1840,6 +1885,8 @@ async function handleEconomySlashCommand(interaction) {
     "daily",
     "jobs",
     "setjob",
+    "work-permit",
+    "work-permits",
     "jobinfo",
     "my-level",
     "work",
@@ -2112,6 +2159,68 @@ async function handleEconomySlashCommand(interaction) {
     return true;
   }
 
+  if (name === "work-permits") {
+    const permits = activeWorkPermitsForWallet(wallet);
+    const rows = permits.slice(0, 8).map((permit) => {
+      const scope = permit.jobName ? `${permit.targetDistrict} / ${permit.jobName}` : permit.targetDistrict;
+      const expires = permit.expiresAt ? new Date(permit.expiresAt).toLocaleDateString("en-GB") : "No expiry";
+      return `${scope} - expires ${expires}`;
+    }).join("\n") || "No active work permits. Use `/work-permit` to request foreign district work authorization.";
+    await replyEconomy(interaction, ministryEmbed("Work Permits", rows), true, economyQuickLinks("portal"));
+    return true;
+  }
+
+  if (name === "work-permit") {
+    const rawTargetDistrict = String(interaction.options.getString("target_district", true) || "").trim();
+    const targetDistrict = rawTargetDistrict ? normalizeEconomyDistrict(rawTargetDistrict) : "";
+    const targetJobId = String(interaction.options.getString("job") || "").trim();
+    const reason = String(interaction.options.getString("reason") || "No reason supplied.").trim().slice(0, 500);
+    const citizenDistrict = normalizeCitizenDistrict(identity.citizen, wallet);
+    const job = targetJobId ? economyJobDefaults.find((entry) => entry.id === targetJobId || entry.name.toLowerCase() === targetJobId.toLowerCase()) : null;
+
+    if (!targetDistrict || targetDistrict === citizenDistrict || (targetJobId && (!job || normalizeEconomyDistrict(job.district) !== targetDistrict))) {
+      await replyEconomy(interaction, ministryEmbed("Work Permit Rejected", "Choose a foreign district and, if you specify a job, make sure that job belongs to that district."), true);
+      return true;
+    }
+
+    const duplicate = (governmentStore.citizenRequests || []).find((request) =>
+      request.category === "Work Permit Request" &&
+      request.citizenId === identity.citizen.id &&
+      request.targetDistrict === targetDistrict &&
+      String(request.targetJobId || "") === String(job?.id || "") &&
+      !["Approved", "Closed", "Denied", "Resolved"].includes(request.status)
+    );
+    if (duplicate) {
+      await replyEconomy(interaction, ministryEmbed("Work Permit Pending", `Request ${duplicate.id} is already waiting for ${duplicate.governorName || "District Administration"}.`), true, economyQuickLinks("portal"));
+      return true;
+    }
+
+    const requestRecord = {
+      id: createId("req"),
+      citizenName: identity.citizen.citizenName || identity.citizen.name || wallet.displayName || interaction.user.username,
+      citizenId: identity.citizen.id,
+      district: citizenDistrict,
+      category: "Work Permit Request",
+      priority: "Normal",
+      status: "Submitted",
+      assignedMinistry: "District Administration",
+      targetDistrict,
+      targetJobId: job?.id || "",
+      targetJobName: job?.name || "All district jobs",
+      governorName: districtGovernorName(targetDistrict),
+      message: `Discord work permit request for ${targetDistrict}${job ? ` / ${job.name}` : ""}. Reason: ${reason}`,
+      attachments: "Filed through Discord /work-permit.",
+      governmentNotes: "",
+      citizenResponse: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    governmentStore.citizenRequests = [requestRecord, ...(governmentStore.citizenRequests || [])];
+    await writeGovernmentAccessStore(governmentStore);
+    await replyEconomy(interaction, ministryEmbed("Work Permit Requested", `Request ${requestRecord.id} sent to ${requestRecord.governorName} for ${targetDistrict}${job ? ` / ${job.name}` : ""}.`), true, economyQuickLinks("portal"));
+    return true;
+  }
+
   if (name === "jobinfo") {
     const jobInput = interaction.options.getString("job", true);
     const district = normalizeCitizenDistrict(identity.citizen, wallet);
@@ -2243,7 +2352,7 @@ async function handleEconomySlashCommand(interaction) {
 
   if (name === "my-level") {
     ensureEconomyHoldings(wallet);
-    await replyEconomy(interaction, ministryEmbed("Citizen Progression", `Crafting Level: ${wallet.craftingLevel} (${wallet.craftingXp} XP)\nJob Level: ${wallet.jobLevel} (${wallet.jobXp} XP)\nDistrict: ${normalizeCitizenDistrict(identity.citizen, wallet)}\nNative jobs pay full rewards. Foreign jobs pay 40-60% and carry extra risk.`), true, economyQuickLinks("portal", "inventory"));
+    await replyEconomy(interaction, ministryEmbed("Citizen Progression", `Crafting Level: ${wallet.craftingLevel} (${wallet.craftingXp} XP)\nJob Level: ${wallet.jobLevel} (${wallet.jobXp} XP)\nDistrict: ${normalizeCitizenDistrict(identity.citizen, wallet)}\nNative jobs pay full rewards. Approved work permits unlock foreign jobs with reduced payout and extra risk.`), true, economyQuickLinks("portal", "inventory"));
     return true;
   }
 
@@ -5668,6 +5777,24 @@ function buildSlashCommands() {
       .setName("setjob")
       .setDescription("Select your citizen job.")
       .addStringOption((option) => option.setName("job").setDescription("Job id or exact job name.").setRequired(true)),
+    new SlashCommandBuilder()
+      .setName("work-permit")
+      .setDescription("Request authorization to work in a foreign district.")
+      .addStringOption((option) =>
+        option
+          .setName("target_district")
+          .setDescription("Foreign district requested.")
+          .setRequired(true)
+          .addChoices(...workPermitDistrictChoices.map((district) => ({ name: district, value: district })))
+      )
+      .addStringOption((option) =>
+        option
+          .setName("job")
+          .setDescription("Optional requested job.")
+          .addChoices(...economyJobDefaults.slice(0, 25).map((job) => ({ name: job.name, value: job.id })))
+      )
+      .addStringOption((option) => option.setName("reason").setDescription("Why you need foreign work authorization.").setMaxLength(500)),
+    new SlashCommandBuilder().setName("work-permits").setDescription("Show your active foreign work permits."),
     new SlashCommandBuilder()
       .setName("jobinfo")
       .setDescription("Show job risk, payout, cooldown, and item rewards.")

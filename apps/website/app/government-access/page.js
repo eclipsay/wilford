@@ -82,6 +82,14 @@ const systems = [
     permission: "citizenRequestControl"
   },
   {
+    group: "Citizen Services",
+    icon: "WP",
+    title: "Work Permit Requests",
+    text: "Review governor-routed foreign work permit requests and approve temporary district labour access.",
+    href: "/government-access/citizen-requests?category=Work%20Permit%20Request&status=Submitted",
+    permission: "citizenRequestControl"
+  },
+  {
     group: "MSS",
     icon: "🛂",
     title: "Union Security Registry",

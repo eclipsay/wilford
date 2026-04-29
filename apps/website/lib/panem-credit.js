@@ -25,6 +25,7 @@ import {
   lootboxDailyGlobalLimit,
   lootboxDailyUserLimit,
   marketItemDefaults,
+  normalizeEconomyDistrict,
   prestigeItemDefaults,
   stockCompanyDefaults,
   stockMarketEventDefaults,
@@ -496,6 +497,7 @@ export function normalizeEconomyStore(economy = {}) {
       jobXp: Math.max(0, Number(wallet.jobXp || 0)),
       jobLevel: Math.max(1, Number(wallet.jobLevel || levelForXp(wallet.jobXp))),
       unlockedRecipes: Array.isArray(wallet.unlockedRecipes) ? wallet.unlockedRecipes : [],
+      workPermits: Array.isArray(wallet.workPermits) ? wallet.workPermits : [],
       selectedJobId: cleanText(wallet.selectedJobId || "", 120),
       jobChangedAt: cleanText(wallet.jobChangedAt || "", 80),
       suspicionLevel: Math.max(0, Math.min(100, Number(wallet.suspicionLevel || 0))),
@@ -1000,6 +1002,57 @@ export async function setCitizenJob({ walletId, jobId, actor = "citizen", distri
     meta: { key: job.id, district: jobWallet.district }
   });
   return { ok: true, job, store: await saveEconomyStore(store) };
+}
+
+export async function grantWorkPermit({
+  walletId,
+  citizenId = "",
+  citizenName = "",
+  targetDistrict = "",
+  jobId = "",
+  requestId = "",
+  approvedBy = "District Administration",
+  durationDays = 30
+}) {
+  const store = await getEconomyStore();
+  const wallet = getWallet(store, walletId);
+  const job = economyJobDefaults.find((entry) => entry.id === jobId);
+  const cleanTargetDistrict = cleanText(targetDistrict, 80);
+  if (!wallet || !cleanTargetDistrict) return { ok: false, reason: "wallet", store };
+  ensureWalletCollections(wallet);
+  wallet.workPermits = Array.isArray(wallet.workPermits) ? wallet.workPermits : [];
+  const now = new Date();
+  const permit = {
+    id: createId("permit"),
+    citizenId: cleanText(citizenId, 120),
+    citizenName: cleanText(citizenName || wallet.displayName, 160),
+    walletId: wallet.id,
+    targetDistrict: normalizeEconomyDistrict(cleanTargetDistrict),
+    jobId: cleanText(jobId, 120),
+    jobName: cleanText(job?.name || "All district jobs", 160),
+    status: "approved",
+    approvedBy: cleanText(approvedBy, 160),
+    requestId: cleanText(requestId, 120),
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + Math.max(1, Number(durationDays || 30)) * 24 * 60 * 60 * 1000).toISOString()
+  };
+  wallet.workPermits = [
+    permit,
+    ...wallet.workPermits.filter((entry) =>
+      !(entry.targetDistrict === permit.targetDistrict && String(entry.jobId || "") === String(permit.jobId || "") && entry.status === "approved")
+    )
+  ].slice(0, 25);
+  wallet.updatedAt = now.toISOString();
+  pushTransaction(store, {
+    fromWalletId: "labour-registry",
+    toWalletId: wallet.id,
+    amount: 0,
+    type: "work_permit",
+    reason: `${permit.targetDistrict} work permit approved${permit.jobName ? ` / ${permit.jobName}` : ""}.`,
+    createdBy: approvedBy,
+    meta: { permitId: permit.id, requestId, targetDistrict: permit.targetDistrict, jobId: permit.jobId }
+  });
+  return { ok: true, permit, store: await saveEconomyStore(store) };
 }
 
 export async function performCrimeAction({ walletId, crimeId, targetWalletId = "", actor = "citizen" }) {

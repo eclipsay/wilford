@@ -154,7 +154,7 @@ export default async function PanemCreditPage({ searchParams }) {
         {params?.saved ? (
           <section className="application-notice">
             <strong>Ledger Updated</strong>
-            <p>The Ministry of Credit & Records has recorded the transaction.</p>
+            <p>{params.saved === "permit-request" ? "Your work permit request has been sent to District Administration for governor review." : "The Ministry of Credit & Records has recorded the transaction."}</p>
           </section>
         ) : null}
         {params?.error ? (
@@ -167,6 +167,8 @@ export default async function PanemCreditPage({ searchParams }) {
                   ? "Large public-handle transfers require the confirmation checkbox before execution."
                 : params.error === "work-permit-required"
                   ? "You cannot select this job outside your district without a work permit."
+                : params.error === "work-permit-invalid"
+                  ? "That work permit request could not be filed. Choose a foreign district and valid job."
                 : params.error === "restricted-job"
                   ? "This restricted role requires special government or MSS permission."
                 : params.error === "session"
@@ -262,6 +264,38 @@ export default async function PanemCreditPage({ searchParams }) {
             <strong>Current district: {currentDistrict}</strong>
             <p>Native district jobs are open at full payout. Foreign jobs are visible in All Jobs, but require a Work Permit before they can be selected.</p>
           </div>
+          <article className="finance-panel">
+            <p className="eyebrow">District Administration</p>
+            <h3>Request Work Permit</h3>
+            <p>Ask the target district governor to approve temporary foreign work access. Approved permits are recorded on your wallet and expire automatically.</p>
+            <form action="/citizen-portal/action" className="public-application-form" method="post">
+              <input name="intent" type="hidden" value="work_permit" />
+              <div className="public-application-grid public-application-grid--three">
+                <label className="public-application-field">
+                  <span>Target district</span>
+                  <select name="targetDistrict" required>
+                    {store.districts.filter((district) => normalizeEconomyDistrict(district.name) !== currentDistrict).map((district) => (
+                      <option key={district.id || district.name} value={district.name}>{district.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="public-application-field">
+                  <span>Requested job</span>
+                  <select name="targetJobId">
+                    <option value="">Any job in target district</option>
+                    {economyJobDefaults.filter((job) => job.district !== "Any" && normalizeEconomyDistrict(job.district) !== currentDistrict).map((job) => (
+                      <option key={job.id} value={job.id}>{job.name} / {job.district}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="public-application-field">
+                  <span>Reason</span>
+                  <input name="reason" placeholder="Why should the governor approve this work?" />
+                </label>
+              </div>
+              <button className="button button--solid-site" type="submit">Request Work Permit</button>
+            </form>
+          </article>
           <div className="government-action-row">
             <Link className={`button ${jobView === "my" ? "button--solid-site" : ""}`} href="/panem-credit?jobs=my#jobs-work">My District Jobs</Link>
             <Link className={`button ${jobView === "all" ? "button--solid-site" : ""}`} href="/panem-credit?jobs=all#jobs-work">All Jobs</Link>
