@@ -7,7 +7,7 @@ import {
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import { requireGovernmentUser } from "../../../lib/government-auth";
-import { broadcastDistributions, broadcastTypes } from "../../../lib/discord-broadcasts";
+import { broadcastDistributions, broadcastTypes, pingOptions } from "../../../lib/discord-broadcasts";
 
 export const metadata = {
   title: "Article Control | Government Access"
@@ -26,7 +26,8 @@ function toDateTimeLocal(value) {
   return date.toISOString().slice(0, 16);
 }
 
-function DiscordBroadcastFields({ showResend = false }) {
+function DiscordBroadcastFields({ showResend = false, allowEveryone = false }) {
+  const visiblePingOptions = allowEveryone ? pingOptions : pingOptions.filter((option) => option.value !== "everyone");
   return (
     <fieldset className="broadcast-fieldset">
       <legend>Discord Broadcast Optional</legend>
@@ -46,6 +47,14 @@ function DiscordBroadcastFields({ showResend = false }) {
           ))}
         </select>
       </label>
+      <label className="public-application-field">
+        <span>Ping Options</span>
+        <select defaultValue="none" name="pingOption">
+          {visiblePingOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
       <div className="public-application-grid public-application-grid--two">
         <label className="public-application-field">
           <span>Specific Discord User ID</span>
@@ -55,6 +64,10 @@ function DiscordBroadcastFields({ showResend = false }) {
           <input name="confirmDiscordBroadcast" type="checkbox" />
           <span>Submit dangerous broadcast for Chairman approval</span>
         </label>
+        <label className="public-application-toggle">
+          <input name="confirmPingBroadcast" type="checkbox" />
+          <span>Confirm Broadcast: You are about to send a message to all members.</span>
+        </label>
         {showResend ? (
           <label className="public-application-toggle">
             <input name="forceDiscordBroadcast" type="checkbox" />
@@ -63,7 +76,7 @@ function DiscordBroadcastFields({ showResend = false }) {
         ) : null}
       </div>
       <p className="public-application-help">
-        Broadcasts only send for published articles. DM-all and Enemy of the State notices become Chairman approval requests before delivery.
+        Broadcasts only send for published articles. @everyone requires Supreme Chairman or Executive Director authority and confirmation.
       </p>
     </fieldset>
   );
@@ -72,6 +85,7 @@ function DiscordBroadcastFields({ showResend = false }) {
 export default async function ArticleControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("articleControl");
+  const allowEveryonePing = ["Supreme Chairman", "Executive Director"].includes(user.role);
   const articles = await getAllArticles();
 
   return (
@@ -181,7 +195,7 @@ export default async function ArticleControlPage({ searchParams }) {
                 <span>Featured article</span>
               </label>
             </div>
-            <DiscordBroadcastFields />
+            <DiscordBroadcastFields allowEveryone={allowEveryonePing} />
             <button className="button button--solid-site" type="submit">
               Add Article
             </button>
@@ -255,7 +269,7 @@ export default async function ArticleControlPage({ searchParams }) {
                       <span>Featured article</span>
                     </label>
                   </div>
-                  <DiscordBroadcastFields showResend />
+                  <DiscordBroadcastFields allowEveryone={allowEveryonePing} showResend />
                   <div className="bulletin-editor-card__actions">
                     <button className="button button--solid-site" type="submit">
                       Save Article

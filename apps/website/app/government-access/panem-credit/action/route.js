@@ -19,7 +19,8 @@ import {
   getWallet,
   markWalletWanted,
   pardonWallet,
-  triggerEconomyEvent
+  triggerEconomyEvent,
+  triggerRandomEconomyEvent
 } from "../../../../lib/panem-credit";
 import { updateCitizenRecord } from "../../../../lib/citizen-state";
 
@@ -181,11 +182,15 @@ export async function POST(request) {
   }
 
   if (intent === "trigger-event") {
-    await triggerEconomyEvent({
-      eventId: String(formData.get("eventId") || "").trim(),
-      durationHours: formData.get("durationHours") || 168,
-      actor: actorName
-    });
+    if (String(formData.get("eventId") || "").trim() === "random") {
+      await triggerRandomEconomyEvent({ durationHours: formData.get("durationHours") || 72, actor: actorName });
+    } else {
+      await triggerEconomyEvent({
+        eventId: String(formData.get("eventId") || "").trim(),
+        durationHours: formData.get("durationHours") || 168,
+        actor: actorName
+      });
+    }
   }
 
   if (intent === "reverse") {

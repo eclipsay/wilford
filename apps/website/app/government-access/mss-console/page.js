@@ -5,7 +5,8 @@ import { canAccess, requireGovernmentUser } from "../../../lib/government-auth";
 import {
   mssClassifications,
   mssDistributions,
-  mssThreatLevels
+  mssThreatLevels,
+  pingOptions
 } from "../../../lib/discord-broadcasts";
 import {
   enemyClassifications,
@@ -28,6 +29,9 @@ export default async function MssConsolePage({ searchParams }) {
   const entries = await getAllEnemyEntries();
   const canIssuePublic = canAccess(user, "enemyRegistryPublic");
   const canCreateAlerts = canAccess(user, "mssTools");
+  const visiblePingOptions = ["Supreme Chairman", "Executive Director", "MSS Command", "Security Command"].includes(user.role)
+    ? pingOptions
+    : pingOptions.filter((option) => option.value !== "everyone");
 
   return (
     <SiteLayout>
@@ -334,6 +338,14 @@ export default async function MssConsolePage({ searchParams }) {
                   ))}
                 </select>
               </label>
+              <label className="public-application-field">
+                <span>Ping Options</span>
+                <select defaultValue="none" name="pingOption">
+                  {visiblePingOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
             </div>
             <label className="public-application-field">
               <span>Reason / summary</span>
@@ -351,6 +363,10 @@ export default async function MssConsolePage({ searchParams }) {
               <label className="public-application-toggle">
                 <input name="confirmDiscordBroadcast" type="checkbox" />
                 <span>Submit dangerous broadcast for Chairman approval</span>
+              </label>
+              <label className="public-application-toggle">
+                <input name="confirmPingBroadcast" type="checkbox" />
+                <span>Confirm Broadcast: You are about to send a message to all members.</span>
               </label>
             </div>
             <button className="button button--solid-site" type="submit">

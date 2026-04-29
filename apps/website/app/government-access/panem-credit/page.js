@@ -87,6 +87,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
                 <label className="public-application-field">
                   <span>Event</span>
                   <select name="eventId">
+                    <option value="random">Random Dynamic Event</option>
                     {economyEventDefaults.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
                   </select>
                 </label>
@@ -96,6 +97,25 @@ export default async function PanemCreditControlPage({ searchParams }) {
               <button className="button button--solid-site" type="submit">Trigger Event</button>
             </form>
           ) : null}
+        </section>
+
+        <section className="panel government-user-panel">
+          <p className="eyebrow">Event Timeline</p>
+          <h2>Active Market Conditions</h2>
+          <div className="panem-ledger-layout">
+            {store.events.filter((event) => event.status === "active").slice(0, 6).map((event) => (
+              <article className="finance-panel" key={`${event.id}-${event.startsAt}`}>
+                <p className="eyebrow">{event.eventType || "state event"}</p>
+                <h3>{event.title}</h3>
+                <p>{event.summary}</p>
+                <dl className="panem-ledger">
+                  <div><dt>Districts</dt><dd>{(event.affectedDistricts || event.boostedDistricts || []).join(", ") || "Union-wide"}</dd></div>
+                  <div><dt>Companies</dt><dd>{(event.affectedCompanies || event.tickers || []).join(", ") || "All/None"}</dd></div>
+                  <div><dt>Ends</dt><dd>{event.endsAt ? new Date(event.endsAt).toLocaleString("en-GB") : "Standing order"}</dd></div>
+                </dl>
+              </article>
+            ))}
+          </div>
         </section>
 
         {fullAccess ? (

@@ -125,6 +125,9 @@ export async function POST(request) {
   const reason = clean(formData.get("reason"), 1400);
   const evidenceNotes = clean(formData.get("evidenceNotes"), 1400);
   const distribution = mapDistribution(formData.get("distribution"));
+  const requestedPing = clean(formData.get("pingOption") || "none", 40);
+  const pingOption = ["none", "here", "everyone"].includes(requestedPing) ? requestedPing : "none";
+  const pingConfirmed = formData.get("confirmPingBroadcast") === "on";
   const targetDiscordId = clean(formData.get("targetDiscordId"), 80);
   const requiresApproval = formData.get("requiresApproval") === "on";
 
@@ -156,12 +159,15 @@ export async function POST(request) {
         evidenceNotes
       }),
       distribution,
+      pingOption,
+      pingConfirmed,
       targetDiscordId,
       requiresApproval:
         requiresApproval ||
         requiresChairmanApproval({
           distribution,
-          type
+          type,
+          pingOption
         }),
       confirmed: false,
       linkedType: "mss-security-alert",
@@ -173,7 +179,7 @@ export async function POST(request) {
     await addAuditEvent(
       user.username,
       "mss security alert queued",
-      `${broadcast.id} / ${subjectName} / ${classification}`,
+      `${broadcast.id} / ${subjectName} / ${classification} / ping ${broadcast.pingOption || "none"}`,
       "success"
     );
     return redirectTo(request, "/government-access/mss-console?saved=1");

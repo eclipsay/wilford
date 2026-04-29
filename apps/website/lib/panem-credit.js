@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   calculateMarketPrice,
+  dynamicEconomyEventDefaults,
   districtMarketEventDefaults,
   districtEconomyDefaults,
   economyCrimeDefaults,
@@ -73,18 +74,40 @@ function randomInt(min, max) {
 }
 
 function activeEvent(store) {
+  return activeEvents(store)[0] || economyEventDefaults[0];
+}
+
+function activeEvents(store) {
   const now = Date.now();
-  const active = (store.events || []).find((event) =>
+  return (store.events || []).filter((event) =>
     event.status === "active" &&
     (!event.endsAt || Date.parse(event.endsAt) > now)
   );
-  return active || economyEventDefaults[0];
 }
 
 function eventMultiplier(store, key, fallback = 1) {
-  const event = activeEvent(store);
-  const value = Number(event?.[key]);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
+  const events = activeEvents(store);
+  if (!events.length) {
+    const value = Number(activeEvent(store)?.[key]);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  }
+  return events.reduce((value, event) => value * Math.max(0, Number(event?.[key] ?? 1)), fallback);
+}
+
+function eventAffectsDistrict(event, district) {
+  return (event.affectedDistricts || event.boostedDistricts || []).includes(district);
+}
+
+function eventAffectsGood(event, item) {
+  return (event.affectedGoods || []).includes(item?.id) || eventAffectsDistrict(event, item?.district);
+}
+
+function eventAffectsCompany(event, company) {
+  return (event.affectedCompanies || event.tickers || []).includes(company?.ticker) || eventAffectsDistrict(event, company?.district);
+}
+
+function activeModifierSum(store, matcher, key) {
+  return activeEvents(store).reduce((sum, event) => matcher(event) ? sum + Number(event.modifiers?.[key] || 0) : sum, 0);
 }
 
 function isCooldownReady(store, walletId, type, key, cooldownHours) {
@@ -318,6 +341,8 @@ export function normalizeEconomyStore(economy = {}) {
       inventoryFlags: Array.isArray(wallet.inventoryFlags) ? wallet.inventoryFlags : [],
       actionBans: Array.isArray(wallet.actionBans) ? wallet.actionBans : [],
       achievements: Array.isArray(wallet.achievements) ? wallet.achievements : [],
+      selectedJobId: cleanText(wallet.selectedJobId || "", 120),
+      jobChangedAt: cleanText(wallet.jobChangedAt || "", 80),
       collectionScore: Math.max(0, Number(wallet.collectionScore || 0))
     })),
     transactions: Array.isArray(economy.transactions) ? economy.transactions : [],
@@ -710,31 +735,94 @@ export async function claimDailyReward({ walletId, actor = "citizen" }) {
 export async function performEconomyJob({ walletId, jobId, actor = "citizen" }) {
   const store = await getEconomyStore();
   const wallet = getWallet(store, walletId);
-  const job = economyJobDefaults.find((entry) => entry.id === jobId) || economyJobDefaults[0];
+  const selectedJobId = jobId || wallet?.selectedJobId || "work-shift";
+  const job = economyJobDefaults.find((entry) => entry.id === selectedJobId) || economyJobDefaults[0];
   if (!wallet || wallet.status !== "active") return { ok: false, store };
+  if (job.district !== "Any" && job.district !== wallet.district) return { ok: false, store, reason: "district-job" };
   if (!isCooldownReady(store, wallet.id, "work", job.id, job.cooldownHours)) return { ok: false, store, reason: "cooldown" };
   const district = store.districts.find((entry) => entry.name === wallet.district);
   const districtFit = job.district === "Any" || job.district === wallet.district ? 1.18 : 1;
   const prosperity = 1 + (Number(district?.prosperityRating || 70) - 70) / 300;
   const event = activeEvent(store);
   const eventBoost = event?.boostedDistricts?.includes(wallet.district) ? 1.2 : 1;
-  const amount = Math.round(randomInt(job.minReward, job.maxReward) * districtFit * prosperity * eventBoost * eventMultiplier(store, "workMultiplier", 1));
-  wallet.balance += amount;
+  const jobEventBoost = 1 + activeModifierSum(store, (entry) => eventAffectsDistrict(entry, job.district), "jobPayoutPercent");
+  const riskEventBoost = activeModifierSum(store, (entry) => eventAffectsDistrict(entry, job.district), "riskPercent");
+  const failed = Math.random() < clampNumber(Number(job.failureChance || 0) + riskEventBoost, 0, 0.75);
+  const illegalOffer = Math.random() < Number(job.illegalOpportunityChance || 0);
+  let amount = Math.round(randomInt(job.minReward, job.maxReward) * districtFit * prosperity * eventBoost * eventMultiplier(store, "workMultiplier", 1) * jobEventBoost);
+  let penalty = 0;
+  let itemReward = null;
+  if (failed) {
+    penalty = Math.max(15, Math.round(amount * (job.riskLevel === "High" || job.riskLevel === "Restricted" ? 0.45 : job.riskLevel === "Medium" ? 0.28 : 0.15)));
+    const previousBalance = Number(wallet.balance || 0);
+    wallet.balance = Math.max(-1000, previousBalance - penalty);
+    wallet.debt = Math.max(0, Number(wallet.debt || 0) + Math.max(0, penalty - previousBalance));
+    amount = 0;
+    if (job.riskLevel === "High" || job.riskLevel === "Restricted" || illegalOffer) {
+      postMssAlert(store, wallet, {
+        severity: job.riskLevel === "Restricted" ? "critical" : "high",
+        type: "job_risk",
+        fine: penalty,
+        summary: `MSS Labour Risk Alert: ${wallet.displayName} triggered a ${job.name} failure.`
+      });
+    }
+  } else {
+    wallet.balance += amount;
+    if (Array.isArray(job.itemRewards) && job.itemRewards.length && Math.random() < 0.22) {
+      itemReward = getInventoryItem(job.itemRewards[Math.floor(Math.random() * job.itemRewards.length)]);
+      if (itemReward) addHolding(wallet, itemReward.id, 1, itemValue(itemReward, store), job.name);
+    }
+    if (illegalOffer) {
+      const bonus = Math.round(amount * 0.22);
+      wallet.balance += bonus;
+      amount += bonus;
+      postMssAlert(store, wallet, {
+        severity: "medium",
+        type: "illegal_job_opportunity",
+        fine: Math.round(bonus * 0.5),
+        summary: `MSS Labour Notice: ${wallet.displayName} encountered a suspicious opportunity during ${job.name}.`
+      });
+    }
+  }
   wallet.updatedAt = new Date().toISOString();
   if (district) {
-    district.tradeVolume = Math.round(Number(district.tradeVolume || 0) + amount * 1.6);
+    district.tradeVolume = Math.round(Number(district.tradeVolume || 0) + Math.max(1, amount) * 1.6);
     district.taxContribution = Math.round(Number(district.taxContribution || 0) + amount * 0.08);
+    district.supplyLevel = clampNumber(Number(district.supplyLevel || 0) + (failed ? -1 : 1), 0, 130);
   }
   pushTransaction(store, {
-    fromWalletId: "district-production",
-    toWalletId: wallet.id,
-    amount,
+    fromWalletId: failed ? wallet.id : "district-production",
+    toWalletId: failed ? "treasury" : wallet.id,
+    amount: failed ? penalty : amount,
     type: "work",
-    reason: `${job.name}: ${job.description}`,
+    reason: `${job.name}: ${failed ? "failed assignment" : job.description}${itemReward ? ` / item: ${itemReward.name}` : ""}`,
     createdBy: actor,
-    meta: { key: job.id, district: wallet.district, eventId: event?.id }
+    meta: { key: job.id, district: wallet.district, eventId: event?.id, failed, riskLevel: job.riskLevel, illegalOffer, itemRewardId: itemReward?.id || "" }
   });
-  return { ok: true, amount, job, store: await saveEconomyStore(store) };
+  return { ok: true, amount, penalty, failed, job, itemReward, illegalOffer, store: await saveEconomyStore(store) };
+}
+
+export async function setCitizenJob({ walletId, jobId, actor = "citizen" }) {
+  const store = await getEconomyStore();
+  const wallet = getWallet(store, walletId);
+  const job = economyJobDefaults.find((entry) => entry.id === jobId);
+  if (!wallet || !job || wallet.status !== "active") return { ok: false, store, reason: "job" };
+  if (job.district !== "Any" && job.district !== wallet.district) return { ok: false, store, reason: "district-job" };
+  if (wallet.jobChangedAt && Date.now() - Date.parse(wallet.jobChangedAt) < Number(job.switchCooldownHours || 24) * 60 * 60 * 1000) {
+    return { ok: false, store, reason: "job-cooldown" };
+  }
+  wallet.selectedJobId = job.id;
+  wallet.jobChangedAt = new Date().toISOString();
+  pushTransaction(store, {
+    fromWalletId: wallet.id,
+    toWalletId: "labour-registry",
+    amount: 0,
+    type: "set_job",
+    reason: `${wallet.displayName} selected ${job.name}.`,
+    createdBy: actor,
+    meta: { key: job.id, district: wallet.district }
+  });
+  return { ok: true, job, store: await saveEconomyStore(store) };
 }
 
 export async function performCrimeAction({ walletId, crimeId, targetWalletId = "", actor = "citizen" }) {
@@ -1584,6 +1672,7 @@ export async function triggerEconomyEvent({ eventId, durationHours = 168, actor 
     endsAt: new Date(now.getTime() + Math.max(1, Number(durationHours || 168)) * 60 * 60 * 1000).toISOString(),
     triggeredBy: actor
   };
+  applyDynamicEventEffects(store, active);
   store.events = [active, ...(store.events || []).map((entry) => ({ ...entry, status: entry.status === "active" ? "expired" : entry.status }))].slice(0, 20);
   pushTransaction(store, {
     fromWalletId: "treasury",
@@ -1595,6 +1684,44 @@ export async function triggerEconomyEvent({ eventId, durationHours = 168, actor 
     meta: { key: active.id }
   });
   return { ok: true, event: active, store: await saveEconomyStore(store) };
+}
+
+function applyDynamicEventEffects(store, event) {
+  const modifiers = event.modifiers || {};
+  for (const district of store.districts || []) {
+    if (!eventAffectsDistrict(event, district.name)) continue;
+    district.supplyLevel = clampNumber(Number(district.supplyLevel || 0) + Number(modifiers.supplyDelta || 0), 0, 140);
+    district.demandLevel = clampNumber(Number(district.demandLevel || 0) + Number(modifiers.demandDelta || 0), 0, 140);
+    district.developmentStatus = event.title;
+  }
+  for (const item of store.marketItems || []) {
+    if (!eventAffectsGood(event, item)) continue;
+    const previous = Number(item.currentPrice || item.basePrice || 1);
+    item.currentPrice = Math.max(1, Math.round(previous * (1 + Number(modifiers.itemPricePercent || 0))));
+    item.priceHistory = [...(item.priceHistory || []), { date: new Date().toISOString().slice(0, 10), price: item.currentPrice }].slice(-30);
+  }
+  for (const company of store.stockCompanies || []) {
+    if (!eventAffectsCompany(event, company)) continue;
+    const previous = Number(company.sharePrice || 1);
+    company.sharePrice = Math.max(1, Math.round(previous * (1 + Number(modifiers.stockPercent || 0)) * 100) / 100);
+    company.dailyChangePercent = Math.round(((company.sharePrice - previous) / previous) * 1000) / 10;
+    company.priceHistory = [...(company.priceHistory || []), { date: new Date().toISOString().slice(0, 10), price: company.sharePrice }].slice(-30);
+  }
+  store.marketNotices = [
+    {
+      id: createId("notice"),
+      title: event.title,
+      body: event.summary || event.description || "A state economy event has changed market conditions.",
+      severity: event.alertSeverity || "medium",
+      createdAt: new Date().toISOString()
+    },
+    ...(store.marketNotices || [])
+  ].slice(0, 20);
+}
+
+export async function triggerRandomEconomyEvent({ actor = "treasury", durationHours = 72 } = {}) {
+  const event = dynamicEconomyEventDefaults[Math.floor(Math.random() * dynamicEconomyEventDefaults.length)] || economyEventDefaults[0];
+  return triggerEconomyEvent({ eventId: event.id, durationHours: event.durationHours || durationHours, actor });
 }
 
 export async function updateEconomyAdmin(fields, actor = "treasury") {

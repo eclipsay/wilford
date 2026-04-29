@@ -271,6 +271,100 @@ function verifyPassword(password, storedHash) {
   return timingSafeEqual(passwordBuffer, hashBuffer);
 }
 
+function cleanRecordText(value, maxLength = 800) {
+  return String(value || "")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function createId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
+}
+
+function createVerificationCode() {
+  return `WPU-${randomBytes(2).toString("hex").toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+function createSecurityId(districtName = "Capitol") {
+  const districtCode = districtName === "The Capitol" || districtName === "Capitol"
+    ? "CR"
+    : String(districtName).replace(/\D/g, "").padStart(2, "0").slice(-2) || "00";
+  return `WPU-${districtCode}-${new Date().getFullYear()}-${randomBytes(2).toString("hex").toUpperCase()}`;
+}
+
+function createTemporaryPassword() {
+  return `WPU-${randomBytes(4).toString("hex").toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+function portalUsernameForApplication(application, existingRecords = []) {
+  const base = cleanRecordText(application.applicantName || "citizen", 80)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "") || "citizen";
+  const suffix = String(application.discordUserId || application.id || "").slice(-4);
+  let username = `${base}${suffix ? `.${suffix}` : ""}`.slice(0, 80);
+  const taken = new Set(existingRecords.map((record) => String(record.portalUsername || record.userId || "").toLowerCase()));
+  let counter = 2;
+  while (taken.has(username.toLowerCase())) {
+    username = `${base}.${suffix || "wpu"}${counter}`.slice(0, 80);
+    counter += 1;
+  }
+  return username;
+}
+
+function normalizeCitizenForProvisioning(record = {}) {
+  const district = cleanRecordText(record.district || "Capitol", 80);
+  return {
+    id: cleanRecordText(record.id || createId("citizen"), 120),
+    name: cleanRecordText(record.name || "Registered Citizen", 160),
+    userId: cleanRecordText(record.userId || "", 120),
+    portalUsername: cleanRecordText(record.portalUsername || record.userId || "", 120),
+    passwordHash: String(record.passwordHash || ""),
+    forcePasswordChange: record.forcePasswordChange !== false,
+    temporaryPasswordIssuedAt: record.temporaryPasswordIssuedAt || "",
+    credentialDeliveryStatus: cleanRecordText(record.credentialDeliveryStatus || "pending", 80),
+    credentialDeliveryError: cleanRecordText(record.credentialDeliveryError || "", 300),
+    sourceApplicationId: cleanRecordText(record.sourceApplicationId || "", 120),
+    discordUsername: cleanRecordText(record.discordUsername || "", 120),
+    discordId: cleanRecordText(record.discordId || "", 80),
+    district,
+    citizenStatus: cleanRecordText(record.citizenStatus || "Active Citizen", 80),
+    securityClassification: cleanRecordText(record.securityClassification || "Clear", 80),
+    walletId: cleanRecordText(record.walletId || "", 120),
+    unionSecurityId: cleanRecordText(record.unionSecurityId || createSecurityId(district), 80),
+    verificationCode: cleanRecordText(record.verificationCode || createVerificationCode(), 80),
+    issueDate: cleanRecordText(record.issueDate || new Date().toISOString().slice(0, 10), 40),
+    expiryDate: cleanRecordText(record.expiryDate || "", 40),
+    verificationStatus: cleanRecordText(record.verificationStatus || "Verified", 80),
+    internalNotes: cleanRecordText(record.internalNotes || "", 1600),
+    warnings: Array.isArray(record.warnings) ? record.warnings : [],
+    lostOrStolen: Boolean(record.lostOrStolen),
+    createdAt: record.createdAt || new Date().toISOString(),
+    updatedAt: record.updatedAt || new Date().toISOString()
+  };
+}
+
+function normalizeWalletForProvisioning(wallet = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: cleanRecordText(wallet.id || createId("wallet"), 120),
+    userId: cleanRecordText(wallet.userId || "", 120),
+    discordId: cleanRecordText(wallet.discordId || "", 80),
+    displayName: cleanRecordText(wallet.displayName || "Citizen Wallet", 120),
+    balance: Math.max(0, Number(wallet.balance || 0)),
+    district: cleanRecordText(wallet.district || "", 80),
+    title: cleanRecordText(wallet.title || "Citizen", 80),
+    salary: Math.max(0, Number(wallet.salary ?? 125)),
+    status: cleanRecordText(wallet.status || "active", 80),
+    taxStatus: cleanRecordText(wallet.taxStatus || "compliant", 80),
+    createdAt: wallet.createdAt || now,
+    updatedAt: wallet.updatedAt || now,
+    ...wallet
+  };
+}
+
 async function readContentFile() {
   try {
     const raw = await readFile(config.dataFile, "utf8");
@@ -484,6 +578,11 @@ function normalizeBroadcast(entry, index = 0) {
     imageUrl: cleanBroadcastText(entry?.imageUrl || entry?.heroImage || "", 500),
     articleUrl: cleanBroadcastText(entry?.articleUrl || entry?.link || "", 500),
     distribution: cleanBroadcastText(entry?.distribution || "none", 80),
+    pingOption: ["none", "here", "everyone"].includes(String(entry?.pingOption || "none")) ? String(entry?.pingOption || "none") : "none",
+    requestedPingOption: ["none", "here", "everyone"].includes(String(entry?.requestedPingOption || entry?.pingOption || "none")) ? String(entry?.requestedPingOption || entry?.pingOption || "none") : "none",
+    pingConfirmed: Boolean(entry?.pingConfirmed),
+    pingApplied: Boolean(entry?.pingApplied),
+    pingDeniedReason: cleanBroadcastText(entry?.pingDeniedReason || "", 240),
     targetDiscordId: cleanBroadcastText(entry?.targetDiscordId || "", 80),
     linkedType: cleanBroadcastText(entry?.linkedType || "", 80),
     linkedId: cleanBroadcastText(entry?.linkedId || "", 160),
@@ -1211,6 +1310,7 @@ function createApplicationEvent(type, message, fields = {}) {
 function normalizeApplicationForUpdate(application) {
   return {
     ...application,
+    discordUserId: String(application.discordUserId || "").replace(/\s+/g, "").trim(),
     discordChannelId: String(application.discordChannelId || application.reviewChannelId || "").trim(),
     discordThreadId: String(application.discordThreadId || application.reviewThreadId || "").trim(),
     discordMessageId: String(application.discordMessageId || application.reviewMessageId || "").trim(),
@@ -1411,6 +1511,312 @@ export async function markApplicationDiscordEvent(applicationId, eventId, fields
         ...(normalized.applicationAuditLog || [])
       ].slice(0, 200),
       updatedAt: new Date().toISOString()
+    };
+    return updatedApplication;
+  });
+
+  await writeContentFile(content);
+  return updatedApplication;
+}
+
+export async function approveCitizenApplication(applicationId, approvedBy = "system", options = {}) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+  const applicationIndex = (content.publicApplications || []).findIndex((application) => application.id === applicationId);
+
+  if (applicationIndex === -1) {
+    return null;
+  }
+
+  const application = normalizeApplicationForUpdate(content.publicApplications[applicationIndex]);
+  const discordUserId = String(application.discordUserId || application.applicantId || "").replace(/\s+/g, "").trim();
+  const district = cleanRecordText(application.district || application.requestedDistrict || application.affiliation || "Capitol", 80);
+  const existingRecords = Array.isArray(content.citizenRecords) ? content.citizenRecords : [];
+  const existingRecordIndex = existingRecords.findIndex((record) =>
+    (discordUserId && String(record.discordId || "") === discordUserId) ||
+    String(record.sourceApplicationId || "") === application.id
+  );
+  const temporaryPassword = createTemporaryPassword();
+  const existingRecord = existingRecordIndex >= 0 ? existingRecords[existingRecordIndex] : null;
+  const portalUsername = existingRecord?.portalUsername || portalUsernameForApplication(application, existingRecords);
+  const citizenRecord = normalizeCitizenForProvisioning({
+    ...(existingRecord || {}),
+    name: application.applicantName || existingRecord?.name || "Registered Citizen",
+    userId: existingRecord?.userId || portalUsername,
+    portalUsername,
+    passwordHash: hashPassword(temporaryPassword),
+    forcePasswordChange: true,
+    temporaryPasswordIssuedAt: now,
+    credentialDeliveryStatus: "pending",
+    credentialDeliveryError: "",
+    discordUsername: application.discordHandle || existingRecord?.discordUsername || "",
+    discordId: discordUserId || existingRecord?.discordId || "",
+    district: existingRecord?.district || district,
+    citizenStatus: "Active Citizen",
+    securityClassification: existingRecord?.securityClassification || "Clear",
+    verificationStatus: "Verified",
+    sourceApplicationId: application.id,
+    updatedAt: now
+  });
+
+  if (existingRecordIndex >= 0) {
+    content.citizenRecords[existingRecordIndex] = citizenRecord;
+  } else {
+    content.citizenRecords = [citizenRecord, ...existingRecords].slice(0, 500);
+  }
+
+  content.economy = normalizeEconomyStore(content.economy || defaultContent.economy);
+  const walletIndex = (content.economy.wallets || []).findIndex((wallet) =>
+    (citizenRecord.walletId && wallet.id === citizenRecord.walletId) ||
+    (discordUserId && String(wallet.discordId || "") === discordUserId) ||
+    String(wallet.userId || "") === citizenRecord.userId
+  );
+  const openingBalance = Math.max(0, Number(options.openingBalance ?? 500));
+  const wallet = normalizeWalletForProvisioning({
+    ...(walletIndex >= 0 ? content.economy.wallets[walletIndex] : {}),
+    id: walletIndex >= 0 ? content.economy.wallets[walletIndex].id : createId("wallet"),
+    userId: citizenRecord.userId || citizenRecord.id,
+    discordId: citizenRecord.discordId,
+    displayName: citizenRecord.name,
+    balance: walletIndex >= 0 ? content.economy.wallets[walletIndex].balance : openingBalance,
+    district: citizenRecord.district,
+    title: "Citizen",
+    salary: options.salary ?? 125,
+    status: "active",
+    taxStatus: "compliant",
+    updatedAt: now
+  });
+
+  if (walletIndex >= 0) {
+    content.economy.wallets[walletIndex] = wallet;
+  } else {
+    content.economy.wallets = [wallet, ...(content.economy.wallets || [])].slice(0, 1000);
+    content.economy.transactions = [
+      {
+        id: createId("txn"),
+        fromWalletId: "treasury",
+        toWalletId: wallet.id,
+        amount: wallet.balance,
+        taxAmount: 0,
+        type: "wallet_created",
+        reason: "Citizen application approved; wallet created by Ministry of Credit & Records",
+        createdBy: approvedBy,
+        createdAt: now
+      },
+      ...(content.economy.transactions || [])
+    ].slice(0, 1000);
+  }
+
+  const linkedCitizenRecord = { ...citizenRecord, walletId: wallet.id, updatedAt: now };
+  const linkedIndex = content.citizenRecords.findIndex((record) => record.id === linkedCitizenRecord.id);
+  if (linkedIndex >= 0) {
+    content.citizenRecords[linkedIndex] = linkedCitizenRecord;
+  }
+
+  const previousStatus = application.status || "pending";
+  const shouldQueueEvents = !options.suppressDiscordEvents;
+  const statusEvent = previousStatus === "approved" || !shouldQueueEvents
+    ? []
+    : [
+        createApplicationEvent(
+          "status_changed",
+          "Ministry of Credit and Records: Your citizenship application has been approved.",
+          { oldStatus: previousStatus, newStatus: "approved" }
+        )
+      ];
+  const credentialEvents = shouldQueueEvents
+    ? [
+        createApplicationEvent(
+          "citizen_login_credentials",
+          "Citizen Portal credentials are ready for secure delivery.",
+          { citizenAccountId: linkedCitizenRecord.id, walletId: wallet.id }
+        )
+      ]
+    : [];
+
+  const auditEntries = [
+    {
+      id: createId("app-audit"),
+      at: now,
+      actor: approvedBy,
+      action: "citizen application approved",
+      detail: `method=${options.approvalMethod || "Website"} citizen=${linkedCitizenRecord.id} wallet=${wallet.id}`,
+      status: "success"
+    }
+  ];
+
+  content.publicApplications[applicationIndex] = {
+    ...application,
+    status: "approved",
+    decisionNote: cleanRecordText(options.decisionNote || application.decisionNote || "", 1000),
+    approvedAt: application.approvedAt || now,
+    approvedBy,
+    updatedAt: now,
+    archived: false,
+    needsAttention: false,
+    approvalProvisioning: {
+      citizenAccountId: linkedCitizenRecord.id,
+      walletId: wallet.id,
+      unionSecurityId: linkedCitizenRecord.unionSecurityId,
+      portalUsername: linkedCitizenRecord.portalUsername,
+      approvalMethod: options.approvalMethod || "Website",
+      discordRoleStatus: cleanRecordText(options.discordRoleStatus || "pending", 80),
+      credentialDeliveryStatus: "pending",
+      credentialDeliveryError: "",
+      provisionedAt: now
+    },
+    pendingDiscordEvents: [
+      ...(application.pendingDiscordEvents || []),
+      ...statusEvent,
+      ...credentialEvents
+    ].slice(-100),
+    applicationAuditLog: [
+      ...auditEntries,
+      ...(application.applicationAuditLog || [])
+    ].slice(0, 200)
+  };
+
+  await writeContentFile(content);
+
+  return {
+    application: content.publicApplications[applicationIndex],
+    citizenRecord: linkedCitizenRecord,
+    wallet,
+    credentials: {
+      portalUrl: cleanRecordText(options.portalUrl || "https://wilfordindustries.org/citizen-portal", 300),
+      username: linkedCitizenRecord.portalUsername,
+      temporaryPassword,
+      unionSecurityId: linkedCitizenRecord.unionSecurityId,
+      forcePasswordChange: true
+    }
+  };
+}
+
+export async function regenerateCitizenLoginCredentials(applicationId, actor = "system", options = {}) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+  const applicationIndex = (content.publicApplications || []).findIndex((application) => application.id === applicationId);
+  if (applicationIndex === -1) return null;
+
+  const application = normalizeApplicationForUpdate(content.publicApplications[applicationIndex]);
+  const provisioning = application.approvalProvisioning || {};
+  const discordUserId = String(application.discordUserId || application.applicantId || "").replace(/\s+/g, "").trim();
+  const citizenIndex = (content.citizenRecords || []).findIndex((record) =>
+    record.id === provisioning.citizenAccountId ||
+    (discordUserId && String(record.discordId || "") === discordUserId) ||
+    String(record.sourceApplicationId || "") === application.id
+  );
+  if (citizenIndex === -1) return null;
+
+  const temporaryPassword = createTemporaryPassword();
+  const citizenRecord = normalizeCitizenForProvisioning({
+    ...content.citizenRecords[citizenIndex],
+    passwordHash: hashPassword(temporaryPassword),
+    forcePasswordChange: true,
+    temporaryPasswordIssuedAt: now,
+    credentialDeliveryStatus: "pending",
+    credentialDeliveryError: "",
+    updatedAt: now
+  });
+  content.citizenRecords[citizenIndex] = citizenRecord;
+  content.publicApplications[applicationIndex] = {
+    ...application,
+    approvalProvisioning: {
+      ...provisioning,
+      citizenAccountId: citizenRecord.id,
+      portalUsername: citizenRecord.portalUsername,
+      unionSecurityId: citizenRecord.unionSecurityId,
+      credentialDeliveryStatus: "pending",
+      credentialDeliveryError: "",
+      resentAt: now
+    },
+    pendingDiscordEvents: [
+      ...(application.pendingDiscordEvents || []),
+      ...(options.queueEvent === false
+        ? []
+        : [
+            createApplicationEvent(
+              "citizen_login_credentials",
+              "Citizen Portal credentials are ready for secure delivery.",
+              { citizenAccountId: citizenRecord.id, walletId: citizenRecord.walletId || provisioning.walletId || "" }
+            )
+          ])
+    ].slice(-100),
+    applicationAuditLog: [
+      {
+        id: createId("app-audit"),
+        at: now,
+        actor,
+        action: "citizen login regenerated",
+        detail: `citizen=${citizenRecord.id}`,
+        status: "success"
+      },
+      ...(application.applicationAuditLog || [])
+    ].slice(0, 200),
+    updatedAt: now
+  };
+
+  await writeContentFile(content);
+  return {
+    application: content.publicApplications[applicationIndex],
+    citizenRecord,
+    credentials: {
+      portalUrl: "https://wilfordindustries.org/citizen-portal",
+      username: citizenRecord.portalUsername,
+      temporaryPassword,
+      unionSecurityId: citizenRecord.unionSecurityId,
+      forcePasswordChange: true
+    }
+  };
+}
+
+export async function markCitizenCredentialDelivery(applicationId, fields = {}) {
+  const content = await readContentFile();
+  const now = new Date().toISOString();
+  let updatedApplication = null;
+
+  content.publicApplications = (content.publicApplications || []).map((application) => {
+    if (application.id !== applicationId) return application;
+    const normalized = normalizeApplicationForUpdate(application);
+    const hasCredentialStatus = Boolean(cleanRecordText(fields.status || "", 80));
+    const status = cleanRecordText(fields.status || normalized.approvalProvisioning?.credentialDeliveryStatus || "pending", 80);
+    const error = cleanRecordText(fields.error || "", 300);
+    const provisioning = {
+      ...(normalized.approvalProvisioning || {}),
+      discordRoleStatus: cleanRecordText(fields.discordRoleStatus || normalized.approvalProvisioning?.discordRoleStatus || "pending", 80),
+      credentialDeliveryStatus: status,
+      credentialDeliveryError: error,
+      credentialDeliveredAt: status === "delivered" ? now : normalized.approvalProvisioning?.credentialDeliveredAt || "",
+      credentialDeliveryAttemptedAt: now
+    };
+    const citizenId = provisioning.citizenAccountId;
+    content.citizenRecords = (content.citizenRecords || []).map((record) =>
+      record.id === citizenId
+        ? {
+            ...record,
+            credentialDeliveryStatus: status,
+            credentialDeliveryError: error,
+            updatedAt: now
+          }
+        : record
+    );
+    updatedApplication = {
+      ...normalized,
+      approvalProvisioning: provisioning,
+      applicationAuditLog: [
+        {
+          id: createId("app-audit"),
+          at: now,
+          actor: cleanRecordText(fields.actor || "discord-bot", 120),
+          action: hasCredentialStatus ? "citizen login delivery" : "discord role assignment",
+          detail: hasCredentialStatus
+            ? status === "delivered" ? "Secure login DM delivered." : error || "Secure login DM failed."
+            : `Citizen role status: ${provisioning.discordRoleStatus}`,
+          status: hasCredentialStatus ? status === "delivered" ? "success" : "failed" : provisioning.discordRoleStatus === "granted" ? "success" : "failed"
+        },
+        ...(normalized.applicationAuditLog || [])
+      ].slice(0, 200),
+      updatedAt: now
     };
     return updatedApplication;
   });

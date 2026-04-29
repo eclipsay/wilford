@@ -38,10 +38,17 @@ export const mssDistributions = [
   { value: "specific_user", label: "DM specific Discord ID" }
 ];
 
+export const pingOptions = [
+  { value: "none", label: "Do not ping" },
+  { value: "here", label: "@here" },
+  { value: "everyone", label: "@everyone" }
+];
+
 export function requiresChairmanApproval(fields = {}) {
   return (
     ["dm_all", "announcement_and_dm_all"].includes(fields.distribution) ||
-    fields.type === "treason_notice"
+    fields.type === "treason_notice" ||
+    fields.pingOption === "everyone"
   );
 }
 
@@ -99,10 +106,17 @@ export function parseBroadcastOptions(formData) {
     ? requestedType
     : "news";
 
+  const requestedPing = cleanText(formData.get("pingOption") || "none", 40);
+  const pingOption = pingOptions.some((option) => option.value === requestedPing)
+    ? requestedPing
+    : "none";
+
   return {
     enabled: distribution !== "none",
     distribution,
     type,
+    pingOption,
+    pingConfirmed: formData.get("confirmPingBroadcast") === "on",
     targetDiscordId: cleanText(formData.get("targetDiscordId") || "", 80),
     confirmed: formData.get("confirmDiscordBroadcast") === "on",
     forceResend: formData.get("forceDiscordBroadcast") === "on"

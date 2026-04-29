@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { cookies } from "next/headers";
 import { dirname, resolve } from "node:path";
@@ -135,6 +135,21 @@ function readSessionValue(value) {
   }
 }
 
+function verifyPassword(password, storedHash) {
+  const [salt, hash] = String(storedHash || "").split(":");
+  if (!salt || !hash) return false;
+  const passwordBuffer = scryptSync(String(password || ""), salt, 64);
+  const hashBuffer = Buffer.from(hash, "hex");
+  if (passwordBuffer.length !== hashBuffer.length) return false;
+  return timingSafeEqual(passwordBuffer, hashBuffer);
+}
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(String(password || ""), salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
 function districtNumber(name) {
   if (name === "The Capitol" || name === "Capitol") return 0;
   return Number(String(name).replace(/\D/g, "")) || 0;
@@ -225,6 +240,13 @@ function normalizeCitizenRecord(record = {}) {
     id: cleanText(record.id || createId("citizen"), 120),
     name: cleanText(record.name || "Registered Citizen", 160),
     userId: cleanText(record.userId || "", 120),
+    portalUsername: cleanText(record.portalUsername || record.userId || "", 120),
+    passwordHash: String(record.passwordHash || ""),
+    forcePasswordChange: Boolean(record.forcePasswordChange),
+    temporaryPasswordIssuedAt: record.temporaryPasswordIssuedAt || "",
+    credentialDeliveryStatus: cleanText(record.credentialDeliveryStatus || "", 80),
+    credentialDeliveryError: cleanText(record.credentialDeliveryError || "", 300),
+    sourceApplicationId: cleanText(record.sourceApplicationId || "", 120),
     discordUsername: cleanText(record.discordUsername || "", 120),
     discordId: cleanText(record.discordId || "", 80),
     district,
@@ -548,14 +570,17 @@ export function findCitizenBySelector(state, selector) {
   ) || state.citizenRecords[0];
 }
 
-export function findCitizenForLogin(state, name, unionSecurityId) {
+export function findCitizenForLogin(state, name, unionSecurityId, password = "") {
   const requestedName = normalizeLookup(name);
   const requestedSecurityId = normalizeLookup(unionSecurityId).replace(/\s/g, "");
   if (!requestedName || !requestedSecurityId) return null;
 
   return state.citizenRecords.find((record) =>
-    normalizeLookup(record.name) === requestedName &&
+    [record.name, record.portalUsername, record.userId]
+      .filter(Boolean)
+      .some((item) => normalizeLookup(item) === requestedName) &&
     normalizeLookup(record.unionSecurityId).replace(/\s/g, "") === requestedSecurityId &&
+    (!record.passwordHash || verifyPassword(password, record.passwordHash)) &&
     record.verificationStatus === "Verified" &&
     !record.lostOrStolen &&
     !["Revoked", "Suspended", "Lost/Stolen"].includes(record.verificationStatus) &&
@@ -563,9 +588,9 @@ export function findCitizenForLogin(state, name, unionSecurityId) {
   ) || null;
 }
 
-export async function loginCitizen(name, unionSecurityId) {
+export async function loginCitizen(name, unionSecurityId, password = "") {
   const state = await getCitizenState();
-  const record = findCitizenForLogin(state, name, unionSecurityId);
+  const record = findCitizenForLogin(state, name, unionSecurityId, password);
   if (!record) return { ok: false };
 
   const store = await cookies();
@@ -593,6 +618,34 @@ export async function logoutCitizen() {
   if (record) {
     await recordCitizenActivity(record.id, "logout", "Citizen Portal session ended.");
   }
+}
+
+export async function changeCitizenPassword(citizenId, currentPassword, nextPassword) {
+  const state = await getCitizenState();
+  const record = state.citizenRecords.find((citizen) => citizen.id === citizenId);
+  const password = String(nextPassword || "");
+
+  if (!record || password.length < 8) {
+    return { ok: false };
+  }
+
+  if (record.passwordHash && !verifyPassword(currentPassword, record.passwordHash)) {
+    return { ok: false };
+  }
+
+  state.citizenRecords = state.citizenRecords.map((citizen) =>
+    citizen.id === citizenId
+      ? normalizeCitizenRecord({
+          ...citizen,
+          passwordHash: hashPassword(password),
+          forcePasswordChange: false,
+          updatedAt: new Date().toISOString()
+        })
+      : citizen
+  );
+  await saveCitizenState(state);
+  await recordCitizenActivity(citizenId, "password changed", "Citizen Portal password changed.");
+  return { ok: true };
 }
 
 export async function getCurrentCitizen() {

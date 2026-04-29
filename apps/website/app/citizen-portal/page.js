@@ -41,7 +41,9 @@ export default async function CitizenPortalPage({ searchParams }) {
               <p>
                 {params.error === "session"
                   ? "Your citizen session has expired. Please identify yourself again."
-                  : "The name and Union Security ID could not be verified."}
+                  : params.error === "password"
+                    ? "The password change failed. Check the temporary password and use at least 8 characters."
+                    : "The name, Union Security ID, or portal password could not be verified."}
               </p>
             </section>
           ) : null}
@@ -58,7 +60,7 @@ export default async function CitizenPortalPage({ searchParams }) {
               <p className="eyebrow">Secure Civic Access</p>
               <h2>Identify before service.</h2>
               <p>
-                Enter your legal citizen name and Union Security ID. The portal
+                Enter your citizen name or portal username and Union Security ID. The portal
                 will only open the matching citizen record and will record civic
                 activity against that identity for future marketplace and Panem
                 Credit services.
@@ -67,12 +69,17 @@ export default async function CitizenPortalPage({ searchParams }) {
             <form action="/citizen-portal/action" className="portal-status public-application-form citizen-login-form" method="post">
               <input name="intent" type="hidden" value="login" />
               <label className="public-application-field">
-                <span>Citizen name</span>
-                <input autoComplete="name" name="citizenName" required />
+                <span>Citizen name or username</span>
+                <input autoComplete="username" name="citizenName" required />
               </label>
               <label className="public-application-field">
                 <span>Union Security ID</span>
                 <input autoComplete="off" name="unionSecurityId" placeholder="WPU-CR-2026-ABCD" required />
+              </label>
+              <label className="public-application-field">
+                <span>Portal password</span>
+                <input autoComplete="current-password" name="portalPassword" type="password" />
+                <small className="public-application-help">New citizens should use the temporary password sent by Discord DM.</small>
               </label>
               <button className="button button--solid-site" type="submit">Enter Citizen Portal</button>
             </form>
@@ -114,8 +121,27 @@ export default async function CitizenPortalPage({ searchParams }) {
       <main className="content content--wide portal-page portal-page--citizen citizen-dashboard-page">
         {params?.saved ? (
           <section className="application-notice">
-            <strong>Request Submitted</strong>
-            <p>Your request has entered the government review queue.</p>
+            <strong>{params.saved === "password" ? "Password Changed" : "Request Submitted"}</strong>
+            <p>{params.saved === "password" ? "Your Citizen Portal password has been updated." : "Your request has entered the government review queue."}</p>
+          </section>
+        ) : null}
+
+        {record.forcePasswordChange ? (
+          <section className="application-notice application-notice--error">
+            <strong>Temporary Password Active</strong>
+            <p>Change your Citizen Portal password before continuing regular civic services.</p>
+            <form action="/citizen-portal/action" className="public-application-form" method="post">
+              <input name="intent" type="hidden" value="change_password" />
+              <label className="public-application-field">
+                <span>Current temporary password</span>
+                <input autoComplete="current-password" name="currentPassword" required type="password" />
+              </label>
+              <label className="public-application-field">
+                <span>New password</span>
+                <input autoComplete="new-password" minLength={8} name="newPassword" required type="password" />
+              </label>
+              <button className="button button--solid-site" type="submit">Change Password</button>
+            </form>
           </section>
         ) : null}
 

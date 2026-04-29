@@ -27,6 +27,16 @@ function deliveryDetails(broadcast) {
     });
   }
 
+  if (broadcast.pingOption === "everyone" || broadcast.pingOption === "here") {
+    details.push({
+      label: broadcast.pingOption === "everyone" ? "@everyone Ping" : "@here Ping",
+      detail: broadcast.pingOption === "everyone"
+        ? "You are about to send a message to all members."
+        : "This broadcast will notify online members.",
+      tone: "mass"
+    });
+  }
+
   if (distribution === "dm_all" || distribution === "announcement_and_dm_all") {
     details.push({
       label: "DM All Server Members",
@@ -173,6 +183,10 @@ export default async function BroadcastApprovalsPage({ searchParams }) {
                         <dd>{broadcast.requiresApproval ? "Yes" : "No"}</dd>
                       </div>
                       <div>
+                        <dt>Ping Option</dt>
+                        <dd>{broadcast.pingOption || "none"}{broadcast.pingDeniedReason ? ` / downgraded: ${broadcast.pingDeniedReason}` : ""}</dd>
+                      </div>
+                      <div>
                         <dt>Linked Record</dt>
                         <dd>{linkedRecordLabel(broadcast)}</dd>
                       </div>
@@ -188,7 +202,7 @@ export default async function BroadcastApprovalsPage({ searchParams }) {
                       </label>
                       <div className="bulletin-editor-card__actions">
                         <button className="button button--solid-site" name="intent" type="submit" value="approve">
-                          Approve Broadcast
+                          {broadcast.pingOption === "everyone" ? "Confirm Broadcast" : "Approve Broadcast"}
                         </button>
                         <button className="button button--danger-site" name="intent" type="submit" value="decline">
                           Decline

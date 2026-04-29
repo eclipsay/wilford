@@ -76,10 +76,13 @@ async function enqueueBulletinBroadcast(user, formData, fields, linkedId = "") {
       link: fields.linkedArticleId ? `/news/${fields.linkedArticleId}` : ""
     }),
     distribution: options.distribution,
+    pingOption: options.pingOption,
+    pingConfirmed: options.pingConfirmed,
     targetDiscordId: options.targetDiscordId,
     requiresApproval: requiresChairmanApproval({
       distribution: options.distribution,
-      type
+      type,
+      pingOption: options.pingOption
     }),
     confirmed: false,
     linkedType: "bulletin",
@@ -111,7 +114,7 @@ export async function POST(request) {
       const broadcast = await enqueueBulletinBroadcast(user, formData, fields, createdBulletin?.id || "");
       await addAuditEvent(user.username, "bulletin added", fields.headline, "success");
       if (broadcast) {
-        await addAuditEvent(user.username, "discord broadcast queued", broadcast.id, "success");
+        await addAuditEvent(user.username, "discord broadcast queued", `${broadcast.id} / ping ${broadcast.pingOption || "none"}`, "success");
       }
       return redirectTo(request, `/government-access/bulletins?saved=1${broadcast ? "&broadcast=queued" : ""}`);
     } catch (error) {
@@ -135,7 +138,7 @@ export async function POST(request) {
       const broadcast = await enqueueBulletinBroadcast(user, formData, fields, id);
       await addAuditEvent(user.username, "bulletin edited", id, "success");
       if (broadcast) {
-        await addAuditEvent(user.username, "discord broadcast queued", broadcast.id, "success");
+        await addAuditEvent(user.username, "discord broadcast queued", `${broadcast.id} / ping ${broadcast.pingOption || "none"}`, "success");
       }
       return redirectTo(request, `/government-access/bulletins?saved=1${broadcast ? "&broadcast=queued" : ""}`);
     } catch (error) {

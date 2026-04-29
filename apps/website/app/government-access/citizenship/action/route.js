@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import {
   archiveResolvedCitizenApplications,
+  approveCitizenApplication,
+  isValidDiscordUserId,
   parseApplicationReviewForm,
+  resendCitizenLogin,
   updateCitizenApplication
 } from "../../../../lib/citizen-applications";
 import {
@@ -41,12 +44,52 @@ export async function POST(request) {
       actor: user.username
     };
 
+    if (!isValidDiscordUserId(fields.discordUserId)) {
+      return redirectTo(request, "/government-access/citizenship?error=invalid-discord-id&detail=Valid%20Discord%20User%20ID%20is%20required.");
+    }
+
     if (intent === "approve") {
-      fields.status = "approved";
+      const result = await approveCitizenApplication(id, {
+        approvedBy: user.username,
+        actor: user.username,
+        approvalMethod: "Website",
+        decisionNote: fields.decisionNote,
+        portalUrl: `${new URL(request.url).origin}/citizen-portal`
+      });
+      await addAuditEvent(
+        user.username,
+        "citizenship application approved",
+        `${id} / citizen=${result?.citizenRecord?.id || "provisioned"}`,
+        "success"
+      );
+      return redirectTo(request, "/government-access/citizenship?saved=approved");
+    }
+
+    if (intent === "resend_login") {
+      await resendCitizenLogin(id, user.username);
+      await addAuditEvent(user.username, "citizen login resent", id, "success");
+      return redirectTo(request, "/government-access/citizenship?saved=resend-login");
     }
 
     if (intent === "reject") {
       fields.status = "rejected";
+    }
+
+    if (fields.status === "approved") {
+      const result = await approveCitizenApplication(id, {
+        approvedBy: user.username,
+        actor: user.username,
+        approvalMethod: "Website",
+        decisionNote: fields.decisionNote,
+        portalUrl: `${new URL(request.url).origin}/citizen-portal`
+      });
+      await addAuditEvent(
+        user.username,
+        "citizenship application approved",
+        `${id} / citizen=${result?.citizenRecord?.id || "provisioned"}`,
+        "success"
+      );
+      return redirectTo(request, "/government-access/citizenship?saved=approved");
     }
 
     if (intent === "under_review") {

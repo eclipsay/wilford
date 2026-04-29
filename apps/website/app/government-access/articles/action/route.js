@@ -99,10 +99,13 @@ async function enqueueArticleBroadcast(user, formData, fields, linkedId = "") {
     imageUrl: publicUrl(fields.imageUrl || fields.heroImage || fields.thumbnail),
     articleUrl: linkedId ? publicUrl(`/news/${linkedId}`) : "",
     distribution: options.distribution,
+    pingOption: options.pingOption,
+    pingConfirmed: options.pingConfirmed,
     targetDiscordId: options.targetDiscordId,
     requiresApproval: requiresChairmanApproval({
       distribution: options.distribution,
-      type: options.type
+      type: options.type,
+      pingOption: options.pingOption
     }),
     confirmed: false,
     linkedType: "article",
@@ -152,7 +155,7 @@ export async function POST(request) {
       const broadcastResult = await enqueueArticleBroadcast(user, formData, fields, createdArticle?.id || "");
       await addAuditEvent(user.username, "article added", fields.title, "success");
       if (broadcastResult?.broadcast) {
-        await addAuditEvent(user.username, "discord broadcast queued", broadcastResult.broadcast.id, "success");
+        await addAuditEvent(user.username, "discord broadcast queued", `${broadcastResult.broadcast.id} / ping ${broadcastResult.broadcast.pingOption || "none"}`, "success");
       } else if (broadcastResult?.status === "skipped-draft") {
         await addAuditEvent(user.username, "discord broadcast skipped", "article not published", "info");
       } else if (broadcastResult?.status === "skipped-duplicate") {
@@ -180,7 +183,7 @@ export async function POST(request) {
       const broadcastResult = await enqueueArticleBroadcast(user, formData, fields, id);
       await addAuditEvent(user.username, "article edited", id, "success");
       if (broadcastResult?.broadcast) {
-        await addAuditEvent(user.username, "discord broadcast queued", broadcastResult.broadcast.id, "success");
+        await addAuditEvent(user.username, "discord broadcast queued", `${broadcastResult.broadcast.id} / ping ${broadcastResult.broadcast.pingOption || "none"}`, "success");
       } else if (broadcastResult?.status === "skipped-draft") {
         await addAuditEvent(user.username, "discord broadcast skipped", "article not published", "info");
       } else if (broadcastResult?.status === "skipped-duplicate") {

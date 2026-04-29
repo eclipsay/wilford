@@ -10,6 +10,14 @@ const baseUrl = (
   "http://localhost:4000"
 ).replace(/\/+$/, "");
 
+function normalizeDiscordUserId(value) {
+  return String(value || "").replace(/\s+/g, "").trim();
+}
+
+function isValidDiscordUserId(value) {
+  return /^\d{17,20}$/.test(normalizeDiscordUserId(value));
+}
+
 async function submitPetitionAction(formData) {
   "use server";
 
@@ -20,9 +28,13 @@ async function submitPetitionAction(formData) {
     motivation: String(formData.get("motivation") || "").trim(),
     experience: String(formData.get("experience") || "").trim(),
     discordHandle: String(formData.get("discordHandle") || "").trim(),
-    discordUserId: String(formData.get("discordUserId") || "").trim(),
+    discordUserId: normalizeDiscordUserId(formData.get("discordUserId")),
     email: String(formData.get("email") || "").trim()
   };
+
+  if (!isValidDiscordUserId(payload.discordUserId)) {
+    redirect("/citizenship/petition?error=Valid%20Discord%20User%20ID%20is%20required%20to%20apply%20for%20citizenship.");
+  }
 
   try {
     const response = await fetch(`${baseUrl}/api/applications`, {
@@ -135,12 +147,17 @@ export default async function PetitionPage({ searchParams }) {
                 <label className="public-application-field">
                   <span>Discord User ID</span>
                   <input
+                    inputMode="numeric"
+                    maxLength={20}
+                    minLength={17}
                     name="discordUserId"
-                    placeholder="Optional, helps with automatic role/DM handling"
+                    pattern="\d{17,20}"
+                    placeholder="Required, for example 123456789012345678"
+                    required
                     type="text"
                   />
                   <small className="public-application-help">
-                    Optional, but helpful for automatic Discord DMs and role assignment.
+                    Enable Developer Mode in Discord, right-click your name, and click ‘Copy User ID’.
                   </small>
                 </label>
               </div>

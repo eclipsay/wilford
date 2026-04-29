@@ -3,6 +3,7 @@ import express from "express";
 import { config } from "./config.js";
 import {
   appendCryptoLog,
+  approveCitizenApplication,
   authenticatePanelUser,
   createArticle,
   createBulletin,
@@ -37,6 +38,7 @@ import {
   moveExcommunication,
   moveMember,
   markApplicationDiscordEvent,
+  markCitizenCredentialDelivery,
   markEnemyOfStateDiscordEvent,
   reorderAlliances,
   reorderEnemyNations,
@@ -44,6 +46,7 @@ import {
   reorderMembers,
   replaceAlliances,
   replaceMembers,
+  regenerateCitizenLoginCredentials,
   updatePublicApplication,
   updateAlliancePosition,
   updateArticle,
@@ -258,13 +261,32 @@ app.post("/api/applications", async (req, res) => {
   const motivation = String(req.body?.motivation || "").trim();
   const experience = String(req.body?.experience || "").trim();
   const discordHandle = String(req.body?.discordHandle || "").trim();
-  const discordUserId = String(req.body?.discordUserId || "").trim();
+  const discordUserId = String(req.body?.discordUserId || "").replace(/\s+/g, "").trim();
   const email = String(req.body?.email || "").trim();
 
   if (!applicantName || !age || !timezone || !motivation || !experience || !discordHandle) {
     return res.status(400).json({
       error:
         "Name, age, timezone, motivation, experience, and Discord handle are required."
+    });
+  }
+
+  if (!/^\d{17,20}$/.test(discordUserId)) {
+    return res.status(400).json({
+      error: "Valid Discord User ID is required to apply for citizenship."
+    });
+  }
+
+  const existingApplications = await getPublicApplications();
+  const duplicate = existingApplications.find((application) =>
+    String(application.discordUserId || "").trim() === discordUserId &&
+    !application.archived &&
+    !["rejected", "archived"].includes(String(application.status || "pending"))
+  );
+
+  if (duplicate) {
+    return res.status(400).json({
+      error: "That Discord User ID is already linked to an active citizenship application."
     });
   }
 
@@ -299,7 +321,7 @@ app.get("/api/admin/applications", requireAdmin, async (_req, res) => {
 app.post("/api/admin/applications/:id", requireAdmin, async (req, res) => {
   const allowedStatuses = ["pending", "under_review", "approved", "rejected", "appealed", "archived"];
   const status = String(req.body?.status || "pending").trim();
-  const application = await updatePublicApplication(req.params.id, {
+  const updateFields = {
     status: allowedStatuses.includes(status) ? status : "pending",
     internalNotes: String(req.body?.internalNotes || "").trim(),
     decisionNote: String(req.body?.decisionNote || "").trim(),
@@ -310,6 +332,94 @@ app.post("/api/admin/applications/:id", requireAdmin, async (req, res) => {
     needsAttention: Boolean(req.body?.needsAttention),
     suppressDiscordEvents: Boolean(req.body?.suppressDiscordEvents),
     actor: String(req.body?.actor || "government-access").trim()
+  };
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "discordUserId")) {
+    updateFields.discordUserId = String(req.body?.discordUserId || "").replace(/\s+/g, "").trim();
+    if (!/^\d{17,20}$/.test(updateFields.discordUserId)) {
+      return res.status(400).json({ error: "Valid Discord User ID is required to apply for citizenship." });
+    }
+  }
+  const application = await updatePublicApplication(req.params.id, updateFields);
+
+  if (!application) {
+    return res.status(404).json({ error: "Application not found." });
+  }
+
+  res.json({ application });
+});
+
+app.post("/api/admin/applications/:id/approve-citizen", requireAdmin, async (req, res) => {
+  let result = await approveCitizenApplication(
+    req.params.id,
+    String(req.body?.approvedBy || req.body?.actor || "government-access").trim(),
+    {
+      approvalMethod: String(req.body?.approvalMethod || "Website").trim(),
+      decisionNote: String(req.body?.decisionNote || "").trim(),
+      suppressDiscordEvents: Boolean(req.body?.suppressDiscordEvents),
+      portalUrl: String(req.body?.portalUrl || "").trim()
+    }
+  );
+
+  if (!result && req.body?.application && typeof req.body.application === "object") {
+    const snapshot = req.body.application;
+    await createPublicApplication({
+      id: req.params.id,
+      source: snapshot.source || "discord",
+      status: snapshot.status || "pending",
+      submittedAt: snapshot.submittedAt || snapshot.createdAt || new Date().toISOString(),
+      applicantName: snapshot.applicantName || snapshot.applicantTag || snapshot.discordHandle || "Discord Applicant",
+      age: snapshot.age || snapshot.answers?.[1] || "Unspecified",
+      timezone: snapshot.timezone || snapshot.answers?.[2] || "Unspecified",
+      motivation: snapshot.motivation || snapshot.answers?.[3] || snapshot.answers?.[0] || "Discord application intake.",
+      experience: snapshot.experience || snapshot.answers?.[4] || snapshot.answers?.slice?.(0)?.join("\n\n") || "Discord application intake.",
+      discordHandle: snapshot.discordHandle || snapshot.applicantTag || "",
+      discordUserId: snapshot.discordUserId || snapshot.applicantId || "",
+      discordChannelId: snapshot.discordChannelId || "",
+      discordThreadId: snapshot.discordThreadId || snapshot.reviewThreadId || "",
+      discordMessageId: snapshot.discordMessageId || snapshot.reviewMessageId || "",
+      reviewThreadId: snapshot.reviewThreadId || "",
+      reviewMessageId: snapshot.reviewMessageId || "",
+      reviewGuildId: snapshot.reviewGuildId || snapshot.guildId || ""
+    });
+    result = await approveCitizenApplication(
+      req.params.id,
+      String(req.body?.approvedBy || req.body?.actor || "government-access").trim(),
+      {
+        approvalMethod: String(req.body?.approvalMethod || "Website").trim(),
+        decisionNote: String(req.body?.decisionNote || "").trim(),
+        suppressDiscordEvents: Boolean(req.body?.suppressDiscordEvents),
+        portalUrl: String(req.body?.portalUrl || "").trim()
+      }
+    );
+  }
+
+  if (!result) {
+    return res.status(404).json({ error: "Application not found." });
+  }
+
+  res.json(result);
+});
+
+app.post("/api/admin/applications/:id/resend-login", requireAdmin, async (req, res) => {
+  const result = await regenerateCitizenLoginCredentials(
+    req.params.id,
+    String(req.body?.actor || "government-access").trim(),
+    { queueEvent: req.body?.queueEvent !== false }
+  );
+
+  if (!result) {
+    return res.status(404).json({ error: "Citizen account not found for this application." });
+  }
+
+  res.json(result);
+});
+
+app.post("/api/admin/applications/:id/credential-delivery", requireAdmin, async (req, res) => {
+  const application = await markCitizenCredentialDelivery(req.params.id, {
+    status: Object.prototype.hasOwnProperty.call(req.body || {}, "status") ? String(req.body?.status || "").trim() : "",
+    error: String(req.body?.error || "").trim(),
+    discordRoleStatus: String(req.body?.discordRoleStatus || "").trim(),
+    actor: String(req.body?.actor || "discord-bot").trim()
   });
 
   if (!application) {
@@ -534,9 +644,38 @@ app.post("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
   const body = String(req.body?.body || "").trim();
   const distribution = String(req.body?.distribution || "none").trim();
   const type = String(req.body?.type || "news").trim();
+  const requestedPingOption = ["none", "here", "everyone"].includes(String(req.body?.pingOption || "none").trim())
+    ? String(req.body?.pingOption || "none").trim()
+    : "none";
+  const requestedRole = String(req.body?.requestedRole || "").trim();
+  const pingConfirmed = Boolean(req.body?.pingConfirmed);
+  const everyoneRoles = ["Supreme Chairman", "Executive Director"];
+  const isMssPing = ["mss_alert", "treason_notice"].includes(type);
+  const canUseEveryone = everyoneRoles.includes(requestedRole) || (["MSS Command", "Security Command"].includes(requestedRole) && isMssPing);
+  let pingOption = requestedPingOption;
+  let pingDeniedReason = "";
+  if (pingOption === "everyone" && !canUseEveryone) {
+    pingOption = "none";
+    pingDeniedReason = "role not authorised for @everyone";
+  }
+  if (pingOption === "everyone" && !pingConfirmed) {
+    pingOption = "none";
+    pingDeniedReason = "confirmation missing";
+  }
+  if (pingOption === "everyone") {
+    const recent = (await getDiscordBroadcasts({ status: "" })).find((broadcast) =>
+      broadcast.pingOption === "everyone" &&
+      Date.now() - Date.parse(broadcast.createdAt || 0) < 20 * 60 * 1000
+    );
+    if (recent) {
+      pingOption = "none";
+      pingDeniedReason = "cooldown active";
+    }
+  }
   const dangerousBroadcast =
     ["dm_all", "announcement_and_dm_all"].includes(distribution) ||
-    type === "treason_notice";
+    type === "treason_notice" ||
+    pingOption === "everyone";
 
   if (!title || !body) {
     return res.status(400).json({ error: "Broadcast title and body are required." });
@@ -555,6 +694,11 @@ app.post("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
     title,
     body,
     distribution,
+    pingOption,
+    requestedPingOption,
+    pingConfirmed,
+    pingApplied: pingOption !== "none",
+    pingDeniedReason,
     targetDiscordId: req.body?.targetDiscordId || "",
     linkedType: req.body?.linkedType || "",
     linkedId: req.body?.linkedId || "",
@@ -565,10 +709,10 @@ app.post("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
     imageUrl: req.body?.imageUrl || "",
     articleUrl: req.body?.articleUrl || "",
     metadata: req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {},
-    requiresApproval: dangerousBroadcast || Boolean(req.body?.requiresApproval),
+    requiresApproval: dangerousBroadcast || (Boolean(req.body?.requiresApproval) && !pingDeniedReason),
     confirmed: !dangerousBroadcast && Boolean(req.body?.confirmed),
     requestedBy: req.body?.requestedBy || "system",
-    requestedRole: req.body?.requestedRole || ""
+    requestedRole
   });
 
   res.status(201).json({ broadcast });
@@ -590,7 +734,7 @@ app.post("/api/admin/discord-broadcasts/:id", requireAdmin, async (req, res) => 
     return res.status(400).json({ error: "Valid broadcast status is required." });
   }
 
-  const broadcast = await updateDiscordBroadcast(req.params.id, {
+  const updates = {
     status,
     processedAt: req.body?.processedAt || (["completed", "failed"].includes(status) ? new Date().toISOString() : ""),
     recipients: Array.isArray(req.body?.recipients) ? req.body.recipients : [],
@@ -605,7 +749,14 @@ app.post("/api/admin/discord-broadcasts/:id", requireAdmin, async (req, res) => 
     declinedAt: req.body?.declinedAt || "",
     declinedBy: req.body?.declinedBy || "",
     approvalNote: req.body?.approvalNote || ""
-  });
+  };
+  for (const key of ["pingOption", "requestedPingOption", "pingConfirmed", "pingApplied", "pingDeniedReason"]) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) {
+      updates[key] = req.body[key];
+    }
+  }
+
+  const broadcast = await updateDiscordBroadcast(req.params.id, updates);
 
   if (!broadcast) {
     return res.status(404).json({ error: "Broadcast not found." });

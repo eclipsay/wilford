@@ -71,6 +71,14 @@ export default async function CitizenshipDetailPage({ params, searchParams }) {
           </section>
         ) : null}
 
+        {query?.error ? (
+          <section className="application-notice application-notice--error">
+            <strong>Case Update Failed</strong>
+            <p>{query?.error === "invalid-discord-id" ? "Valid Discord User ID is required to apply for citizenship." : "Application changes could not be saved."}</p>
+            {query?.detail ? <p className="public-application-help">API detail: {String(query.detail)}</p> : null}
+          </section>
+        ) : null}
+
         <section className={`panel citizen-application-card citizen-application-card--${application.status}`}>
           <div className="panel__header">
             <div>
@@ -94,7 +102,18 @@ export default async function CitizenshipDetailPage({ params, searchParams }) {
             <div><dt>Age</dt><dd>{application.age}</dd></div>
             <div><dt>Timezone</dt><dd>{application.timezone}</dd></div>
             <div><dt>Discord</dt><dd>{application.discordHandle}</dd></div>
-            <div><dt>Discord ID</dt><dd>{application.discordUserId || "Not provided"}</dd></div>
+            <div>
+              <dt>Discord ID</dt>
+              <dd>
+                {application.discordUserId || "Not provided"}
+                {application.discordUserId ? (
+                  <>
+                    {" / "}
+                    <a href={`https://discord.com/users/${application.discordUserId}`}>Open Discord Profile</a>
+                  </>
+                ) : null}
+              </dd>
+            </div>
             <div><dt>Email</dt><dd>{application.email || "Not provided"}</dd></div>
             <div><dt>Thread ID</dt><dd>{application.discordThreadId || application.reviewThreadId || "Not created"}</dd></div>
           </dl>
@@ -139,6 +158,11 @@ export default async function CitizenshipDetailPage({ params, searchParams }) {
                 <span>Decision Note</span>
                 <input defaultValue={application.decisionNote} name="decisionNote" type="text" />
               </label>
+              <label className="public-application-field">
+                <span>Discord User ID</span>
+                <input defaultValue={application.discordUserId} inputMode="numeric" maxLength={20} minLength={17} name="discordUserId" pattern="\d{17,20}" required type="text" />
+                <small className="public-application-help">Link to Discord user for DMs, Citizen role assignment, economy identity, and future integrations.</small>
+              </label>
             </div>
             <label className="public-application-field">
               <span>Public Response</span>
@@ -152,11 +176,23 @@ export default async function CitizenshipDetailPage({ params, searchParams }) {
               <input defaultChecked={application.needsAttention} name="needsAttention" type="checkbox" />
               <span>Needs Attention</span>
             </label>
+            {application.approvalProvisioning ? (
+              <div className="application-notice">
+                <strong>Citizen Login</strong>
+                <p>
+                  {application.approvalProvisioning.portalUsername || "Portal account"} /
+                  {" "}{application.approvalProvisioning.credentialDeliveryStatus || "pending"}
+                </p>
+              </div>
+            ) : null}
             <div className="bulletin-editor-card__actions">
               <button className="button button--solid-site" name="intent" type="submit" value="save">Save</button>
               <button className="button" name="intent" type="submit" value="under_review">Mark Under Review</button>
               <button className="button" name="intent" type="submit" value="request_info">Request Info</button>
               <button className="button" name="intent" type="submit" value="approve">Approve</button>
+              {application.status === "approved" ? (
+                <button className="button" name="intent" type="submit" value="resend_login">Resend Citizen Login</button>
+              ) : null}
               <button className="button button--danger-site" name="intent" type="submit" value="reject">Reject</button>
               <button className="button" name="intent" type="submit" value="accept_appeal">Accept Appeal</button>
               <button className="button" name="intent" type="submit" value="reject_appeal">Reject Appeal</button>

@@ -60,12 +60,16 @@ export default async function PanemCreditPage({ searchParams }) {
               <input name="intent" type="hidden" value="login" />
               <input name="returnTo" type="hidden" value="/panem-credit" />
               <label className="public-application-field">
-                <span>Citizen name</span>
-                <input autoComplete="name" name="citizenName" required />
+                <span>Citizen name or username</span>
+                <input autoComplete="username" name="citizenName" required />
               </label>
               <label className="public-application-field">
                 <span>Union Security ID</span>
                 <input autoComplete="off" name="unionSecurityId" placeholder="WPU-08-2026-0004" required />
+              </label>
+              <label className="public-application-field">
+                <span>Portal password</span>
+                <input autoComplete="current-password" name="portalPassword" type="password" />
               </label>
               <button className="button button--solid-site" type="submit">Open Panem Credit</button>
             </form>
@@ -104,6 +108,9 @@ export default async function PanemCreditPage({ searchParams }) {
   const paidTax = sumTaxes(walletTaxes.filter((record) => record.status === "paid"));
   const outstandingTax = sumTaxes(walletTaxes.filter((record) => record.status !== "paid"));
   const activeEvent = store.events.find((event) => event.status === "active") || store.events[0];
+  const activeEvents = store.events.filter((event) => event.status === "active").slice(0, 5);
+  const selectedJob = economyJobDefaults.find((job) => job.id === selectedWallet.selectedJobId) || economyJobDefaults.find((job) => job.district === selectedWallet.district) || economyJobDefaults[0];
+  const availableJobs = economyJobDefaults.filter((job) => job.district === "Any" || job.district === selectedWallet.district);
   const richest = [...store.wallets].sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0)).slice(0, 6);
   const wanted = store.wallets.filter((wallet) => wallet.wanted || wallet.underReview || Number(wallet.bounty || 0) > 0).slice(0, 6);
   const districtChampions = store.districts.map((district) => {
@@ -162,6 +169,11 @@ export default async function PanemCreditPage({ searchParams }) {
               <span><strong>x{Number(activeEvent?.marketMultiplier || 1)}</strong> Market pressure</span>
               <span><strong>{selectedWallet.streak || 0}</strong> Login streak</span>
             </div>
+            <div className="panem-ledger">
+              {activeEvents.map((event) => (
+                <div key={`${event.id}-${event.startsAt}`}><dt>{event.title}</dt><dd>{(event.affectedDistricts || event.boostedDistricts || []).join(", ") || "Union-wide"}</dd></div>
+              ))}
+            </div>
           </article>
 
           <article className="finance-panel">
@@ -206,9 +218,25 @@ export default async function PanemCreditPage({ searchParams }) {
 
         <section className="state-section scroll-fade">
           <p className="eyebrow">Civic Earnings</p>
-          <h2>Work Desk</h2>
+          <h2>Job Desk</h2>
+          <article className="finance-panel">
+            <p className="eyebrow">Selected Role</p>
+            <h3>{selectedJob.name}</h3>
+            <p>{selectedJob.description}</p>
+            <div className="metric-grid">
+              <span><strong>{selectedJob.district}</strong> District</span>
+              <span><strong>{selectedJob.riskLevel}</strong> Risk</span>
+              <span><strong>{formatCredits(selectedJob.minReward)}-{formatCredits(selectedJob.maxReward)}</strong> Payout</span>
+              <span><strong>{selectedJob.cooldownHours}h</strong> Cooldown</span>
+            </div>
+            <form action="/panem-credit/action" method="post">
+              <input name="intent" type="hidden" value="work" />
+              <input name="jobId" type="hidden" value={selectedJob.id} />
+              <button className="button button--solid-site" type="submit">Work Selected Job</button>
+            </form>
+          </article>
           <div className="panem-market-grid">
-            {economyJobDefaults.map((job) => (
+            {availableJobs.map((job) => (
               <article className="premium-card panem-market-card" key={job.id}>
                 <span className="court-role-badge">{job.district}</span>
                 <h3>{job.name}</h3>
@@ -216,11 +244,12 @@ export default async function PanemCreditPage({ searchParams }) {
                 <dl className="panem-ledger">
                   <div><dt>Payout</dt><dd>{formatCredits(job.minReward)} - {formatCredits(job.maxReward)}</dd></div>
                   <div><dt>Cooldown</dt><dd>{job.cooldownHours}h</dd></div>
+                  <div><dt>Risk</dt><dd>{job.riskLevel} / {(Number(job.failureChance || 0) * 100).toFixed(0)}% failure</dd></div>
                 </dl>
                 <form action="/panem-credit/action" method="post">
-                  <input name="intent" type="hidden" value="work" />
+                  <input name="intent" type="hidden" value="set-job" />
                   <input name="jobId" type="hidden" value={job.id} />
-                  <button className="button button--solid-site" type="submit">Work Shift</button>
+                  <button className="button button--solid-site" type="submit">{selectedJob.id === job.id ? "Selected" : "Select Job"}</button>
                 </form>
               </article>
             ))}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  changeCitizenPassword,
   createCitizenRequest,
   getCurrentCitizen,
   loginCitizen,
@@ -21,7 +22,11 @@ export async function POST(request) {
   const intent = String(formData.get("intent") || "").trim();
 
   if (intent === "login") {
-    const result = await loginCitizen(formData.get("citizenName"), formData.get("unionSecurityId"));
+    const result = await loginCitizen(
+      formData.get("citizenName"),
+      formData.get("unionSecurityId"),
+      formData.get("portalPassword")
+    );
     const returnTo = String(formData.get("returnTo") || "/citizen-portal").trim();
     const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/citizen-portal";
     return redirectTo(request, result.ok ? `${safeReturnTo}${safeReturnTo.includes("?") ? "&" : "?"}login=success` : "/citizen-portal?error=login");
@@ -35,6 +40,15 @@ export async function POST(request) {
   const citizen = await getCurrentCitizen();
   if (!citizen) {
     return redirectTo(request, "/citizen-portal?error=session");
+  }
+
+  if (intent === "change_password") {
+    const result = await changeCitizenPassword(
+      citizen.id,
+      formData.get("currentPassword"),
+      formData.get("newPassword")
+    );
+    return redirectTo(request, result.ok ? "/citizen-portal?saved=password" : "/citizen-portal?error=password");
   }
 
   const submitted = await createCitizenRequest({

@@ -8,7 +8,7 @@ import { getPublishedArticles } from "../../../lib/articles";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 import { requireGovernmentUser } from "../../../lib/government-auth";
-import { broadcastDistributions, broadcastTypes } from "../../../lib/discord-broadcasts";
+import { broadcastDistributions, broadcastTypes, pingOptions } from "../../../lib/discord-broadcasts";
 
 function toDateTimeLocal(value) {
   if (!value) {
@@ -24,7 +24,8 @@ function toDateTimeLocal(value) {
   return date.toISOString().slice(0, 16);
 }
 
-function DiscordBroadcastFields() {
+function DiscordBroadcastFields({ allowEveryone = false }) {
+  const visiblePingOptions = allowEveryone ? pingOptions : pingOptions.filter((option) => option.value !== "everyone");
   return (
     <fieldset className="broadcast-fieldset">
       <legend>Discord Broadcast Optional</legend>
@@ -44,6 +45,14 @@ function DiscordBroadcastFields() {
           ))}
         </select>
       </label>
+      <label className="public-application-field">
+        <span>Ping Options</span>
+        <select defaultValue="none" name="pingOption">
+          {visiblePingOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
       <div className="public-application-grid public-application-grid--two">
         <label className="public-application-field">
           <span>Specific Discord User ID</span>
@@ -53,9 +62,13 @@ function DiscordBroadcastFields() {
           <input name="confirmDiscordBroadcast" type="checkbox" />
           <span>Submit dangerous broadcast for Chairman approval</span>
         </label>
+        <label className="public-application-toggle">
+          <input name="confirmPingBroadcast" type="checkbox" />
+          <span>Confirm Broadcast: You are about to send a message to all members.</span>
+        </label>
       </div>
       <p className="public-application-help">
-        DM-all and Enemy of the State notices become Chairman approval requests before delivery.
+        @everyone requires Supreme Chairman or Executive Director authority and confirmation.
       </p>
     </fieldset>
   );
@@ -71,6 +84,7 @@ export const revalidate = 0;
 export default async function BulletinControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("bulletinControl");
+  const allowEveryonePing = ["Supreme Chairman", "Executive Director"].includes(user.role);
   const bulletins = await getAllBulletins();
   const articles = await getPublishedArticles().catch(() => []);
 
@@ -172,7 +186,7 @@ export default async function BulletinControlPage({ searchParams }) {
                     ))}
                   </select>
                 </label>
-                <DiscordBroadcastFields />
+                <DiscordBroadcastFields allowEveryone={allowEveryonePing} />
                 <button className="button button--solid-site" type="submit">
                   Add Bulletin
                 </button>
@@ -272,7 +286,7 @@ export default async function BulletinControlPage({ searchParams }) {
                           ))}
                         </select>
                       </label>
-                      <DiscordBroadcastFields />
+                      <DiscordBroadcastFields allowEveryone={allowEveryonePing} />
 
                       <div className="bulletin-editor-card__actions">
                         <button className="button button--solid-site" type="submit">

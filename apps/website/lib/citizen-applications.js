@@ -12,6 +12,15 @@ const baseUrl = (
 ).replace(/\/+$/, "");
 
 export const applicationStatuses = ["pending", "under_review", "approved", "rejected", "appealed", "archived"];
+export const discordUserIdPattern = /^\d{17,20}$/;
+
+export function normalizeDiscordUserId(value) {
+  return String(value || "").replace(/\s+/g, "").trim();
+}
+
+export function isValidDiscordUserId(value) {
+  return discordUserIdPattern.test(normalizeDiscordUserId(value));
+}
 
 function resolveContentFile() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -53,7 +62,7 @@ function normalizeApplication(entry, index) {
     motivation: String(entry?.motivation || "").trim(),
     experience: String(entry?.experience || "").trim(),
     discordHandle: String(entry?.discordHandle || "").trim(),
-    discordUserId: String(entry?.discordUserId || "").trim(),
+    discordUserId: normalizeDiscordUserId(entry?.discordUserId),
     discordChannelId: String(entry?.discordChannelId || entry?.reviewChannelId || "").trim(),
     discordThreadId: String(entry?.discordThreadId || entry?.reviewThreadId || "").trim(),
     discordMessageId: String(entry?.discordMessageId || entry?.reviewMessageId || "").trim(),
@@ -70,6 +79,10 @@ function normalizeApplication(entry, index) {
     needsAttention: Boolean(entry?.needsAttention),
     publicReplies: Array.isArray(entry?.publicReplies) ? entry.publicReplies : [],
     applicationAuditLog: Array.isArray(entry?.applicationAuditLog) ? entry.applicationAuditLog : [],
+    pendingDiscordEvents: Array.isArray(entry?.pendingDiscordEvents) ? entry.pendingDiscordEvents : [],
+    approvalProvisioning: entry?.approvalProvisioning && typeof entry.approvalProvisioning === "object"
+      ? entry.approvalProvisioning
+      : null,
     decisionNote: String(entry?.decisionNote || "").trim(),
     internalNotes: String(entry?.internalNotes || "").trim()
   };
@@ -217,6 +230,32 @@ export async function updateCitizenApplication(id, fields) {
   return true;
 }
 
+export async function approveCitizenApplication(id, fields = {}) {
+  try {
+    return await requestAdminApplications(`/api/admin/applications/${encodeURIComponent(id)}/approve-citizen`, {
+      method: "POST",
+      body: JSON.stringify(fields)
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw error;
+    }
+  }
+
+  await updateCitizenApplication(id, {
+    ...fields,
+    status: "approved"
+  });
+  return null;
+}
+
+export async function resendCitizenLogin(id, actor = "government-access") {
+  return requestAdminApplications(`/api/admin/applications/${encodeURIComponent(id)}/resend-login`, {
+    method: "POST",
+    body: JSON.stringify({ actor })
+  });
+}
+
 export async function archiveResolvedCitizenApplications(actor = "system") {
   const applications = await getCitizenApplications();
   const targets = applications.filter(
@@ -244,6 +283,7 @@ export async function getCitizenApplicationById(id) {
 export function parseApplicationReviewForm(formData) {
   return {
     status: normalizeStatus(formData.get("status")),
+    discordUserId: normalizeDiscordUserId(formData.get("discordUserId")),
     internalNotes: String(formData.get("internalNotes") || "").trim(),
     decisionNote: String(formData.get("decisionNote") || "").trim(),
     publicResponse: String(formData.get("publicResponse") || "").trim(),

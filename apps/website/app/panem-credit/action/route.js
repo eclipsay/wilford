@@ -16,6 +16,7 @@ import {
   performCrimeAction,
   performEconomyJob,
   playGambleGame,
+  setCitizenJob,
   transferCredits,
 } from "../../../lib/panem-credit";
 
@@ -85,6 +86,18 @@ export async function POST(request) {
       await recordCitizenActivity(citizen.id, "economy work completed", `${result.job?.name || "Work"} / ${result.amount || 0} PC`);
     }
     return redirectTo(request, `/panem-credit?${result.ok ? "saved=work" : `error=${result.reason || "work"}`}`);
+  }
+
+  if (intent === "set-job") {
+    const result = await setCitizenJob({
+      walletId,
+      jobId: String(formData.get("jobId") || "").trim(),
+      actor: citizen.unionSecurityId
+    });
+    if (result.ok) {
+      await recordCitizenActivity(citizen.id, "job selected", result.job?.name || "Citizen job");
+    }
+    return redirectTo(request, `/panem-credit?${result.ok ? "saved=job" : `error=${result.reason || "job"}`}`);
   }
 
   if (intent === "crime") {

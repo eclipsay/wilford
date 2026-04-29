@@ -114,7 +114,7 @@ export default async function CitizenshipReviewPage({ searchParams }) {
         {params?.error ? (
           <section className="application-notice application-notice--error">
             <strong>Application Storage Error</strong>
-            <p>Application changes could not be saved.</p>
+            <p>{params?.error === "invalid-discord-id" ? "Valid Discord User ID is required to apply for citizenship." : "Application changes could not be saved."}</p>
             {params?.detail ? (
               <p className="public-application-help">API detail: {String(params.detail)}</p>
             ) : null}
@@ -204,7 +204,15 @@ export default async function CitizenshipReviewPage({ searchParams }) {
                   </div>
                   <div>
                     <dt>Discord ID</dt>
-                    <dd>{application.discordUserId || "Not provided"}</dd>
+                    <dd>
+                      {application.discordUserId || "Not provided"}
+                      {application.discordUserId ? (
+                        <>
+                          {" / "}
+                          <a href={`https://discord.com/users/${application.discordUserId}`}>Open Discord Profile</a>
+                        </>
+                      ) : null}
+                    </dd>
                   </div>
                   <div>
                     <dt>Email</dt>
@@ -241,6 +249,11 @@ export default async function CitizenshipReviewPage({ searchParams }) {
                       <span>Decision Note</span>
                       <input defaultValue={application.decisionNote} name="decisionNote" type="text" />
                     </label>
+                    <label className="public-application-field">
+                      <span>Discord User ID</span>
+                      <input defaultValue={application.discordUserId} inputMode="numeric" maxLength={20} minLength={17} name="discordUserId" pattern="\d{17,20}" required type="text" />
+                      <small className="public-application-help">Copy Discord ID for bot linking, DMs, economy identity, and role assignment.</small>
+                    </label>
                   </div>
                   <label className="public-application-field">
                     <span>Internal Notes</span>
@@ -249,6 +262,11 @@ export default async function CitizenshipReviewPage({ searchParams }) {
                   <button className="button button--solid-site" type="submit">
                     Save Review
                   </button>
+                  {application.status === "approved" ? (
+                    <button className="button" name="intent" type="submit" value="resend_login">
+                      Resend Citizen Login
+                    </button>
+                  ) : null}
                   <Link className="button" href={`/government-access/citizenship/${application.id}`}>
                     Open Detail
                   </Link>

@@ -22,6 +22,7 @@ import {
 import {
   applicationQuestions,
   brand,
+  dynamicEconomyEventDefaults,
   economyCrimeDefaults,
   economyEventDefaults,
   economyGambleDefaults,
@@ -301,6 +302,51 @@ function economyActiveEvent(economy) {
   return (economy.events || []).find((event) =>
     event.status === "active" && (!event.endsAt || Date.parse(event.endsAt) > now)
   ) || economyEventDefaults[0];
+}
+
+function economyActiveEvents(economy) {
+  const now = Date.now();
+  return (economy.events || []).filter((event) =>
+    event.status === "active" && (!event.endsAt || Date.parse(event.endsAt) > now)
+  );
+}
+
+function discordEventAffectsDistrict(event, district) {
+  return (event.affectedDistricts || event.boostedDistricts || []).includes(district);
+}
+
+function discordEventModifier(economy, district, key) {
+  return economyActiveEvents(economy).reduce((sum, event) =>
+    discordEventAffectsDistrict(event, district) ? sum + Number(event.modifiers?.[key] || 0) : sum, 0);
+}
+
+function discordEventAffectsGood(event, item) {
+  return (event.affectedGoods || []).includes(item?.id) || discordEventAffectsDistrict(event, item?.district);
+}
+
+function discordEventAffectsCompany(event, company) {
+  return (event.affectedCompanies || event.tickers || []).includes(company?.ticker) || discordEventAffectsDistrict(event, company?.district);
+}
+
+function applyDiscordDynamicEventEffects(economy, event) {
+  const modifiers = event.modifiers || {};
+  for (const district of economy.districts || []) {
+    if (!discordEventAffectsDistrict(event, district.name)) continue;
+    district.supplyLevel = Math.max(0, Math.min(140, Number(district.supplyLevel || 0) + Number(modifiers.supplyDelta || 0)));
+    district.demandLevel = Math.max(0, Math.min(140, Number(district.demandLevel || 0) + Number(modifiers.demandDelta || 0)));
+    district.developmentStatus = event.title;
+  }
+  for (const item of economy.marketItems || []) {
+    if (!discordEventAffectsGood(event, item)) continue;
+    const previous = Number(item.currentPrice || item.basePrice || 1);
+    item.currentPrice = Math.max(1, Math.round(previous * (1 + Number(modifiers.itemPricePercent || 0))));
+    item.priceHistory = [...(item.priceHistory || []), { date: new Date().toISOString().slice(0, 10), price: item.currentPrice }].slice(-30);
+  }
+  for (const company of economy.stockCompanies || []) {
+    if (!discordEventAffectsCompany(event, company)) continue;
+    discordMoveStock(company, Number(modifiers.stockPercent || 0));
+  }
+  economy.marketNotices = [{ id: createId("notice"), title: event.title, body: event.summary || "A state economy event has changed market conditions.", severity: event.alertSeverity || "medium", createdAt: new Date().toISOString() }, ...(economy.marketNotices || [])].slice(0, 20);
 }
 
 function economyCooldownReady(economy, walletId, type, key, hours) {
@@ -1113,8 +1159,15 @@ async function handleEconomySlashCommand(interaction) {
     "pay",
     "transactions",
     "daily",
+    "jobs",
+    "setjob",
+    "jobinfo",
     "work",
     "overtime",
+    "special-task",
+    "district-work",
+    "events",
+    "event",
     "crime",
     "rob",
     "gamble",
@@ -1335,11 +1388,64 @@ async function handleEconomySlashCommand(interaction) {
     return true;
   }
 
-  if (name === "work" || name === "overtime") {
-    const jobId = name === "overtime" ? "overtime" : interaction.options.getString("job") || "work-shift";
+  if (name === "events") {
+    const rows = economyActiveEvents(economy).slice(0, 8).map((event) => `${event.title} - ${(event.affectedDistricts || event.boostedDistricts || []).join(", ") || "Union-wide"}`).join("\n") || "No active event beyond the standard treasury cycle.";
+    await replyEconomy(interaction, ministryEmbed("Active Economy Events", rows));
+    return true;
+  }
+
+  if (name === "event") {
+    const event = economyActiveEvents(economy).find((entry) => entry.id === interaction.options.getString("event")) || economyActiveEvent(economy);
+    await replyEconomy(interaction, ministryEmbed(event.title, `${event.summary || event.description || "State event active."}\nDistricts: ${(event.affectedDistricts || event.boostedDistricts || []).join(", ") || "Union-wide"}\nCompanies: ${(event.affectedCompanies || event.tickers || []).join(", ") || "All/None"}\nEnds: ${event.endsAt || "standing order"}`));
+    return true;
+  }
+
+  if (name === "jobs") {
+    const jobs = economyJobDefaults.filter((job) => job.district === "Any" || job.district === wallet.district).slice(0, 15);
+    const rows = jobs.map((job) => `${job.name} (${job.riskLevel}) - ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)} / ${job.cooldownHours}h`).join("\n");
+    await replyEconomy(interaction, ministryEmbed("District Job Board", `${wallet.district || "Unassigned"}\nSelected: ${wallet.selectedJobId || "none"}\n\n${rows}`), true);
+    return true;
+  }
+
+  if (name === "jobinfo") {
+    const jobInput = interaction.options.getString("job", true);
+    const job = economyJobDefaults.find((entry) => entry.id === jobInput || entry.name.toLowerCase() === jobInput.toLowerCase());
+    if (!job) {
+      await replyEconomy(interaction, ministryEmbed("Job Not Found", "Use `/jobs` to see available job names."), true);
+      return true;
+    }
+    await replyEconomy(interaction, ministryEmbed("Job Details", `${job.name}\n${job.description}\nDistrict: ${job.district}\nRisk: ${job.riskLevel} / ${(Number(job.failureChance || 0) * 100).toFixed(0)}% failure\nPayout: ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)}\nCooldown: ${job.cooldownHours}h\nPossible items: ${(job.itemRewards || []).join(", ") || "None"}`), true);
+    return true;
+  }
+
+  if (name === "setjob") {
+    const jobInput = interaction.options.getString("job", true);
+    const job = economyJobDefaults.find((entry) => entry.id === jobInput || entry.name.toLowerCase() === jobInput.toLowerCase());
+    if (!job || (job.district !== "Any" && job.district !== wallet.district)) {
+      await replyEconomy(interaction, ministryEmbed("Job Selection Rejected", "That job is not available for your district. Use `/jobs` first."), true);
+      return true;
+    }
+    if (wallet.jobChangedAt && Date.now() - Date.parse(wallet.jobChangedAt) < Number(job.switchCooldownHours || 24) * 60 * 60 * 1000) {
+      await replyEconomy(interaction, ministryEmbed("Job Selection Cooldown", "You recently changed jobs. Try again after the 24 hour labour registry cooldown."), true);
+      return true;
+    }
+    wallet.selectedJobId = job.id;
+    wallet.jobChangedAt = new Date().toISOString();
+    pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "labour-registry", amount: 0, type: "set_job", reason: `${wallet.displayName} selected ${job.name}.`, createdBy: interaction.user.id, meta: { key: job.id } });
+    await writeEconomyStore(economy);
+    await replyEconomy(interaction, ministryEmbed("Job Selected", `${job.name}\nRisk: ${job.riskLevel}\nUse /work to perform this role.`), true);
+    return true;
+  }
+
+  if (name === "work" || name === "overtime" || name === "special-task" || name === "district-work") {
+    const jobId = name === "overtime" ? "overtime" : name === "special-task" ? "special-task" : name === "district-work" ? "district-labour" : interaction.options.getString("job") || wallet.selectedJobId || "work-shift";
     const job = economyJobDefaults.find((entry) => entry.id === jobId) || economyJobDefaults[0];
+    if (job.district !== "Any" && job.district !== wallet.district) {
+      await replyEconomy(interaction, ministryEmbed("Work Desk", "That role is not available in your district. Use `/jobs` then `/setjob`."), true);
+      return true;
+    }
     if (wallet.status !== "active" || !economyCooldownReady(economy, wallet.id, "work", job.id, job.cooldownHours)) {
-      await replyEconomy(interaction, ministryEmbed("Work Desk", "This wallet cannot work that assignment yet. Cooldown or account status applies."));
+      await replyEconomy(interaction, ministryEmbed("Work Desk", "This wallet cannot work that assignment yet. Cooldown or account status applies."), true);
       return true;
     }
     const district = (economy.districts || []).find((entry) => entry.name === wallet.district);
@@ -1347,11 +1453,35 @@ async function handleEconomySlashCommand(interaction) {
     const districtFit = job.district === "Any" || job.district === wallet.district ? 1.18 : 1;
     const eventBoost = event.boostedDistricts?.includes(wallet.district) ? 1.2 : 1;
     const prosperity = 1 + (Number(district?.prosperityRating || 70) - 70) / 300;
-    const reward = Math.round(randomEconomyAmount(job.minReward, job.maxReward) * districtFit * eventBoost * prosperity * Number(event.workMultiplier || 1));
-    wallet.balance += reward;
-    pushEconomyTransaction(economy, { fromWalletId: "district-production", toWalletId: wallet.id, amount: reward, type: "work", reason: job.name, createdBy: interaction.user.id, meta: { key: job.id, eventId: event.id } });
+    const payoutBoost = 1 + discordEventModifier(economy, job.district, "jobPayoutPercent");
+    const riskBoost = discordEventModifier(economy, job.district, "riskPercent") + (name === "overtime" ? 0.08 : 0);
+    const failed = Math.random() < Math.min(0.75, Math.max(0, Number(job.failureChance || 0) + riskBoost));
+    const illegalOffer = Math.random() < Number(job.illegalOpportunityChance || 0);
+    let reward = Math.round(randomEconomyAmount(job.minReward, job.maxReward) * districtFit * eventBoost * prosperity * Number(event.workMultiplier || 1) * payoutBoost * (name === "overtime" ? 1.35 : 1));
+    let itemReward = null;
+    let penalty = 0;
+    if (failed) {
+      penalty = Math.max(15, Math.round(reward * (job.riskLevel === "High" || job.riskLevel === "Restricted" ? 0.45 : job.riskLevel === "Medium" ? 0.28 : 0.15)));
+      wallet.balance = Math.max(-1000, Number(wallet.balance || 0) - penalty);
+      reward = 0;
+      if (job.riskLevel === "High" || job.riskLevel === "Restricted" || illegalOffer) {
+        addEconomyAlert(economy, { severity: job.riskLevel === "Restricted" ? "critical" : "high", type: "job_risk", walletId: wallet.id, fine: penalty, summary: `${wallet.displayName} triggered a ${job.name} labour risk failure.`, action: "MSS review" });
+        await postMssFinancialAlert({ severity: "high", summary: `${wallet.displayName} triggered a ${job.name} labour risk failure.`, action: "MSS review" });
+      }
+    } else {
+      wallet.balance += reward;
+      if (Array.isArray(job.itemRewards) && job.itemRewards.length && Math.random() < 0.22) {
+        itemReward = inventoryItemById(job.itemRewards[Math.floor(Math.random() * job.itemRewards.length)], economy);
+        if (itemReward) addEconomyHolding(wallet, itemReward.id, 1, inventoryItemValue(itemReward, economy));
+      }
+    }
+    if (district) {
+      district.supplyLevel = Math.max(0, Math.min(140, Number(district.supplyLevel || 0) + (failed ? -1 : 1)));
+      district.tradeVolume = Math.round(Number(district.tradeVolume || 0) + Math.max(1, reward) * 1.6);
+    }
+    pushEconomyTransaction(economy, { fromWalletId: failed ? wallet.id : "district-production", toWalletId: failed ? "treasury" : wallet.id, amount: failed ? penalty : reward, type: "work", reason: `${job.name}${failed ? " failure" : ""}${itemReward ? ` / ${itemReward.name}` : ""}`, createdBy: interaction.user.id, meta: { key: job.id, eventId: event.id, failed, riskLevel: job.riskLevel, itemRewardId: itemReward?.id || "" } });
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed("Work Completed", `${job.name}\nReward: ${formatCredits(reward)}\nEvent: ${event.title}`));
+    await replyEconomy(interaction, ministryEmbed(failed ? "Work Assignment Failed" : "Work Completed", `${job.name}\n${failed ? `Penalty: ${formatCredits(penalty)}` : `Reward: ${formatCredits(reward)}`}${itemReward ? `\nItem: ${itemReward.name}` : ""}\nRisk: ${job.riskLevel}\nEvent: ${event.title}`));
     return true;
   }
 
@@ -1880,10 +2010,14 @@ async function handleEconomySlashCommand(interaction) {
   if (name === "trigger-event") {
     const eventId = interaction.options.getString("event", true);
     const hours = interaction.options.getInteger("hours") || 168;
-    const selected = economyEventDefaults.find((entry) => entry.id === eventId) || economyEventDefaults[0];
+    const selected = eventId === "random"
+      ? dynamicEconomyEventDefaults[Math.floor(Math.random() * dynamicEconomyEventDefaults.length)] || economyEventDefaults[0]
+      : economyEventDefaults.find((entry) => entry.id === eventId) || economyEventDefaults[0];
     const now = new Date();
+    const active = { ...selected, status: "active", startsAt: now.toISOString(), endsAt: new Date(now.getTime() + (selected.durationHours || hours) * 60 * 60 * 1000).toISOString(), triggeredBy: interaction.user.id };
+    applyDiscordDynamicEventEffects(economy, active);
     economy.events = [
-      { ...selected, status: "active", startsAt: now.toISOString(), endsAt: new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString(), triggeredBy: interaction.user.id },
+      active,
       ...(economy.events || []).map((entry) => ({ ...entry, status: entry.status === "active" ? "expired" : entry.status }))
     ].slice(0, 20);
     pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: "ledger", amount: 0, type: "economy_event", reason: selected.title, createdBy: interaction.user.id, meta: { key: selected.id } });
@@ -2170,6 +2304,82 @@ async function updateRemoteApplication(applicationId, fields) {
   return response.json().catch(() => null);
 }
 
+async function approveRemoteCitizenApplication(applicationId, fields = {}) {
+  if (!adminApiKey) {
+    throw new Error("ADMIN_API_KEY is not configured, so citizen provisioning cannot run.");
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/applications/${encodeURIComponent(applicationId)}/approve-citizen`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify(fields),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Citizen approval request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function resendRemoteCitizenLogin(applicationId, actor = "discord-bot") {
+  if (!adminApiKey) {
+    return null;
+  }
+
+  const response = await fetch(`${apiUrl}/api/admin/applications/${encodeURIComponent(applicationId)}/resend-login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify({ actor, queueEvent: false }),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Citizen login generation failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function markRemoteCredentialDelivery(applicationId, fields = {}) {
+  if (!adminApiKey) {
+    return null;
+  }
+
+  await fetch(`${apiUrl}/api/admin/applications/${encodeURIComponent(applicationId)}/credential-delivery`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminApiKey
+    },
+    body: JSON.stringify(fields),
+    cache: "no-store"
+  }).catch(() => null);
+}
+
+function formatCitizenLoginMessage(credentials, note = "") {
+  const portalUrl = credentials?.portalUrl || "https://wilfordindustries.org/citizen-portal";
+  return [
+    "Ministry of Credit and Records: Your citizenship application has been approved.",
+    note ? `\n${note}` : "",
+    "",
+    "Citizen Portal login credentials:",
+    `Portal: ${portalUrl}`,
+    `Username: ${credentials?.username || "Issued citizen account"}`,
+    `Union Security ID: ${credentials?.unionSecurityId || "Issued"}`,
+    `Temporary password: ${credentials?.temporaryPassword || "Contact Citizen Services for reset"}`,
+    "",
+    "Use this temporary password for your first login and change it immediately after entering the Citizen Portal."
+  ].filter((line) => line !== "").join("\n");
+}
+
 async function readSupremeCourtStore() {
   if (!adminApiKey) {
     throw new Error("ADMIN_API_KEY is not configured for court petitions.");
@@ -2271,16 +2481,27 @@ async function setApplicationReviewStatus(application, status, options = {}) {
     updatedAt: new Date().toISOString()
   });
 
-  await updateRemoteApplication(application.id, {
-    status: normalizedStatus,
-    decisionNote: options.decisionNote || "",
-    publicResponse: options.publicResponse || "",
-    requestInfo: Boolean(options.requestInfo),
-    needsAttention: Boolean(options.needsAttention),
-    archived: normalizedStatus === "archived",
-    suppressDiscordEvents: Boolean(options.suppressDiscordEvents),
-    actor: options.actorId ? `discord:${options.actorId}` : "discord"
-  }).catch(() => null);
+  if (normalizedStatus === "approved") {
+    await approveRemoteCitizenApplication(application.id, {
+      approvedBy: options.actorId ? `discord:${options.actorId}` : "discord",
+      actor: options.actorId ? `discord:${options.actorId}` : "discord",
+      approvalMethod: "Discord",
+      decisionNote: options.decisionNote || "",
+      suppressDiscordEvents: Boolean(options.suppressDiscordEvents),
+      application
+    }).catch(() => null);
+  } else {
+    await updateRemoteApplication(application.id, {
+      status: normalizedStatus,
+      decisionNote: options.decisionNote || "",
+      publicResponse: options.publicResponse || "",
+      requestInfo: Boolean(options.requestInfo),
+      needsAttention: Boolean(options.needsAttention),
+      archived: normalizedStatus === "archived",
+      suppressDiscordEvents: Boolean(options.suppressDiscordEvents),
+      actor: options.actorId ? `discord:${options.actorId}` : "discord"
+    }).catch(() => null);
+  }
 
   return updated;
 }
@@ -2736,26 +2957,59 @@ async function handleReviewThreadCommand(message, commandName, args) {
 
   if (commandName === "accept") {
     const note = args.join(" ").trim();
-    const updated = await setApplicationReviewStatus(application, "approved", {
-      actorId: message.author.id,
+    const approval = await approveRemoteCitizenApplication(application.id, {
+      approvedBy: `discord:${message.author.id}`,
+      actor: `discord:${message.author.id}`,
+      approvalMethod: "Discord",
       decisionNote: note,
-      suppressDiscordEvents: true
+      suppressDiscordEvents: true,
+      portalUrl: `${websiteUrl}/citizen-portal`,
+      application
     });
-    const roleGranted = hasLinkedDiscordUser ? await grantApplicantRole(updated) : false;
+    const approvedApplication = approval?.application || application;
+    const applicantId = String(approvedApplication.discordUserId || application.applicantId || "").trim();
+    const updated = await setApplicationStatus(application.id, {
+      status: "approved",
+      decisionBy: message.author.id,
+      decisionNote: note,
+      updatedAt: new Date().toISOString()
+    });
+    const roleTarget = {
+      ...(updated || application),
+      applicantId,
+      guildId: approvedApplication.reviewGuildId || application.guildId || applicationGuildId
+    };
+    const roleGranted = applicantId ? await grantApplicantRole(roleTarget) : false;
+    let dmDelivered = false;
+    let dmError = "";
 
-    if (hasLinkedDiscordUser) {
-      await sendApplicantDirectMessage(
-        updated.applicantId,
-        note
-          ? `Ministry of Credit and Records: Your citizenship application has been approved.\n\n${note}`
-          : "Ministry of Credit and Records: Your citizenship application has been approved."
-      );
+    if (applicantId) {
+      try {
+        await sendApplicantDirectMessage(
+          applicantId,
+          formatCitizenLoginMessage(approval?.credentials, note)
+        );
+        dmDelivered = true;
+      } catch (error) {
+        dmError = error instanceof Error ? error.message : "unknown error";
+        await reviewThread.send(`Citizen approved, but login DM failed. ${dmError}`);
+      }
+      await markRemoteCredentialDelivery(application.id, {
+        status: dmDelivered ? "delivered" : "failed",
+        error: dmError,
+        discordRoleStatus: roleGranted ? "granted" : "not_granted",
+        actor: `discord:${message.author.id}`
+      });
     }
     await message.reply(
-      hasLinkedDiscordUser
+      applicantId
         ? roleGranted
-          ? "Application accepted, applicant notified, and role granted."
-          : "Application accepted and applicant notified."
+          ? dmDelivered
+            ? "Application accepted, citizen account created, login DM sent, and role granted."
+            : "Application accepted, citizen account created, and role granted. Citizen approved, but login DM failed."
+          : dmDelivered
+            ? "Application accepted, citizen account created, and login DM sent. Role assignment was not completed."
+            : "Application accepted and citizen account created. Citizen approved, but login DM failed."
         : "Application accepted. No Discord user ID was linked, so no DM or automatic role was applied."
     );
     await closeReviewThread("accepted", note);
@@ -2916,6 +3170,29 @@ async function deliverApplicationDiscordEvent(application, event) {
     ]
   });
 
+  if (applicantId && event.type === "citizen_login_credentials") {
+    let deliveryStatus = "failed";
+    let deliveryError = "";
+    try {
+      const login = await resendRemoteCitizenLogin(application.id, "discord-bot");
+      await sendApplicantDirectMessage(
+        applicantId,
+        formatCitizenLoginMessage(login?.credentials)
+      );
+      deliveryStatus = "delivered";
+      await thread.send("Citizen Portal login credentials delivered by secure DM.");
+    } catch (error) {
+      deliveryError = error instanceof Error ? error.message : "unknown error";
+      await thread.send(`Citizen approved, but login DM failed. ${deliveryError}`);
+    }
+    await markRemoteCredentialDelivery(application.id, {
+      status: deliveryStatus,
+      error: deliveryError,
+      actor: "discord-bot"
+    });
+    return;
+  }
+
   if (applicantId && ["public_reply", "request_info", "status_changed", "appealed"].includes(event.type)) {
     try {
       await sendApplicantDirectMessage(applicantId, message);
@@ -2924,6 +3201,27 @@ async function deliverApplicationDiscordEvent(application, event) {
         `Ministry of Credit and Records delivery note: applicant DM failed (${error instanceof Error ? error.message : "unknown error"}).`
       );
     }
+  }
+
+  if (applicantId && event.type === "status_changed" && event.newStatus === "approved") {
+    let roleStatus = "not_granted";
+    try {
+      const granted = await grantApplicantRole({
+        applicantId,
+        guildId: application.reviewGuildId || application.guildId || applicationGuildId,
+        applicantTag: application.discordHandle || application.applicantName
+      });
+      roleStatus = granted ? "granted" : "not_granted";
+    } catch (error) {
+      roleStatus = "failed";
+      await thread.send(
+        `Ministry of Credit and Records delivery note: Citizen role assignment failed (${error instanceof Error ? error.message : "unknown error"}).`
+      );
+    }
+    await markRemoteCredentialDelivery(application.id, {
+      discordRoleStatus: roleStatus,
+      actor: "discord-bot"
+    });
   }
 }
 
@@ -3286,10 +3584,12 @@ function buildBroadcastEmbed(broadcast) {
     .replace(/^Reference:\s*.*$/im, "")
     .trim()
     .slice(0, 1200);
+  const priorityPing = ["everyone", "here"].includes(String(broadcast.pingOption || "none"));
+  const isMssDirective = broadcast.type === "mss_alert" || broadcast.type === "treason_notice";
   const embed = new EmbedBuilder()
-    .setColor(colorForIssuer(`${issuerName} ${broadcast.type}`))
+    .setColor(priorityPing ? (isMssDirective ? 0xb3261e : 0xd7a85f) : colorForIssuer(`${issuerName} ${broadcast.type}`))
     .setAuthor({ name: "Official WPU News Bulletin" })
-    .setTitle(headline)
+    .setTitle(priorityPing && isMssDirective ? `MSS SECURITY DIRECTIVE - ${headline}` : headline)
     .setDescription(description || "Official state communication issued for public record.")
     .addFields(
       {
@@ -3299,7 +3599,7 @@ function buildBroadcastEmbed(broadcast) {
       },
       {
         name: "Classification",
-        value: classification,
+        value: priorityPing ? `PRIORITY BROADCAST / ${classification}` : classification,
         inline: true
       },
       {
@@ -3545,6 +3845,24 @@ function buildBroadcastComponents(broadcast) {
   ];
 }
 
+function pingContentForBroadcast(broadcast) {
+  if (broadcast.pingOption === "everyone") {
+    return broadcast.type === "mss_alert" || broadcast.type === "treason_notice"
+      ? "@everyone\n**🚨 MSS SECURITY DIRECTIVE 🚨**"
+      : "@everyone";
+  }
+  if (broadcast.pingOption === "here") {
+    return "@here";
+  }
+  return "";
+}
+
+function allowedMentionsForBroadcast(broadcast) {
+  return ["everyone", "here"].includes(String(broadcast.pingOption || "none"))
+    ? { parse: ["everyone"] }
+    : { parse: [] };
+}
+
 function buildBroadcastApprovalEmbed(broadcast) {
   return new EmbedBuilder()
     .setColor(0xb3261e)
@@ -3553,7 +3871,7 @@ function buildBroadcastApprovalEmbed(broadcast) {
     .addFields(
       {
         name: "Request",
-        value: `${broadcast.title || "Official Broadcast"}\n${broadcast.type} / ${broadcast.distribution}`,
+        value: `${broadcast.title || "Official Broadcast"}\n${broadcast.type} / ${broadcast.distribution} / ping: ${broadcast.pingOption || "none"}`,
         inline: false
       },
       {
@@ -3613,8 +3931,10 @@ async function sendBroadcastToChannel(broadcast, results) {
     }
 
     const sent = await channel.send({
+      content: pingContentForBroadcast(enrichedBroadcast),
       embeds: [buildBroadcastEmbed(enrichedBroadcast)],
-      components: buildBroadcastComponents(enrichedBroadcast)
+      components: buildBroadcastComponents(enrichedBroadcast),
+      allowedMentions: allowedMentionsForBroadcast(enrichedBroadcast)
     });
     results.recipients.push({ target: channelId, method: "channel", messageId: sent.id });
     results.successCount += 1;
@@ -3757,6 +4077,7 @@ async function postWebsiteApplicationToReview(application) {
         .setDescription(
           [
             `**Discord:** ${application.discordHandle}`,
+            `**Discord User ID:** ${application.discordUserId}`,
             application.email ? `**Email:** ${application.email}` : null,
             `**Age:** ${application.age}`,
             `**Timezone:** ${application.timezone}`,
@@ -3832,9 +4153,7 @@ async function postWebsiteApplicationToReview(application) {
   });
 
   await thread.send(
-    application.discordUserId
-      ? "Website application imported into review.\nUse `-r <message>`, `-accept [message]`, or `-deny [message]`."
-      : "Website application imported into review.\nNo Discord user ID was supplied, so `-r`, `-accept`, and `-deny` cannot send DMs unless the Ministry of Credit and Records handles contact manually."
+    "Website application imported into review.\nUse `-r <message>`, `-accept [message]`, or `-deny [message]`. Discord User ID is linked for DMs and Citizen role assignment."
   );
 }
 
@@ -4200,6 +4519,15 @@ function buildSlashCommands() {
       .addNumberOption((option) => option.setName("amount").setDescription("Amount of Panem Credits.").setRequired(true).setMinValue(1)),
     new SlashCommandBuilder().setName("transactions").setDescription("Show recent Panem Credit transactions."),
     new SlashCommandBuilder().setName("daily").setDescription("Claim the daily civic stipend."),
+    new SlashCommandBuilder().setName("jobs").setDescription("Show jobs available to your district."),
+    new SlashCommandBuilder()
+      .setName("setjob")
+      .setDescription("Select your citizen job.")
+      .addStringOption((option) => option.setName("job").setDescription("Job id or exact job name.").setRequired(true)),
+    new SlashCommandBuilder()
+      .setName("jobinfo")
+      .setDescription("Show job risk, payout, cooldown, and item rewards.")
+      .addStringOption((option) => option.setName("job").setDescription("Job id or exact job name.").setRequired(true)),
     new SlashCommandBuilder()
       .setName("work")
       .setDescription("Work a Panem Credit job shift.")
@@ -4210,6 +4538,18 @@ function buildSlashCommands() {
           .addChoices(...economyJobDefaults.slice(0, 25).map((job) => ({ name: job.name, value: job.id })))
       ),
     new SlashCommandBuilder().setName("overtime").setDescription("Work overtime for higher Panem Credit pay."),
+    new SlashCommandBuilder().setName("special-task").setDescription("Attempt a higher-risk special government task."),
+    new SlashCommandBuilder().setName("district-work").setDescription("Work local district production labour."),
+    new SlashCommandBuilder().setName("events").setDescription("Show active Panem economy events."),
+    new SlashCommandBuilder()
+      .setName("event")
+      .setDescription("Show details for the current or selected economy event.")
+      .addStringOption((option) =>
+        option
+          .setName("event")
+          .setDescription("Event id.")
+          .addChoices(...economyEventDefaults.slice(0, 25).map((event) => ({ name: event.title.slice(0, 100), value: event.id })))
+      ),
     new SlashCommandBuilder()
       .setName("crime")
       .setDescription("Attempt a fictional risky economy action.")
@@ -4383,7 +4723,7 @@ function buildSlashCommands() {
           .setName("event")
           .setDescription("State event.")
           .setRequired(true)
-          .addChoices(...economyEventDefaults.map((event) => ({ name: event.title, value: event.id })))
+          .addChoices({ name: "Random Dynamic Event", value: "random" }, ...economyEventDefaults.slice(0, 24).map((event) => ({ name: event.title.slice(0, 100), value: event.id })))
       )
       .addIntegerOption((option) => option.setName("hours").setDescription("Duration in hours.").setMinValue(1).setMaxValue(720)),
     new SlashCommandBuilder()
