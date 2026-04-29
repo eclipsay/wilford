@@ -729,11 +729,10 @@ function dashboardSelect(section = "overview") {
     new StringSelectMenuBuilder()
       .setCustomId("citizen-dashboard:section")
       .setPlaceholder("Choose a section")
-      .addOptions(options.map(([value, label, description, emoji]) => ({
+      .addOptions(options.map(([value, label, description]) => ({
         label,
         value,
         description,
-        emoji,
         default: value === section
       })))
   );
@@ -753,7 +752,6 @@ function dashboardJobSelect(context) {
         label: job.name.slice(0, 100),
         value: job.id,
         description: `${job.riskLevel} risk - ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)}`.slice(0, 100),
-        emoji: job.riskLevel === "High" || job.riskLevel === "Restricted" ? "âš ï¸" : "âš’",
         default: job.id === selected
       })))
   );
