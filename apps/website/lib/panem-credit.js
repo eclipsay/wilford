@@ -42,6 +42,7 @@ const baseUrl = (
 ).replace(/\/+$/, "");
 
 const seedWallets = [
+  ["treasury", "state-treasury", "", "WPU State Treasury", 0, "The Capitol", 0],
   ["wallet-chairman", "chairman", "", "Chairman Lemmie", 125000, "The Capitol", 1500],
   ["wallet-eclip", "eclip", "", "Executive Director Eclip", 82000, "District 3", 1000],
   ["wallet-flukkston", "flukkston", "", "Sir Flukkston", 64000, "District 2", 900],
@@ -53,11 +54,11 @@ const seedWallets = [
     displayName,
     balance,
     district,
-    title: "",
+    title: id === "treasury" ? "State Treasury" : "",
     salary,
     status: "active",
   taxStatus: "compliant",
-  exempt: false,
+  exempt: id === "treasury",
   underReview: false,
   linkedEnemyRecordId: "",
   createdAt: "2026-04-28T00:00:00.000Z",
@@ -448,6 +449,149 @@ function defaultTaxRates() {
   return Object.fromEntries(taxTypes.map((tax) => [tax.id, tax.defaultRate]));
 }
 
+function defaultTaxRateSettings(taxRates = defaultTaxRates()) {
+  return Object.fromEntries(taxTypes.map((tax) => [
+    tax.id,
+    {
+      enabled: Number(taxRates[tax.id] ?? tax.defaultRate) > 0,
+      lastUpdatedAt: "",
+      updatedBy: "system"
+    }
+  ]));
+}
+
+function normalizeTaxRateSettings(settings = {}, taxRates = defaultTaxRates()) {
+  const defaults = defaultTaxRateSettings(taxRates);
+  return Object.fromEntries(taxTypes.map((tax) => {
+    const entry = settings[tax.id] || {};
+    return [
+      tax.id,
+      {
+        enabled: Object.hasOwn(entry, "enabled") ? Boolean(entry.enabled) : defaults[tax.id].enabled,
+        lastUpdatedAt: cleanText(entry.lastUpdatedAt || "", 80),
+        updatedBy: cleanText(entry.updatedBy || defaults[tax.id].updatedBy, 120)
+      }
+    ];
+  }));
+}
+
+function taxRateFor(store, taxType) {
+  if (store.taxRateSettings?.[taxType]?.enabled === false) return 0;
+  return Number(store.taxRates?.[taxType] || 0);
+}
+
+function nextAutoTaxRun(settings = {}, fromDate = new Date()) {
+  if (!settings.enabled) return "";
+  const [hour, minute] = String(settings.executionTime || "09:00").split(":").map((part) => Number.parseInt(part, 10));
+  const next = new Date(fromDate);
+  next.setHours(Number.isFinite(hour) ? hour : 9, Number.isFinite(minute) ? minute : 0, 0, 0);
+  if (next <= fromDate) {
+    next.setDate(next.getDate() + (settings.frequency === "weekly" ? 7 : 1));
+  }
+  return next.toISOString();
+}
+
+function normalizeAutoTaxSettings(settings = {}) {
+  const frequency = settings.frequency === "weekly" ? "weekly" : "daily";
+  const executionTime = /^\d{2}:\d{2}$/.test(String(settings.executionTime || ""))
+    ? String(settings.executionTime)
+    : "09:00";
+  const normalized = {
+    enabled: Boolean(settings.enabled),
+    frequency,
+    executionTime,
+    lastRunAt: cleanText(settings.lastRunAt || "", 80),
+    nextRunAt: cleanText(settings.nextRunAt || "", 80),
+    updatedAt: cleanText(settings.updatedAt || "", 80),
+    updatedBy: cleanText(settings.updatedBy || "", 120)
+  };
+  if (normalized.enabled && !normalized.nextRunAt) {
+    normalized.nextRunAt = nextAutoTaxRun(normalized);
+  }
+  if (!normalized.enabled) {
+    normalized.nextRunAt = "";
+  }
+  return normalized;
+}
+
+export const stateTreasuryWalletId = "treasury";
+export const stateTreasuryWalletName = "WPU State Treasury";
+
+function normalizeTreasuryWallet(wallet = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: stateTreasuryWalletId,
+    userId: "state-treasury",
+    discordId: "",
+    displayName: stateTreasuryWalletName,
+    balance: Math.max(0, Number(wallet.balance || 0)),
+    district: "The Capitol",
+    title: "State Treasury",
+    salary: 0,
+    status: "active",
+    taxStatus: "state account",
+    exempt: true,
+    underReview: false,
+    createdAt: wallet.createdAt || now,
+    updatedAt: wallet.updatedAt || now,
+    ...wallet,
+    id: stateTreasuryWalletId,
+    displayName: stateTreasuryWalletName,
+    exempt: true,
+    status: "active"
+  };
+}
+
+function ensureStateTreasury(store) {
+  const wallets = Array.isArray(store.wallets) ? store.wallets : [];
+  const index = wallets.findIndex((wallet) => wallet.id === stateTreasuryWalletId);
+  const wallet = normalizeTreasuryWallet(index >= 0 ? wallets[index] : {});
+  if (index >= 0) wallets[index] = wallet;
+  else wallets.unshift(wallet);
+  store.wallets = wallets;
+  return wallet;
+}
+
+function recordTaxReceipt(store, { wallet, taxType, amount, rate = 0, status = "paid", reason = "", actor = "treasury" }) {
+  const numericAmount = Math.max(0, Number(amount || 0));
+  const treasury = ensureStateTreasury(store);
+  if (status === "paid" && numericAmount > 0) {
+    treasury.balance += numericAmount;
+    treasury.updatedAt = new Date().toISOString();
+  }
+  store.taxRecords = Array.isArray(store.taxRecords) ? store.taxRecords : [];
+  const record = {
+    id: createId("tax"),
+    walletId: wallet.id,
+    taxType,
+    amount: numericAmount,
+    rate,
+    status,
+    reason: cleanText(reason || "Paid into WPU State Treasury", 300),
+    paidIntoWalletId: stateTreasuryWalletId,
+    paidInto: stateTreasuryWalletName,
+    createdAt: new Date().toISOString(),
+    createdBy: actor
+  };
+  store.taxRecords.unshift(record);
+  return record;
+}
+
+function alertTreasuryPersonalTransfer(store, { actor, recipient, amount, reason }) {
+  addAlert(store, {
+    severity: "critical",
+    type: "state_treasury_transfer",
+    walletId: recipient?.id || "",
+    summary: "State Treasury transfer detected",
+    action: "MSS review",
+    authorisedUser: cleanText(actor || "unknown", 120),
+    recipient: cleanText(recipient?.displayName || recipient?.id || "unknown", 160),
+    amount: Math.max(0, Number(amount || 0)),
+    reason: cleanText(reason || "No reason recorded", 500),
+    timestamp: new Date().toISOString()
+  });
+}
+
 export function normalizeEconomyStore(economy = {}) {
   const storedDistricts = Array.isArray(economy.districts) && economy.districts.length
     ? economy.districts
@@ -469,7 +613,7 @@ export function normalizeEconomyStore(economy = {}) {
   });
 
   return {
-    wallets: (Array.isArray(economy.wallets) && economy.wallets.length ? economy.wallets : seedWallets).map((wallet) => ({
+    wallets: [normalizeTreasuryWallet((economy.wallets || seedWallets).find((wallet) => wallet.id === stateTreasuryWalletId)), ...(Array.isArray(economy.wallets) && economy.wallets.length ? economy.wallets : seedWallets).filter((wallet) => wallet.id !== stateTreasuryWalletId)].map((wallet) => ({
       ...wallet,
       salary: Math.max(0, Number(wallet.salary ?? 125)),
       streak: Math.max(0, Number(wallet.streak || 0)),
@@ -510,6 +654,7 @@ export function normalizeEconomyStore(economy = {}) {
     listings: Array.isArray(economy.listings) ? economy.listings : [],
     taxRecords: Array.isArray(economy.taxRecords) ? economy.taxRecords : [],
     taxRates: { ...defaultTaxRates(), ...(economy.taxRates || {}) },
+    taxRateSettings: normalizeTaxRateSettings(economy.taxRateSettings || {}, { ...defaultTaxRates(), ...(economy.taxRates || {}) }),
     districts,
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
     raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs : [],
@@ -563,6 +708,7 @@ export function normalizeEconomyStore(economy = {}) {
           }
         ],
     stockSettings: { transactionTax: 0.015, transactionFee: 2, ...(economy.stockSettings || {}) },
+    autoTax: normalizeAutoTaxSettings(economy.autoTax || {}),
     marketNotices: Array.isArray(economy.marketNotices) && economy.marketNotices.length
       ? economy.marketNotices
       : [
@@ -664,6 +810,140 @@ async function writeRemoteStore(economy) {
   return parsed.economy || parsed;
 }
 
+async function readGovernmentAccessForTaxAlerts() {
+  const key = adminApiKey();
+  if (key) {
+    const response = await fetch(`${baseUrl}/api/admin/government-access-store`, {
+      headers: { "x-admin-key": key },
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000)
+    });
+    if (response.ok) return response.json();
+  }
+
+  try {
+    return JSON.parse(await readFile(contentFile(), "utf8"));
+  } catch {}
+  return {};
+}
+
+async function writeGovernmentAccessForTaxAlerts(content) {
+  const key = adminApiKey();
+  if (key) {
+    const response = await fetch(`${baseUrl}/api/admin/government-access-store`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-key": key },
+      body: JSON.stringify({
+        citizenAlerts: content.citizenAlerts || [],
+        governmentAuditLog: content.governmentAuditLog || []
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000)
+    });
+    if (response.ok) return response.json();
+  }
+
+  const file = contentFile();
+  let current = {};
+  try {
+    current = JSON.parse(await readFile(file, "utf8"));
+  } catch {}
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify({
+    ...current,
+    citizenAlerts: content.citizenAlerts || current.citizenAlerts || [],
+    governmentAuditLog: content.governmentAuditLog || current.governmentAuditLog || []
+  }, null, 2));
+  return content;
+}
+
+async function logTaxAlertWarning(actor, detail) {
+  try {
+    const content = await readGovernmentAccessForTaxAlerts();
+    content.governmentAuditLog = [
+      {
+        id: createId("audit"),
+        at: new Date().toISOString(),
+        actor: actor || "system",
+        action: "Tax collected but citizen alert failed.",
+        detail: cleanText(detail, 1000),
+        status: "warning"
+      },
+      ...(content.governmentAuditLog || [])
+    ].slice(0, 300);
+    await writeGovernmentAccessForTaxAlerts(content);
+  } catch {}
+}
+
+async function createIncomeTaxCitizenAlerts(taxEvents = [], actor = "treasury") {
+  if (!taxEvents.length) return { ok: true, count: 0 };
+  const content = await readGovernmentAccessForTaxAlerts();
+  const citizens = Array.isArray(content.citizenRecords) ? content.citizenRecords : [];
+  const createdAt = new Date().toISOString();
+  const alerts = [];
+
+  for (const event of taxEvents) {
+    const citizen = citizens.find((record) =>
+      (event.walletId && record.walletId === event.walletId) ||
+      (event.discordId && String(record.discordId || "") === event.discordId) ||
+      (event.userId && String(record.userId || "") === event.userId)
+    );
+    if (!citizen) {
+      content.governmentAuditLog = [
+        {
+          id: createId("audit"),
+          at: new Date().toISOString(),
+          actor: actor || "system",
+          action: "Tax collected but citizen alert failed.",
+          detail: `No citizen record matched wallet ${event.walletId}.`,
+          status: "warning"
+        },
+        ...(content.governmentAuditLog || [])
+      ].slice(0, 300);
+      continue;
+    }
+    alerts.push({
+      id: createId("alert"),
+      citizenId: citizen.id,
+      citizenName: citizen.name,
+      district: citizen.district,
+      title: "Income Tax Collected",
+      type: "Tax Notice",
+      issuingAuthority: "Ministry of Credit & Records",
+      severity: "notice",
+      category: "Tax Notice",
+      message: `The Ministry of Credit & Records has collected ${event.amount} PC in income tax. Funds have been deposited into the WPU State Treasury. Tax rate: ${(event.rate * 100).toFixed(2)}%. Date/time: ${event.createdAt}. Transaction ID: ${event.transactionId}. Remaining balance: ${event.remainingBalance} PC.`,
+      enforcementAction: "none",
+      actionTaken: `${event.amount} PC income tax collected into WPU State Treasury`,
+      amount: event.amount,
+      taxRate: event.rate,
+      treasuryDestination: stateTreasuryWalletName,
+      remainingBalance: event.remainingBalance,
+      linkedRecordType: "tax_record",
+      linkedRecordId: event.taxRecordId,
+      transactionId: event.transactionId,
+      appealEnabled: false,
+      websiteOnly: true,
+      discordDeliveryRequested: false,
+      discordDeliveryStatus: "not_requested",
+      discordDeliveryError: "",
+      readByCitizen: false,
+      status: "open",
+      createdBy: actor,
+      createdAt,
+      updatedAt: createdAt
+    });
+  }
+
+  if (!alerts.length) {
+    await writeGovernmentAccessForTaxAlerts(content);
+    return { ok: false, count: 0 };
+  }
+  content.citizenAlerts = [...alerts, ...(content.citizenAlerts || [])].slice(0, 1000);
+  await writeGovernmentAccessForTaxAlerts(content);
+  return { ok: true, count: alerts.length };
+}
+
 export async function getEconomyStore() {
   try {
     return normalizeEconomyStore(await readRemoteStore());
@@ -719,16 +999,15 @@ export function getWallet(store, walletId) {
 }
 
 function pushTransaction(store, transaction) {
-  store.transactions = [
-    {
-      id: createId("txn"),
-      taxAmount: 0,
-      createdAt: new Date().toISOString(),
-      createdBy: "system",
-      ...transaction
-    },
-    ...(store.transactions || [])
-  ].slice(0, 1000);
+  const record = {
+    id: createId("txn"),
+    taxAmount: 0,
+    createdAt: new Date().toISOString(),
+    createdBy: "system",
+    ...transaction
+  };
+  store.transactions = [record, ...(store.transactions || [])].slice(0, 1000);
+  return record;
 }
 
 function addAlert(store, alert) {
@@ -818,6 +1097,7 @@ export async function createWallet(fields, actor = "system") {
 
 export async function transferCredits({ fromWalletId, toWalletId, amount, reason, type = "transfer", actor = "citizen" }) {
   const store = await getEconomyStore();
+  ensureStateTreasury(store);
   const fromWallet = getWallet(store, fromWalletId);
   const toWallet = getWallet(store, toWalletId);
   const numericAmount = Math.max(0, Number(amount || 0));
@@ -830,7 +1110,7 @@ export async function transferCredits({ fromWalletId, toWalletId, amount, reason
   if (toWallet.status === "frozen") return { ok: false, store, reason: "recipient-frozen" };
   if (fromWallet.balance < numericAmount) return { ok: false, store, reason: "insufficient-balance" };
 
-  const rate = Number(store.taxRates.trade_tax || 0);
+  const rate = taxRateFor(store, "trade_tax");
   const taxAmount = type === "transfer" && !fromWallet.exempt ? Math.round(numericAmount * rate * 100) / 100 : 0;
   const totalDebit = numericAmount + taxAmount;
   if (fromWallet.balance < totalDebit) {
@@ -852,15 +1132,17 @@ export async function transferCredits({ fromWalletId, toWalletId, amount, reason
   };
   pushTransaction(store, transaction);
   if (taxAmount) {
-    store.taxRecords.unshift({
-      id: createId("tax"),
-      walletId: fromWallet.id,
+    recordTaxReceipt(store, {
+      wallet: fromWallet,
       taxType: "trade_tax",
       amount: taxAmount,
       rate,
       status: "paid",
-      createdAt: new Date().toISOString()
+      actor
     });
+  }
+  if (fromWallet.id === stateTreasuryWalletId && toWallet.id !== stateTreasuryWalletId && ["treasury_personal_transfer", "government_transfer"].includes(type)) {
+    alertTreasuryPersonalTransfer(store, { actor, recipient: toWallet, amount: numericAmount, reason });
   }
   flagSuspiciousTransfer(store, transaction, fromWallet, toWallet);
   return { ok: true, store: await saveEconomyStore(store) };
@@ -868,11 +1150,17 @@ export async function transferCredits({ fromWalletId, toWalletId, amount, reason
 
 export async function treasuryPayment({ walletId, amount, reason, type = "grant", actor = "treasury" }) {
   const store = await getEconomyStore();
+  const treasury = ensureStateTreasury(store);
   const wallet = getWallet(store, walletId);
   const numericAmount = Math.max(0, Number(amount || 0));
   if (!wallet || numericAmount <= 0) {
     return { ok: false, store };
   }
+  if (treasury.balance < numericAmount) {
+    return { ok: false, store, reason: "insufficient-treasury-funds" };
+  }
+  treasury.balance = Math.max(0, Number(treasury.balance || 0) - numericAmount);
+  treasury.updatedAt = new Date().toISOString();
   wallet.balance += numericAmount;
   wallet.updatedAt = new Date().toISOString();
   pushTransaction(store, {
@@ -1260,7 +1548,7 @@ export async function playGambleGame({ walletId, gameId, amount, actor = "citize
     return { ok: false, store, reason: "gamble-cooldown", game };
   }
   const won = Math.random() < Number(game.winChance || 0);
-  const taxRate = Number(store.taxRates.gambling_winnings_tax || 0.08);
+  const taxRate = taxRateFor(store, "gambling_winnings_tax");
   const grossPayout = won ? Math.round(bet * Number(game.payoutMultiplier || 1)) : 0;
   const winningsTax = won ? Math.round(Math.max(0, grossPayout - bet) * taxRate * 100) / 100 : 0;
   const payout = Math.max(0, grossPayout - winningsTax);
@@ -1283,6 +1571,9 @@ export async function playGambleGame({ walletId, gameId, amount, actor = "citize
     createdBy: actor,
     meta: { key: game.id, bet, won, grossPayout, winningsTax, suspicion: suspicion.score }
   });
+  if (winningsTax) {
+    recordTaxReceipt(store, { wallet, taxType: "gambling_winnings_tax", amount: winningsTax, rate: taxRate, status: "paid", actor });
+  }
   if (wallet.suspicionLevel >= 70) {
     postMssAlert(store, wallet, {
       severity: wallet.suspicionLevel >= 85 ? "critical" : "high",
@@ -1465,14 +1756,13 @@ export async function sellInventoryToState({ walletId, itemId, quantity, actor =
     meta: { key: item.id, quantity: count, rarity: itemRarity(item) }
   });
   if (taxAmount) {
-    store.taxRecords.unshift({
-      id: createId("tax"),
-      walletId: wallet.id,
+    recordTaxReceipt(store, {
+      wallet,
       taxType: "inventory_tax",
       amount: taxAmount,
       rate: taxRate,
       status: "paid",
-      createdAt: new Date().toISOString()
+      actor
     });
   }
   return { ok: true, item, quantity: count, value, store: await saveEconomyStore(store) };
@@ -1865,7 +2155,8 @@ export async function buyStock({ walletId, ticker, shares, actor = "citizen" }) 
   ensureWalletCollections(wallet);
   applyStockMovement(store, company, Math.min(0.018, count / 10000));
   const subtotal = Math.round(Number(company.sharePrice || 0) * count * 100) / 100;
-  const tax = Math.round(subtotal * Number(store.stockSettings?.transactionTax || 0.015) * 100) / 100;
+  const stockTradeRate = taxRateFor(store, "stock_trade_tax");
+  const tax = Math.round(subtotal * stockTradeRate * 100) / 100;
   const fee = Number(store.stockSettings?.transactionFee || 2);
   const total = subtotal + tax + fee;
   if (Number(wallet.balance || 0) < total) return { ok: false, store };
@@ -1880,6 +2171,7 @@ export async function buyStock({ walletId, ticker, shares, actor = "citizen" }) 
   const trade = { id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "buy", shares: count, price: company.sharePrice, subtotal, tax, fee, createdAt: new Date().toISOString(), createdBy: actor };
   store.stockTrades = [trade, ...(store.stockTrades || [])].slice(0, 1000);
   pushTransaction(store, { fromWalletId: wallet.id, toWalletId: "pse", amount: total, type: "stock_buy", reason: `${count} ${company.ticker} shares`, taxAmount: tax, createdBy: actor, meta: { key: company.ticker } });
+  if (tax) recordTaxReceipt(store, { wallet, taxType: "stock_trade_tax", amount: tax, rate: stockTradeRate, status: "paid", actor });
   return { ok: true, company, shares: count, total, store: await saveEconomyStore(store) };
 }
 
@@ -1894,7 +2186,8 @@ export async function sellStock({ walletId, ticker, shares, actor = "citizen" })
   if (Number(position.shares || 0) < count) return { ok: false, store };
   applyStockMovement(store, company, -Math.min(0.018, count / 10000));
   const subtotal = Math.round(Number(company.sharePrice || 0) * count * 100) / 100;
-  const tax = Math.round(subtotal * Number(store.stockSettings?.transactionTax || 0.015) * 100) / 100;
+  const stockTradeRate = taxRateFor(store, "stock_trade_tax");
+  const tax = Math.round(subtotal * stockTradeRate * 100) / 100;
   const fee = Number(store.stockSettings?.transactionFee || 2);
   const proceeds = Math.max(0, subtotal - tax - fee);
   position.shares -= count;
@@ -1904,6 +2197,7 @@ export async function sellStock({ walletId, ticker, shares, actor = "citizen" })
   const trade = { id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "sell", shares: count, price: company.sharePrice, subtotal, tax, fee, createdAt: new Date().toISOString(), createdBy: actor };
   store.stockTrades = [trade, ...(store.stockTrades || [])].slice(0, 1000);
   pushTransaction(store, { fromWalletId: "pse", toWalletId: wallet.id, amount: proceeds, type: "stock_sell", reason: `${count} ${company.ticker} shares`, taxAmount: tax, createdBy: actor, meta: { key: company.ticker } });
+  if (tax) recordTaxReceipt(store, { wallet, taxType: "stock_trade_tax", amount: tax, rate: stockTradeRate, status: "paid", actor });
   return { ok: true, company, shares: count, proceeds, store: await saveEconomyStore(store) };
 }
 
@@ -1995,12 +2289,15 @@ export async function issueStockDividends({ ticker = "", actor = "treasury" }) {
 
 export async function debitWallet({ walletId, amount, reason, type = "fine", actor = "treasury" }) {
   const store = await getEconomyStore();
+  const treasury = ensureStateTreasury(store);
   const wallet = getWallet(store, walletId);
   const numericAmount = Math.max(0, Number(amount || 0));
   if (!wallet || numericAmount <= 0) {
     return { ok: false, store };
   }
   wallet.balance = Math.max(0, wallet.balance - numericAmount);
+  treasury.balance += numericAmount;
+  treasury.updatedAt = new Date().toISOString();
   wallet.updatedAt = new Date().toISOString();
   pushTransaction(store, {
     fromWalletId: wallet.id,
@@ -2026,6 +2323,7 @@ export async function executeWalletEnforcement({
 }) {
   const store = await getEconomyStore();
   const wallet = getWallet(store, walletId);
+  const treasury = ensureStateTreasury(store);
   const numericAmount = Math.max(0, Number(amount || 0));
   const cleanReason = cleanText(reason || "State enforcement action", 500);
   const now = new Date().toISOString();
@@ -2049,21 +2347,20 @@ export async function executeWalletEnforcement({
     if (wallet.exempt || numericAmount <= 0) return { ok: false, store, reason: "invalid-tax" };
     wallet.balance = Math.max(0, Number(wallet.balance || 0) - numericAmount);
     wallet.taxStatus = "emergency taxation issued";
-    store.taxRecords.unshift({
-      id: createId("tax"),
-      walletId: wallet.id,
+    recordTaxReceipt(store, {
+      wallet,
       taxType: "emergency_state_levy",
       amount: numericAmount,
       rate: 0,
       status: "paid",
       reason: cleanReason,
-      createdAt: now,
-      createdBy: actor
+      actor
     });
     transaction = baseTransaction;
   } else if (action === "fine") {
     if (numericAmount <= 0) return { ok: false, store, reason: "invalid-fine" };
     wallet.balance = Math.max(0, Number(wallet.balance || 0) - numericAmount);
+    treasury.balance += numericAmount;
     wallet.taxStatus = "penalty issued";
     transaction = { ...baseTransaction, type: "fine" };
   } else if (action === "asset_seizure") {
@@ -2083,6 +2380,9 @@ export async function executeWalletEnforcement({
     };
   } else if (action === "tax_rebate" || action === "grant_payment") {
     if (numericAmount <= 0) return { ok: false, store, reason: "invalid-payment" };
+    if (treasury.balance < numericAmount) return { ok: false, store, reason: "insufficient-treasury-funds" };
+    treasury.balance = Math.max(0, Number(treasury.balance || 0) - numericAmount);
+    treasury.updatedAt = now;
     wallet.balance = Number(wallet.balance || 0) + numericAmount;
     transaction = {
       ...baseTransaction,
@@ -2108,25 +2408,25 @@ export async function executeWalletEnforcement({
 
 export async function applyTax({ walletId, taxType, amount, actor = "treasury", status = "paid" }) {
   const store = await getEconomyStore();
+  ensureStateTreasury(store);
   const wallet = getWallet(store, walletId);
   const numericAmount = Math.max(0, Number(amount || 0));
-  const rate = Number(store.taxRates[taxType] || 0);
+  const rate = taxRateFor(store, taxType);
   if (!wallet || wallet.exempt || numericAmount <= 0) {
     return { ok: false, store };
   }
   wallet.balance = Math.max(0, wallet.balance - numericAmount);
   wallet.taxStatus = status === "paid" ? "compliant" : "outstanding";
   wallet.updatedAt = new Date().toISOString();
-  store.taxRecords.unshift({
-    id: createId("tax"),
-    walletId: wallet.id,
+  const taxRecord = recordTaxReceipt(store, {
+    wallet,
     taxType,
     amount: numericAmount,
     rate,
     status,
-    createdAt: new Date().toISOString()
+    actor
   });
-  pushTransaction(store, {
+  const transaction = pushTransaction(store, {
     fromWalletId: wallet.id,
     toWalletId: "treasury",
     amount: numericAmount,
@@ -2135,30 +2435,59 @@ export async function applyTax({ walletId, taxType, amount, actor = "treasury", 
     taxAmount: numericAmount,
     createdBy: actor
   });
-  return { ok: true, store: await saveEconomyStore(store) };
+  const saved = await saveEconomyStore(store);
+  if (taxType === "income_tax" && status === "paid") {
+    try {
+      await createIncomeTaxCitizenAlerts([{
+        walletId: wallet.id,
+        discordId: wallet.discordId,
+        userId: wallet.userId,
+        amount: numericAmount,
+        rate,
+        createdAt: transaction.createdAt,
+        taxRecordId: taxRecord.id,
+        transactionId: transaction.id,
+        remainingBalance: Math.max(0, Number(wallet.balance || 0))
+      }], actor);
+    } catch (error) {
+      await logTaxAlertWarning(actor, error instanceof Error ? error.message : "Tax collected but citizen alert failed.");
+    }
+  }
+  return { ok: true, store: saved };
 }
 
 export async function runAutomaticTaxation(actor = "treasury") {
   const store = await getEconomyStore();
-  const rate = Number(store.taxRates.income_tax || 0);
+  ensureStateTreasury(store);
+  const rate = taxRateFor(store, "income_tax");
+  const taxEvents = [];
+  if (rate <= 0) {
+    store.autoTax = normalizeAutoTaxSettings({
+      ...(store.autoTax || {}),
+      lastRunAt: new Date().toISOString(),
+      nextRunAt: nextAutoTaxRun(store.autoTax || {}),
+      updatedAt: new Date().toISOString(),
+      updatedBy: actor
+    });
+    return saveEconomyStore(store);
+  }
   for (const wallet of store.wallets) {
-    if (wallet.exempt || wallet.status === "frozen") {
+    if (wallet.id === stateTreasuryWalletId || wallet.exempt || wallet.status === "frozen") {
       continue;
     }
     const amount = Math.max(1, Math.round(Number(wallet.balance || 0) * rate * 100) / 100);
     wallet.balance = Math.max(0, wallet.balance - amount);
     wallet.taxStatus = "compliant";
     wallet.updatedAt = new Date().toISOString();
-    store.taxRecords.unshift({
-      id: createId("tax"),
-      walletId: wallet.id,
+    const taxRecord = recordTaxReceipt(store, {
+      wallet,
       taxType: "income_tax",
       amount,
       rate,
       status: "paid",
-      createdAt: new Date().toISOString()
+      actor
     });
-    pushTransaction(store, {
+    const transaction = pushTransaction(store, {
       fromWalletId: wallet.id,
       toWalletId: "treasury",
       amount,
@@ -2167,8 +2496,59 @@ export async function runAutomaticTaxation(actor = "treasury") {
       taxAmount: amount,
       createdBy: actor
     });
+    taxEvents.push({
+      walletId: wallet.id,
+      discordId: wallet.discordId,
+      userId: wallet.userId,
+      amount,
+      rate,
+      createdAt: transaction.createdAt,
+      taxRecordId: taxRecord.id,
+      transactionId: transaction.id,
+      remainingBalance: Math.max(0, Number(wallet.balance || 0))
+    });
   }
-  return saveEconomyStore(store);
+  store.autoTax = normalizeAutoTaxSettings({
+    ...(store.autoTax || {}),
+    lastRunAt: new Date().toISOString(),
+    nextRunAt: nextAutoTaxRun(store.autoTax || {}),
+    updatedAt: new Date().toISOString(),
+    updatedBy: actor
+  });
+  const saved = await saveEconomyStore(store);
+  try {
+    await createIncomeTaxCitizenAlerts(taxEvents, actor);
+  } catch (error) {
+    await logTaxAlertWarning(actor, error instanceof Error ? error.message : "Tax collected but citizen alert failed.");
+  }
+  return saved;
+}
+
+export async function updateAutoTaxSettings(fields = {}, actor = "treasury") {
+  const store = await getEconomyStore();
+  const current = normalizeAutoTaxSettings(store.autoTax || {});
+  const intent = cleanText(fields.intent || "", 80);
+  const enabled = intent === "auto-tax-enable" ? true : intent === "auto-tax-disable" ? false : current.enabled;
+  const nextSettings = normalizeAutoTaxSettings({
+    ...current,
+    enabled,
+    frequency: fields.frequency || current.frequency,
+    executionTime: fields.executionTime || current.executionTime,
+    nextRunAt: "",
+    updatedAt: new Date().toISOString(),
+    updatedBy: actor
+  });
+  store.autoTax = nextSettings;
+  pushTransaction(store, {
+    fromWalletId: "treasury",
+    toWalletId: "ledger",
+    amount: 0,
+    type: enabled ? "auto_tax_enabled" : "auto_tax_disabled",
+    reason: `Auto Tax ${enabled ? "enabled" : "disabled"}: ${nextSettings.frequency} at ${nextSettings.executionTime}`,
+    createdBy: actor,
+    meta: { frequency: nextSettings.frequency, executionTime: nextSettings.executionTime }
+  });
+  return { ok: true, store: await saveEconomyStore(store) };
 }
 
 export async function buyMarketItem({ walletId, itemId, quantity, actor = "citizen" }) {
@@ -2181,7 +2561,8 @@ export async function buyMarketItem({ walletId, itemId, quantity, actor = "citiz
   }
   const subtotal = Number(item.currentPrice || item.basePrice || 0) * count;
   const taxType = item.category === "Luxury Goods" ? "luxury_goods_tax" : "trade_tax";
-  const taxAmount = wallet.exempt ? 0 : Math.round(subtotal * Number(store.taxRates[taxType] || 0) * 100) / 100;
+  const taxRate = taxRateFor(store, taxType);
+  const taxAmount = wallet.exempt ? 0 : Math.round(subtotal * taxRate * 100) / 100;
   const total = subtotal + taxAmount;
   if (wallet.balance < total) {
     return { ok: false, store };
@@ -2200,14 +2581,13 @@ export async function buyMarketItem({ walletId, itemId, quantity, actor = "citiz
     createdBy: actor
   });
   if (taxAmount) {
-    store.taxRecords.unshift({
-      id: createId("tax"),
-      walletId: wallet.id,
+    recordTaxReceipt(store, {
+      wallet,
       taxType,
       amount: taxAmount,
-      rate: Number(store.taxRates[taxType] || 0),
+      rate: taxRate,
       status: "paid",
-      createdAt: new Date().toISOString()
+      actor
     });
   }
   return { ok: true, store: await saveEconomyStore(store) };
@@ -2260,9 +2640,12 @@ export async function buyCitizenListing({ buyerWalletId, listingId, quantity, ac
   if (Number(listing.quantity || 0) < count) return { ok: false, store, reason: "listing-quantity" };
   const subtotal = Number(listing.price || 0) * count;
   const taxType = item.category === "Luxury Goods" || item.type === "luxury" ? "luxury_goods_tax" : "trade_tax";
-  const taxAmount = buyer.exempt ? 0 : Math.round(subtotal * Number(store.taxRates[taxType] || 0) * 100) / 100;
+  const buyerRate = taxRateFor(store, taxType);
+  const taxAmount = buyer.exempt ? 0 : Math.round(subtotal * buyerRate * 100) / 100;
   if (Number(buyer.balance || 0) < subtotal + taxAmount) return { ok: false, store, reason: "balance" };
-  const sellerTaxRate = item.contraband ? 0.25 : itemRarity(item) === "legendary" || itemRarity(item) === "epic" ? 0.2 : 0.15;
+  const sellerTaxRate = store.taxRateSettings?.market_sale_tax?.enabled === false
+    ? 0
+    : Number(store.taxRates?.market_sale_tax || (item.contraband ? 0.25 : itemRarity(item) === "legendary" || itemRarity(item) === "epic" ? 0.2 : 0.15));
   const sellerTax = seller.exempt ? 0 : Math.round(subtotal * sellerTaxRate * 100) / 100;
   buyer.balance -= subtotal + taxAmount;
   seller.balance += Math.max(0, subtotal - sellerTax);
@@ -2285,25 +2668,23 @@ export async function buyCitizenListing({ buyerWalletId, listingId, quantity, ac
     meta: { key: listing.id, itemId: item.id, buyerTax: taxAmount, sellerTax, sellerTaxRate }
   });
   if (taxAmount) {
-    store.taxRecords.unshift({
-      id: createId("tax"),
-      walletId: buyer.id,
+    recordTaxReceipt(store, {
+      wallet: buyer,
       taxType,
       amount: taxAmount,
-      rate: Number(store.taxRates[taxType] || 0),
+      rate: buyerRate,
       status: "paid",
-      createdAt: new Date().toISOString()
+      actor
     });
   }
   if (sellerTax) {
-    store.taxRecords.unshift({
-      id: createId("tax"),
-      walletId: seller.id,
+    recordTaxReceipt(store, {
+      wallet: seller,
       taxType: "market_sale_tax",
       amount: sellerTax,
       rate: sellerTaxRate,
       status: "paid",
-      createdAt: new Date().toISOString()
+      actor
     });
   }
   return { ok: true, store: await saveEconomyStore(store) };
@@ -2349,7 +2730,7 @@ export function getMarketDashboard(store) {
   const items = [...(store.marketItems || [])].map((item) => ({
     ...item,
     changePercent: marketChangePercent(item),
-    taxRate: item.category === "Luxury Goods" ? Number(store.taxRates?.luxury_goods_tax || 0) : Number(store.taxRates?.trade_tax || 0)
+    taxRate: item.category === "Luxury Goods" ? taxRateFor(store, "luxury_goods_tax") : taxRateFor(store, "trade_tax")
   }));
   const topGainers = [...items].sort((a, b) => b.changePercent - a.changePercent).slice(0, 5);
   const priceDrops = [...items].sort((a, b) => a.changePercent - b.changePercent).slice(0, 5);
@@ -2520,7 +2901,25 @@ export async function triggerRandomEconomyEvent({ actor = "treasury", durationHo
 export async function updateEconomyAdmin(fields, actor = "treasury") {
   const store = await getEconomyStore();
   if (fields.taxType && fields.taxRate !== undefined) {
-    store.taxRates[fields.taxType] = Math.max(0, Number(fields.taxRate || 0));
+    const taxType = cleanText(fields.taxType, 120);
+    const previousRate = Number(store.taxRates[taxType] || 0);
+    const nextRate = Math.max(0, Math.min(1, Number(fields.taxRate || 0)));
+    store.taxRates[taxType] = nextRate;
+    store.taxRateSettings = normalizeTaxRateSettings(store.taxRateSettings || {}, store.taxRates);
+    store.taxRateSettings[taxType] = {
+      enabled: fields.taxEnabled === "on" || fields.taxEnabled === true,
+      lastUpdatedAt: new Date().toISOString(),
+      updatedBy: actor
+    };
+    pushTransaction(store, {
+      fromWalletId: "treasury",
+      toWalletId: "ledger",
+      amount: 0,
+      type: "tax_rate_update",
+      reason: `${taxType}: ${(previousRate * 100).toFixed(2)}% -> ${(nextRate * 100).toFixed(2)}%`,
+      createdBy: actor,
+      meta: { taxType, previousRate, nextRate, enabled: store.taxRateSettings[taxType].enabled }
+    });
   }
   if (fields.districtId) {
     store.districts = store.districts.map((district) =>

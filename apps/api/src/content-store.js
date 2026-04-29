@@ -208,6 +208,14 @@ function normalizeEconomyStore(economy = {}) {
     ...Object.fromEntries(taxTypes.map((tax) => [tax.id, tax.defaultRate])),
     ...(economy.taxRates || {})
   };
+  const taxRateSettings = Object.fromEntries(taxTypes.map((tax) => {
+    const entry = economy.taxRateSettings?.[tax.id] || {};
+    return [tax.id, {
+      enabled: Object.hasOwn(entry, "enabled") ? Boolean(entry.enabled) : Number(taxRates[tax.id] || 0) > 0,
+      lastUpdatedAt: cleanText(entry.lastUpdatedAt || "", 80),
+      updatedBy: cleanText(entry.updatedBy || "system", 120)
+    }];
+  }));
   const storedDistricts =
     Array.isArray(economy.districts) && economy.districts.length
       ? economy.districts
@@ -218,8 +226,32 @@ function normalizeEconomyStore(economy = {}) {
     ...districtEconomyDefaults.filter((district) => !storedDistrictKeys.has(district.id) && !storedDistrictKeys.has(district.name))
   ];
 
+  const treasury = {
+    id: "treasury",
+    userId: "state-treasury",
+    discordId: "",
+    displayName: "WPU State Treasury",
+    balance: Math.max(0, Number((economy.wallets || []).find((wallet) => wallet.id === "treasury")?.balance || 0)),
+    district: "The Capitol",
+    title: "State Treasury",
+    salary: 0,
+    status: "active",
+    taxStatus: "state account",
+    exempt: true,
+    createdAt: (economy.wallets || []).find((wallet) => wallet.id === "treasury")?.createdAt || new Date().toISOString(),
+    updatedAt: (economy.wallets || []).find((wallet) => wallet.id === "treasury")?.updatedAt || new Date().toISOString()
+  };
+  const autoTax = {
+    enabled: Boolean(economy.autoTax?.enabled),
+    frequency: economy.autoTax?.frequency === "weekly" ? "weekly" : "daily",
+    executionTime: /^\d{2}:\d{2}$/.test(String(economy.autoTax?.executionTime || "")) ? String(economy.autoTax.executionTime) : "09:00",
+    lastRunAt: cleanText(economy.autoTax?.lastRunAt || "", 80),
+    nextRunAt: cleanText(economy.autoTax?.nextRunAt || "", 80),
+    updatedAt: cleanText(economy.autoTax?.updatedAt || "", 80),
+    updatedBy: cleanText(economy.autoTax?.updatedBy || "", 120)
+  };
   return {
-    wallets: Array.isArray(economy.wallets) ? economy.wallets : [],
+    wallets: [treasury, ...(Array.isArray(economy.wallets) ? economy.wallets.filter((wallet) => wallet.id !== "treasury") : [])],
     transactions: Array.isArray(economy.transactions) ? economy.transactions : [],
     marketItems:
       Array.isArray(economy.marketItems) && economy.marketItems.length
@@ -228,6 +260,7 @@ function normalizeEconomyStore(economy = {}) {
     listings: Array.isArray(economy.listings) ? economy.listings : [],
     taxRecords: Array.isArray(economy.taxRecords) ? economy.taxRecords : [],
     taxRates,
+    taxRateSettings,
     districts,
     alerts: Array.isArray(economy.alerts) ? economy.alerts : [],
     raidLogs: Array.isArray(economy.raidLogs) ? economy.raidLogs : [],
@@ -270,6 +303,7 @@ function normalizeEconomyStore(economy = {}) {
     stockTrades: Array.isArray(economy.stockTrades) ? economy.stockTrades : [],
     stockEvents: Array.isArray(economy.stockEvents) ? economy.stockEvents : [],
     stockSettings: { transactionTax: 0.015, transactionFee: 2, ...(economy.stockSettings || {}) },
+    autoTax,
     marketNotices: Array.isArray(economy.marketNotices) ? economy.marketNotices : [],
     bounties: Array.isArray(economy.bounties) ? economy.bounties : []
   };

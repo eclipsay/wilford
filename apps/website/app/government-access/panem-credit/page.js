@@ -20,6 +20,65 @@ export default async function PanemCreditControlPage({ searchParams }) {
   const fullAccess = canAccess(user, "economyControl");
   const securityAccess = canAccess(user, "economySecurity");
   const totalCredits = store.wallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
+  const treasuryWallet = store.wallets.find((wallet) => wallet.id === "treasury");
+  const treasuryTransactions = store.transactions.filter((transaction) => transaction.fromWalletId === "treasury" || transaction.toWalletId === "treasury");
+  const treasuryIncome = treasuryTransactions.filter((transaction) => transaction.toWalletId === "treasury").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const treasurySpending = treasuryTransactions.filter((transaction) => transaction.fromWalletId === "treasury").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const treasuryTaxReceipts = store.taxRecords.filter((record) => record.paidIntoWalletId === "treasury" || record.paidInto === "WPU State Treasury" || record.status === "paid");
+  const treasuryGrants = treasuryTransactions.filter((transaction) => ["grant", "grant_payment", "rebate"].includes(transaction.type));
+  const autoTax = store.autoTax || { enabled: false, frequency: "daily", executionTime: "09:00", lastRunAt: "", nextRunAt: "" };
+  const autoTaxEnabled = Boolean(autoTax.enabled);
+  const formatDateTime = (value) => value ? new Date(value).toLocaleString("en-GB") : "Not recorded";
+  const now = Date.now();
+  const taxCollectedSince = (ms) => store.taxRecords
+    .filter((record) => record.status === "paid" && Date.parse(record.createdAt || 0) >= now - ms)
+    .reduce((sum, record) => sum + Number(record.amount || 0), 0);
+  const taxDescriptions = {
+    income_tax: "Applied to eligible citizen wallet balances during automatic taxation.",
+    trade_tax: "Applied to citizen payments and marketplace purchases.",
+    stock_trade_tax: "Applied to Panem Stock Exchange buy and sell orders.",
+    gambling_winnings_tax: "Applied to gambling winnings before payout.",
+    emergency_state_levy: "Applied during emergency taxation directives.",
+    district_levy: "District-level levy for local production and civic services.",
+    luxury_goods_tax: "Applied to luxury goods and Capitol prestige commerce.",
+    black_market_penalty_tax: "Penalty tax used for detected black market activity.",
+    raid_recovery_fine_rate: "Recovery rate used for MSS raid fines and seizures."
+  };
+  const treasuryTaxNames = {
+    income_tax: "Income Tax",
+    trade_tax: "Marketplace Trade Tax",
+    stock_trade_tax: "Stock Trade Tax",
+    gambling_winnings_tax: "Gambling Winnings Tax",
+    emergency_state_levy: "Emergency Taxation Rate",
+    district_levy: "District Levy",
+    luxury_goods_tax: "Luxury Goods Tax",
+    black_market_penalty_tax: "Black Market Penalty Tax",
+    raid_recovery_fine_rate: "Raid Recovery Fine Rate"
+  };
+  const treasuryTaxIds = [
+    "income_tax",
+    "trade_tax",
+    "stock_trade_tax",
+    "gambling_winnings_tax",
+    "emergency_state_levy",
+    "district_levy",
+    "luxury_goods_tax",
+    "black_market_penalty_tax",
+    "raid_recovery_fine_rate"
+  ];
+  const taxRows = treasuryTaxIds.map((id) => {
+    const tax = taxTypes.find((entry) => entry.id === id) || { id, label: id.replaceAll("_", " ") };
+    const settings = store.taxRateSettings?.[id] || {};
+    return {
+      ...tax,
+      rate: Number(store.taxRates?.[id] || 0),
+      label: treasuryTaxNames[id] || tax.label,
+      enabled: settings.enabled !== false,
+      lastUpdatedAt: settings.lastUpdatedAt || "",
+      updatedBy: settings.updatedBy || "system",
+      description: taxDescriptions[id] || "Treasury-controlled tax rate."
+    };
+  });
   const taxesPaid = store.taxRecords
     .filter((record) => record.status === "paid")
     .reduce((sum, record) => sum + Number(record.amount || 0), 0);
@@ -70,6 +129,12 @@ export default async function PanemCreditControlPage({ searchParams }) {
             <p>The Panem Credit record has been saved.</p>
           </section>
         ) : null}
+        {params?.error ? (
+          <section className="application-notice application-notice--error">
+            <strong>Update Rejected</strong>
+            <p>{params.error === "tax-rate" ? "Confirm the tax change and enter a percentage from 0 to 100." : "The requested treasury update could not be saved."}</p>
+          </section>
+        ) : null}
 
         <section className="government-dashboard-grid">
           <article className="government-status-panel">
@@ -80,7 +145,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
           <article className="government-status-panel">
             <p className="eyebrow">Tax Reports</p>
             <h2>{formatCredits(taxesPaid)}</h2>
-            <p>Taxation sustains the Union.</p>
+            <p>All collected taxes are deposited into the WPU State Treasury.</p>
           </article>
           <article className="government-status-panel">
             <p className="eyebrow">Trade Volume</p>
@@ -97,6 +162,107 @@ export default async function PanemCreditControlPage({ searchParams }) {
             <h2>{wantedWallets.length}</h2>
             <p>{formatCredits(frozenAssets)} in frozen assets.</p>
           </article>
+        </section>
+
+        <section className="panel government-user-panel">
+          <p className="eyebrow">State Treasury</p>
+          <h2>{treasuryWallet?.displayName || "WPU State Treasury"}: {formatCredits(treasuryWallet?.balance || 0)}</h2>
+          <p>All collected taxes are deposited into the WPU State Treasury.</p>
+          <div className="metric-grid">
+            <span><strong>{formatCredits(treasuryIncome)}</strong> Income history</span>
+            <span><strong>{formatCredits(treasurySpending)}</strong> Spending history</span>
+            <span><strong>{formatCredits(treasuryTaxReceipts.reduce((sum, tax) => sum + Number(tax.amount || 0), 0))}</strong> Tax receipts</span>
+            <span><strong>{formatCredits(treasuryGrants.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0))}</strong> Grants paid</span>
+            <span><strong>{treasuryTransactions.filter((transaction) => transaction.fromWalletId === "treasury").length}</strong> Transfers made</span>
+            <span><strong>{formatCredits(taxCollectedSince(24 * 60 * 60 * 1000))}</strong> Tax today</span>
+            <span><strong>{formatCredits(taxCollectedSince(7 * 24 * 60 * 60 * 1000))}</strong> Tax this week</span>
+            <span><strong>{formatCredits(taxCollectedSince(30 * 24 * 60 * 60 * 1000))}</strong> Tax this month</span>
+          </div>
+          {fullAccess ? (
+            <>
+              <div className="treasury-tax-overview">
+                <div className="panel__header">
+                  <div>
+                    <p className="eyebrow">Tax Rates</p>
+                    <h3>Ministry of Credit & Records Tax Control</h3>
+                  </div>
+                  <strong className={`auto-tax-status ${autoTaxEnabled ? "auto-tax-status--enabled" : "auto-tax-status--disabled"}`}>{autoTaxEnabled ? "🟢 ENABLED" : "🔴 DISABLED"}</strong>
+                </div>
+                <p>Auto Tax automatically deducts applicable taxes from citizens at scheduled intervals.</p>
+                <div className="metric-grid">
+                  <span><strong>{formatDateTime(autoTax.lastRunAt)}</strong> Last Auto Tax Run</span>
+                  <span><strong>{autoTaxEnabled ? formatDateTime(autoTax.nextRunAt) : "Auto Tax is currently inactive."}</strong> Next Auto Tax Run</span>
+                </div>
+                <div className="treasury-table-wrap">
+                  <table className="treasury-tax-table">
+                    <thead>
+                      <tr>
+                        <th>Tax name</th>
+                        <th>Current rate</th>
+                        <th>Status</th>
+                        <th>Last updated</th>
+                        <th>Updated by</th>
+                        <th>Description</th>
+                        <th>Edit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {taxRows.map((tax) => (
+                        <tr key={tax.id}>
+                          <td>{tax.label}</td>
+                          <td>{(tax.rate * 100).toFixed(2)}%</td>
+                          <td><span className={`auto-tax-status ${tax.enabled ? "auto-tax-status--enabled" : "auto-tax-status--disabled"}`}>{tax.enabled ? "ENABLED" : "DISABLED"}</span></td>
+                          <td>{formatDateTime(tax.lastUpdatedAt)}</td>
+                          <td>{tax.updatedBy}</td>
+                          <td>{tax.description}</td>
+                          <td>
+                            <form action="/government-access/panem-credit/action" className="treasury-tax-edit-form" method="post">
+                              <input name="intent" type="hidden" value="set-tax" />
+                              <input name="taxType" type="hidden" value={tax.id} />
+                              <label className="public-application-field"><span>Percent</span><input defaultValue={(tax.rate * 100).toFixed(2)} max="100" min="0" name="taxRatePercent" step="0.01" type="number" /></label>
+                              <input name="taxRate" type="hidden" value={tax.rate} />
+                              <label className="public-application-toggle"><input defaultChecked={tax.enabled} name="taxEnabled" type="checkbox" /><span>Enabled</span></label>
+                              <label className="public-application-toggle"><input name="confirmTaxRate" required type="checkbox" /><span>Confirm save</span></label>
+                              <button className="button button--solid-site" type="submit">Edit</button>
+                            </form>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="panem-ledger-layout">
+                <form action="/government-access/panem-credit/action" className="public-application-form auto-tax-control" method="post">
+                  <input name="intent" type="hidden" value={autoTaxEnabled ? "auto-tax-disable" : "auto-tax-enable"} />
+                  <h3>Auto Tax Control</h3>
+                  <div className="public-application-grid public-application-grid--three">
+                    <label className="public-application-field"><span>Frequency</span><select defaultValue={autoTax.frequency || "daily"} name="frequency"><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
+                    <label className="public-application-field"><span>Execution time</span><input defaultValue={autoTax.executionTime || "09:00"} name="executionTime" type="time" /></label>
+                  </div>
+                  <label className="public-application-toggle"><input name="confirmAutoTax" required type="checkbox" /><span>{autoTaxEnabled ? "Are you sure you want to disable automatic taxation?" : "Are you sure you want to enable automatic taxation?"}</span></label>
+                  <button className={autoTaxEnabled ? "button button--danger-site" : "button button--solid-site"} type="submit">{autoTaxEnabled ? "Disable Auto Tax" : "Enable Auto Tax"}</button>
+                </form>
+                <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
+                  <input name="intent" type="hidden" value="run-tax" />
+                  <h3>Manual Run Tax</h3>
+                  <p>Manual run immediately applies income tax to all eligible, non-exempt, non-frozen wallets.</p>
+                  <button className="button button--danger-site" type="submit">Manual Run Tax</button>
+                </form>
+              </div>
+              <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
+                <input name="intent" type="hidden" value="treasury-transfer" />
+                <h3>Treasury Personal Transfer</h3>
+                <div className="public-application-grid public-application-grid--three">
+                  <label className="public-application-field"><span>Recipient</span><select name="toWalletId">{store.wallets.filter((wallet) => wallet.id !== "treasury").map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.displayName}</option>)}</select></label>
+                  <label className="public-application-field"><span>Amount</span><input min="1" name="amount" required type="number" /></label>
+                  <label className="public-application-field"><span>Reason required</span><input name="reason" required /></label>
+                </div>
+                <label className="public-application-toggle"><input name="confirmTreasuryTransfer" required type="checkbox" /><span>Confirm State Treasury funds are being moved to a personal account</span></label>
+                <button className="button button--danger-site" type="submit">Transfer Treasury Funds</button>
+              </form>
+            </>
+          ) : null}
         </section>
 
         <section className="panel government-user-panel">
@@ -347,7 +513,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
                       <span>
                         {taxLabel(tax.taxType)} / {tax.status}
                         <br />
-                        {tax.reason || tax.createdBy || "Treasury record"}
+                        {tax.reason || tax.createdBy || "Treasury record"} / paid into: {tax.paidInto || "WPU State Treasury"}
                         {tax.createdAt ? ` / ${new Date(tax.createdAt).toLocaleString("en-GB")}` : ""}
                       </span>
                       <strong>{formatCredits(tax.amount)}</strong>
@@ -356,26 +522,6 @@ export default async function PanemCreditControlPage({ searchParams }) {
                   {!selectedTaxes.length ? <li><span>No tax records for this wallet.</span><strong>0</strong></li> : null}
                 </ul>
               </article>
-            </div>
-          </section>
-        ) : null}
-
-        {fullAccess ? (
-          <section className="panel government-user-panel">
-            <p className="eyebrow">Tax Policy</p>
-            <h2>Set Rates / Run Automatic Taxation</h2>
-            <div className="panem-ledger-layout">
-              <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
-                <input name="intent" type="hidden" value="set-tax" />
-                <label className="public-application-field"><span>Tax type</span><select name="taxType">{taxTypes.map((tax) => <option key={tax.id} value={tax.id}>{tax.label}</option>)}</select></label>
-                <label className="public-application-field"><span>Rate decimal</span><input defaultValue="0.05" max="1" min="0" name="taxRate" step="0.01" type="number" /></label>
-                <button className="button button--solid-site" type="submit">Set Tax Rate</button>
-              </form>
-              <form action="/government-access/panem-credit/action" className="public-application-form" method="post">
-                <input name="intent" type="hidden" value="run-tax" />
-                <p>Automatic taxation applies income tax to all non-exempt, non-frozen wallets.</p>
-                <button className="button button--danger-site" type="submit">Run Automatic Taxation</button>
-              </form>
             </div>
           </section>
         ) : null}
@@ -460,7 +606,7 @@ export default async function PanemCreditControlPage({ searchParams }) {
               <ul className="government-mini-list">
                 {store.taxRecords.slice(0, 20).map((tax) => (
                   <li key={tax.id}>
-                    <span>{taxLabel(tax.taxType)} / {tax.status}</span>
+                    <span>{taxLabel(tax.taxType)} / {tax.status} / paid into: {tax.paidInto || "WPU State Treasury"}</span>
                     <strong>{formatCredits(tax.amount)}</strong>
                   </li>
                 ))}

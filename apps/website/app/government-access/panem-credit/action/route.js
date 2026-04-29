@@ -21,7 +21,8 @@ import {
   markWalletWanted,
   pardonWallet,
   triggerEconomyEvent,
-  triggerRandomEconomyEvent
+  triggerRandomEconomyEvent,
+  updateAutoTaxSettings
 } from "../../../../lib/panem-credit";
 import { updateCitizenRecord } from "../../../../lib/citizen-state";
 
@@ -134,6 +135,21 @@ export const POST = safeAction("government-access/panem-credit/action", "/govern
     });
   }
 
+  if (intent === "treasury-transfer") {
+    const reason = String(formData.get("reason") || "").trim();
+    if (!reason || formData.get("confirmTreasuryTransfer") !== "on") {
+      return redirectTo(request, "/government-access/panem-credit?error=treasury-confirm");
+    }
+    await transferCredits({
+      fromWalletId: "treasury",
+      toWalletId: String(formData.get("toWalletId") || "").trim(),
+      amount: formData.get("amount"),
+      reason,
+      type: "treasury_personal_transfer",
+      actor: actorName
+    });
+  }
+
   if (intent === "grant") {
     await treasuryPayment({
       walletId: String(formData.get("walletId") || "").trim(),
@@ -178,7 +194,23 @@ export const POST = safeAction("government-access/panem-credit/action", "/govern
     await runAutomaticTaxation(actorName);
   }
 
-  if (intent === "set-tax" || intent === "district" || intent === "item") {
+  if (intent === "auto-tax-enable" || intent === "auto-tax-disable") {
+    if (formData.get("confirmAutoTax") !== "on") {
+      return redirectTo(request, "/government-access/panem-credit?error=auto-tax-confirm");
+    }
+    await updateAutoTaxSettings(Object.fromEntries(formData.entries()), actorName);
+  }
+
+  if (intent === "set-tax") {
+    const percent = formData.get("taxRatePercent");
+    const rate = percent !== null && percent !== "" ? Number(percent) / 100 : Number(formData.get("taxRate") || 0);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 1 || formData.get("confirmTaxRate") !== "on") {
+      return redirectTo(request, "/government-access/panem-credit?error=tax-rate");
+    }
+    await updateEconomyAdmin({ ...Object.fromEntries(formData.entries()), taxRate: rate }, actorName);
+  }
+
+  if (intent === "district" || intent === "item") {
     await updateEconomyAdmin(Object.fromEntries(formData.entries()), actorName);
   }
 

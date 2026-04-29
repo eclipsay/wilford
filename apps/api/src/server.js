@@ -185,6 +185,7 @@ app.get("/api/economy", async (_req, res) => {
       marketItems: economy.marketItems,
       listings: economy.listings.filter((listing) => listing.status === "active"),
       taxRates: economy.taxRates,
+      taxRateSettings: economy.taxRateSettings,
       districts: economy.districts,
       events: economy.events,
       inventoryItems: economy.inventoryItems,
@@ -196,6 +197,7 @@ app.get("/api/economy", async (_req, res) => {
       stockCompanies: economy.stockCompanies,
       stockEvents: economy.stockEvents,
       stockSettings: economy.stockSettings,
+      autoTax: economy.autoTax,
       lootboxAllocationDate: economy.lootboxAllocationDate,
       globalLootboxesOpenedToday: economy.globalLootboxesOpenedToday,
       perUserLootboxesOpenedToday: economy.perUserLootboxesOpenedToday,
@@ -664,6 +666,7 @@ app.post("/api/admin/economy-wallet-patch", requireAdmin, async (req, res) => {
       "lootboxAllocationDate",
       "globalLootboxesOpenedToday",
       "perUserLootboxesOpenedToday",
+      "autoTax",
       "gamblingJackpot"
     ]) {
       if (Object.hasOwn(patch, key)) economy[key] = patch[key];

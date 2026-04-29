@@ -78,7 +78,7 @@ export const publicBotCommands = [
     usage: "/buy grain-sack 2"
   },
   {
-    name: "/grant, /issue-grant, /fine, /freeze-wallet, /unfreeze-wallet, /wanted, /clear, /trigger-event, /set-tax, /run-tax, /economy-report",
+    name: "/grant, /issue-grant, /fine, /freeze-wallet, /unfreeze-wallet, /wanted, /clear, /trigger-event, /set-tax, /auto-tax, /run-tax, /economy-report",
     access: "Economy admins",
     description: "Ministry and MSS command set for grants, fines, freezes, warrants, events, rates, taxation, and reports.",
     usage: "/economy-report"

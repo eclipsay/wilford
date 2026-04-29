@@ -98,7 +98,7 @@ export async function SiteLayout({ children }) {
                   >
                     <span className="notification-menu__type" aria-hidden="true">{iconForAlert(alert.type)}</span>
                     <span>
-                      <strong>{alert.type || "Official Notice"}</strong>
+                      <strong>{alert.title || alert.type || "Official Notice"}</strong>
                       <small>{alert.message || alert.actionTaken || "Official notice issued."}</small>
                       <em>{formatAlertTime(alert.createdAt)}</em>
                     </span>

@@ -431,6 +431,7 @@ function normalizeCitizenAlert(entry = {}) {
     citizenId: cleanText(entry.citizenId || "", 120),
     citizenName: cleanText(entry.citizenName || "", 180),
     district: cleanText(entry.district || "", 80),
+    title: cleanText(entry.title || "", 180),
     type,
     issuingAuthority: cleanText(entry.issuingAuthority || "Government", 160),
     severity: cleanText(entry.severity || "standard", 40),

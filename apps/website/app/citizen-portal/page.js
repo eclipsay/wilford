@@ -387,7 +387,7 @@ export default async function CitizenPortalPage({ searchParams }) {
                 <div className="panel__header">
                   <div>
                     <p className="eyebrow">{alert.type}</p>
-                    <h3>{alert.issuingAuthority}</h3>
+                    <h3>{alert.title || alert.issuingAuthority}</h3>
                   </div>
                   <span className="court-role-badge">{alert.readByCitizen ? "History" : "Unread"}</span>
                 </div>

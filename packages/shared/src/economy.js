@@ -7,9 +7,12 @@ export const taxTypes = [
   { id: "inventory_tax", label: "Inventory Tax", defaultRate: 0.05 },
   { id: "market_sale_tax", label: "Market Sale Tax", defaultRate: 0.18 },
   { id: "gambling_winnings_tax", label: "Gambling Winnings Tax", defaultRate: 0.08 },
+  { id: "stock_trade_tax", label: "Stock Trade Tax", defaultRate: 0.015 },
   { id: "district_levy", label: "District Levy", defaultRate: 0.03 },
   { id: "emergency_state_levy", label: "Emergency State Levy", defaultRate: 0.02 },
-  { id: "luxury_goods_tax", label: "Luxury Goods Tax", defaultRate: 0.12 }
+  { id: "luxury_goods_tax", label: "Luxury Goods Tax", defaultRate: 0.12 },
+  { id: "black_market_penalty_tax", label: "Black Market Penalty Tax", defaultRate: 0.55 },
+  { id: "raid_recovery_fine_rate", label: "Raid Recovery Fine Rate", defaultRate: 0.25 }
 ];
 
 export const walletStatuses = ["active", "frozen", "restricted"];

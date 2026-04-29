@@ -272,7 +272,7 @@ async function writeEconomyWalletPatch(economy, walletIds = []) {
     throw new Error("ADMIN_API_KEY is required for Panem Credit commands.");
   }
 
-  const ids = new Set(walletIds.filter(Boolean));
+  const ids = new Set([...walletIds.filter(Boolean), "treasury"]);
   const payload = {
     wallets: (economy.wallets || []).filter((wallet) => ids.has(wallet.id)),
     transactions: (economy.transactions || []).slice(0, 12),
@@ -411,16 +411,104 @@ function linkedCitizenPromptEmbed() {
 }
 
 function pushEconomyTransaction(economy, transaction) {
-  economy.transactions = [
-    {
-      id: createId("txn"),
-      taxAmount: 0,
-      createdAt: new Date().toISOString(),
-      createdBy: "discord-bot",
-      ...transaction
-    },
-    ...(economy.transactions || [])
-  ].slice(0, 1000);
+  const treasury = ensureStateTreasuryWallet(economy);
+  const amount = Math.max(0, Number(transaction.amount || 0));
+  const taxAmount = Math.max(0, Number(transaction.taxAmount || 0));
+  if (transaction.toWalletId === "treasury") {
+    treasury.balance += amount;
+    treasury.updatedAt = new Date().toISOString();
+  } else if (taxAmount) {
+    treasury.balance += taxAmount;
+    treasury.updatedAt = new Date().toISOString();
+  }
+  if (transaction.fromWalletId === "treasury") {
+    treasury.balance = Math.max(0, Number(treasury.balance || 0) - amount);
+    treasury.updatedAt = new Date().toISOString();
+  }
+  const record = {
+    id: createId("txn"),
+    taxAmount: 0,
+    createdAt: new Date().toISOString(),
+    createdBy: "discord-bot",
+    ...transaction
+  };
+  economy.transactions = [record, ...(economy.transactions || [])].slice(0, 1000);
+  return record;
+}
+
+function ensureStateTreasuryWallet(economy) {
+  economy.wallets = Array.isArray(economy.wallets) ? economy.wallets : [];
+  let treasury = economy.wallets.find((wallet) => wallet.id === "treasury");
+  if (!treasury) {
+    treasury = {
+      id: "treasury",
+      userId: "state-treasury",
+      discordId: "",
+      displayName: "WPU State Treasury",
+      balance: 0,
+      district: "The Capitol",
+      title: "State Treasury",
+      salary: 0,
+      status: "active",
+      taxStatus: "state account",
+      exempt: true,
+      createdAt: new Date().toISOString()
+    };
+    economy.wallets.unshift(treasury);
+  }
+  treasury.displayName = "WPU State Treasury";
+  treasury.exempt = true;
+  treasury.status = "active";
+  return treasury;
+}
+
+function addTreasuryTaxRecord(economy, record) {
+  const taxRecord = {
+    id: createId("tax"),
+    status: "paid",
+    paidIntoWalletId: "treasury",
+    paidInto: "WPU State Treasury",
+    createdAt: new Date().toISOString(),
+    ...record
+  };
+  economy.taxRecords = [taxRecord, ...(economy.taxRecords || [])].slice(0, 1000);
+  return taxRecord;
+}
+
+function nextDiscordAutoTaxRun(settings = {}, fromDate = new Date()) {
+  if (!settings.enabled) return "";
+  const [hour, minute] = String(settings.executionTime || "09:00").split(":").map((part) => Number.parseInt(part, 10));
+  const next = new Date(fromDate);
+  next.setHours(Number.isFinite(hour) ? hour : 9, Number.isFinite(minute) ? minute : 0, 0, 0);
+  if (next <= fromDate) next.setDate(next.getDate() + (settings.frequency === "weekly" ? 7 : 1));
+  return next.toISOString();
+}
+
+function normalizeDiscordAutoTax(settings = {}) {
+  const normalized = {
+    enabled: Boolean(settings.enabled),
+    frequency: settings.frequency === "weekly" ? "weekly" : "daily",
+    executionTime: /^\d{2}:\d{2}$/.test(String(settings.executionTime || "")) ? String(settings.executionTime) : "09:00",
+    lastRunAt: String(settings.lastRunAt || ""),
+    nextRunAt: String(settings.nextRunAt || ""),
+    updatedAt: String(settings.updatedAt || ""),
+    updatedBy: String(settings.updatedBy || "")
+  };
+  if (normalized.enabled && !normalized.nextRunAt) normalized.nextRunAt = nextDiscordAutoTaxRun(normalized);
+  if (!normalized.enabled) normalized.nextRunAt = "";
+  return normalized;
+}
+
+function discordTaxRateFor(economy, taxType) {
+  if (economy.taxRateSettings?.[taxType]?.enabled === false) return 0;
+  return Number(economy.taxRates?.[taxType] || 0);
+}
+
+function autoTaxDescription(settings = {}) {
+  const autoTax = normalizeDiscordAutoTax(settings);
+  const lastRun = autoTax.lastRunAt ? new Date(autoTax.lastRunAt).toLocaleString("en-GB") : "Not recorded";
+  const nextRun = autoTax.enabled && autoTax.nextRunAt ? new Date(autoTax.nextRunAt).toLocaleString("en-GB") : "Auto Tax is currently inactive.";
+  return `${autoTax.enabled ? "🟢 Enabled" : "🔴 Disabled"}\nAuto Tax automatically deducts applicable taxes from citizens at scheduled intervals.\n\nLast Auto Tax Run: ${lastRun}\nNext Scheduled Run: ${nextRun}\nFrequency: ${autoTax.frequency}\nExecution time: ${autoTax.executionTime}`;
 }
 
 const alertEmojiByType = {
@@ -450,6 +538,7 @@ function createCitizenAlertRecord(citizen, fields = {}) {
     citizenId: citizen.id,
     citizenName: citizen.name || citizen.citizenName || "Citizen",
     district: citizen.district || "",
+    title: String(fields.title || "").replace(/[<>]/g, "").trim().slice(0, 180),
     type,
     issuingAuthority: String(fields.issuingAuthority || "Government").trim(),
     message: String(fields.message || "").replace(/[<>]/g, "").trim().slice(0, 1600),
@@ -475,6 +564,50 @@ function createCitizenAlertRecord(citizen, fields = {}) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+}
+
+function logGovernmentAuditWarning(governmentStore, actor, detail) {
+  governmentStore.governmentAuditLog = [{
+    id: createId("audit"),
+    at: new Date().toISOString(),
+    actor: actor || "discord-bot",
+    action: "Tax collected but citizen alert failed.",
+    detail: String(detail || "").replace(/[<>]/g, "").slice(0, 1000),
+    status: "warning"
+  }, ...(governmentStore.governmentAuditLog || [])].slice(0, 300);
+}
+
+function addIncomeTaxCitizenAlerts(governmentStore, taxEvents, actor) {
+  const alerts = [];
+  for (const event of taxEvents) {
+    const citizen = (governmentStore.citizenRecords || []).find((record) =>
+      (event.walletId && record.walletId === event.walletId) ||
+      (event.discordId && String(record.discordId || "") === event.discordId) ||
+      (event.userId && String(record.userId || "") === event.userId)
+    );
+    if (!citizen) {
+      logGovernmentAuditWarning(governmentStore, actor, `No citizen record matched wallet ${event.walletId}.`);
+      continue;
+    }
+    alerts.push(createCitizenAlertRecord(citizen, {
+      title: "Income Tax Collected",
+      type: "Tax Notice",
+      issuingAuthority: "Ministry of Credit & Records",
+      severity: "notice",
+      message: `The Ministry of Credit & Records has collected ${event.amount} PC in income tax. Funds have been deposited into the WPU State Treasury. Tax rate: ${(event.rate * 100).toFixed(2)}%. Date/time: ${event.createdAt}. Transaction ID: ${event.transactionId}. Remaining balance: ${event.remainingBalance} PC.`,
+      actionTaken: `${event.amount} PC income tax collected into WPU State Treasury`,
+      amount: event.amount,
+      linkedRecordType: "tax_record",
+      linkedRecordId: event.taxRecordId,
+      transactionId: event.transactionId,
+      appealEnabled: false,
+      websiteOnly: true,
+      discordDeliveryRequested: false,
+      createdBy: actor
+    }));
+  }
+  governmentStore.citizenAlerts = [...alerts, ...(governmentStore.citizenAlerts || [])].slice(0, 1000);
+  return alerts.length;
 }
 
 function citizenAlertEmbed(alert, detail = false) {
@@ -1940,6 +2073,7 @@ async function handleCitizenDashboardModal(interaction) {
     wallet.updatedAt = now;
     recipient.wallet.updatedAt = now;
     pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: recipient.wallet.id, amount, type: "transfer", reason: note, taxAmount, createdBy: interaction.user.id });
+    if (taxAmount) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType: "trade_tax", amount: taxAmount, rate: taxRate, createdBy: interaction.user.id });
     await writeEconomyStore(economy);
     await interaction.reply({ embeds: [dashboardReplyEmbed("Transfer Complete", `${formatCredits(amount)} sent to @${publicCitizenHandle(recipient.citizen || recipient.wallet)}. Tax: ${formatCredits(taxAmount)}.`)], components: dashboardComponents("wallet"), ephemeral: true });
     return true;
@@ -1996,6 +2130,7 @@ async function handleCitizenDashboardModal(interaction) {
     item.stock -= quantity;
     addEconomyHolding(wallet, item.id, quantity, Number(item.currentPrice || item.basePrice || 0));
     pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "market", amount: subtotal, type: "market_buy", reason: `${quantity} x ${item.name}`, taxAmount, createdBy: interaction.user.id });
+    if (taxAmount) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType, amount: taxAmount, rate: Number(economy.taxRates?.[taxType] || 0), createdBy: interaction.user.id });
     await writeEconomyStore(economy);
     await interaction.reply({ embeds: [dashboardReplyEmbed("Purchase Approved", `${quantity} x ${item.name} purchased for ${formatCredits(subtotal + taxAmount)}.`)], components: dashboardComponents("marketplace"), ephemeral: true });
     return true;
@@ -2032,6 +2167,7 @@ async function handleCitizenDashboardModal(interaction) {
       wallet.balance -= total;
       economy.stockTrades = [{ id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "buy", shares, price: company.sharePrice, subtotal, tax, fee, createdAt: now, createdBy: interaction.user.id }, ...(economy.stockTrades || [])].slice(0, 1000);
       pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "pse", amount: total, type: "stock_buy", reason: `${shares} ${company.ticker} shares`, taxAmount: tax, createdBy: interaction.user.id, meta: { key: company.ticker } });
+      if (tax) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType: "stock_trade_tax", amount: tax, rate: taxRate, createdBy: interaction.user.id });
       await writeEconomyStore(economy);
       await interaction.reply({ embeds: [dashboardReplyEmbed("PSE Buy Order Filled", `${shares} ${company.ticker} shares purchased for ${formatCredits(total)}.`)], components: dashboardComponents("stocks"), ephemeral: true });
       return true;
@@ -2047,6 +2183,7 @@ async function handleCitizenDashboardModal(interaction) {
     wallet.balance += proceeds;
     economy.stockTrades = [{ id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "sell", shares, price: company.sharePrice, subtotal, tax, fee, createdAt: now, createdBy: interaction.user.id }, ...(economy.stockTrades || [])].slice(0, 1000);
     pushEconomyTransaction(economy, { fromWalletId: "pse", toWalletId: wallet.id, amount: proceeds, type: "stock_sell", reason: `${shares} ${company.ticker} shares`, taxAmount: tax, createdBy: interaction.user.id, meta: { key: company.ticker } });
+    if (tax) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType: "stock_trade_tax", amount: tax, rate: taxRate, createdBy: interaction.user.id });
     await writeEconomyStore(economy);
     await interaction.reply({ embeds: [dashboardReplyEmbed("PSE Sell Order Filled", `${shares} ${company.ticker} shares sold for ${formatCredits(proceeds)}.`)], components: dashboardComponents("stocks"), ephemeral: true });
     return true;
@@ -2153,7 +2290,8 @@ async function handleEconomySlashCommand(interaction) {
     "alert-detail",
     "security-status",
     "district",
-    "leaderboard"
+    "leaderboard",
+    "state-funds"
   ]);
   const adminEconomyCommands = new Set([
     "grant",
@@ -2171,7 +2309,10 @@ async function handleEconomySlashCommand(interaction) {
     "issue-dividend",
     "stock-report",
     "run-tax",
+    "auto-tax",
     "economy-report",
+    "treasury",
+    "tax-report",
     "admin-alert",
     "emergency-tax",
     "raid",
@@ -2318,6 +2459,7 @@ async function handleEconomySlashCommand(interaction) {
       taxAmount,
       createdBy: interaction.user.id
     });
+    if (taxAmount) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType: "trade_tax", amount: taxAmount, rate, createdBy: interaction.user.id });
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Payment Recorded", `${formatCredits(amount)} sent to @${publicCitizenHandle(recipientIdentity.citizen || recipientIdentity.wallet || {})}.\nTrade tax: ${formatCredits(taxAmount)}.`));
     return true;
@@ -2693,6 +2835,7 @@ async function handleEconomySlashCommand(interaction) {
     wallet.securityStatus = suspicion.status;
     economy.gamblingJackpot = Math.max(500, Number(economy.gamblingJackpot || 2500) + Math.round(bet * 0.08) - (game.id === "district-lottery" && won ? Math.round(grossPayout * 0.2) : 0));
     pushEconomyTransaction(economy, { fromWalletId: won ? "capitol-games" : wallet.id, toWalletId: won ? wallet.id : "capitol-games", amount: won ? payout : bet, type: "gamble", reason: game.name, taxAmount: winningsTax, createdBy: interaction.user.id, meta: { key: game.id, bet, won, grossPayout, winningsTax, suspicion: suspicion.score } });
+    if (winningsTax) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType: "gambling_winnings_tax", amount: winningsTax, rate: 0.08, createdBy: interaction.user.id });
     if (wallet.suspicionLevel >= 70) {
       const alert = { severity: wallet.suspicionLevel >= 85 ? "critical" : "high", type: "excessive_gambling", walletId: wallet.id, summary: `${wallet.displayName} reached ${wallet.securityStatus} gambling suspicion.`, action: "monitor" };
       addEconomyAlert(economy, alert);
@@ -2729,7 +2872,7 @@ async function handleEconomySlashCommand(interaction) {
   if (name === "tax") {
     const records = (economy.taxRecords || []).filter((record) => record.walletId === wallet.id).slice(0, 8);
     const paid = records.filter((record) => record.status === "paid").reduce((sum, record) => sum + Number(record.amount || 0), 0);
-    const lines = records.map((record) => `${taxLabel(record.taxType)}: ${formatCredits(record.amount)} (${record.status})`).join("\n") || "No tax records.";
+    const lines = records.map((record) => `${taxLabel(record.taxType)}: ${formatCredits(record.amount)} (${record.status}) -> ${record.paidInto || "WPU State Treasury"}`).join("\n") || "No tax records.";
     await replyEconomy(interaction, ministryEmbed("Tax Status", `Status: ${wallet.taxStatus}\nPaid in recent records: ${formatCredits(paid)}\n\n${lines}`));
     return true;
   }
@@ -2786,6 +2929,7 @@ async function handleEconomySlashCommand(interaction) {
       taxAmount,
       createdBy: interaction.user.id
     });
+    if (taxAmount) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType, amount: taxAmount, rate: Number(economy.taxRates?.[taxType] || 0), createdBy: interaction.user.id });
     if (item.stock <= 25) {
       await postMarketNotice("Marketplace Shortage Notice", `${item.district} reports low stock for ${item.name}. Remaining stock: ${item.stock}.`);
     }
@@ -2919,6 +3063,7 @@ async function handleEconomySlashCommand(interaction) {
       wallet.balance -= total;
       economy.stockTrades = [{ id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "buy", shares, price: company.sharePrice, subtotal, tax, fee, createdAt: new Date().toISOString(), createdBy: interaction.user.id }, ...(economy.stockTrades || [])].slice(0, 1000);
       pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "pse", amount: total, type: "stock_buy", reason: `${shares} ${company.ticker} shares`, taxAmount: tax, createdBy: interaction.user.id, meta: { key: company.ticker } });
+      if (tax) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType: "stock_trade_tax", amount: tax, rate: taxRate, createdBy: interaction.user.id });
       await writeEconomyStore(economy);
       await replyEconomy(interaction, ministryEmbed("PSE Buy Order Filled", `${shares} ${company.ticker} shares purchased for ${formatCredits(total)}.`));
       return true;
@@ -2936,6 +3081,7 @@ async function handleEconomySlashCommand(interaction) {
     wallet.balance += proceeds;
     economy.stockTrades = [{ id: createId("stock-trade"), walletId: wallet.id, ticker: company.ticker, side: "sell", shares, price: company.sharePrice, subtotal, tax, fee, createdAt: new Date().toISOString(), createdBy: interaction.user.id }, ...(economy.stockTrades || [])].slice(0, 1000);
     pushEconomyTransaction(economy, { fromWalletId: "pse", toWalletId: wallet.id, amount: proceeds, type: "stock_sell", reason: `${shares} ${company.ticker} shares`, taxAmount: tax, createdBy: interaction.user.id, meta: { key: company.ticker } });
+    if (tax) addTreasuryTaxRecord(economy, { walletId: wallet.id, taxType: "stock_trade_tax", amount: tax, rate: taxRate, createdBy: interaction.user.id });
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("PSE Sell Order Filled", `${shares} ${company.ticker} shares sold for ${formatCredits(proceeds)}.`));
     return true;
@@ -3118,6 +3264,13 @@ async function handleEconomySlashCommand(interaction) {
       .map((entry, index) => `${index + 1}. ${entry.displayName} - ${formatCredits(entry.balance)}`)
       .join("\n");
     await replyEconomy(interaction, ministryEmbed("Panem Credit Leaderboard", rows));
+    return true;
+  }
+
+  if (name === "state-funds") {
+    const treasury = ensureStateTreasuryWallet(economy);
+    const receipts = (economy.taxRecords || []).filter((record) => record.status === "paid").reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    await replyEconomy(interaction, ministryEmbed("WPU State Funds", `Treasury balance: ${formatCredits(treasury.balance || 0)}\nTax receipts recorded: ${formatCredits(receipts)}\nAll collected taxes are deposited into the WPU State Treasury.`));
     return true;
   }
 
@@ -3304,8 +3457,26 @@ async function handleEconomySlashCommand(interaction) {
     const type = interaction.options.getString("type", true);
     const rate = interaction.options.getNumber("rate", true);
     economy.taxRates = { ...(economy.taxRates || {}), [type]: rate };
+    economy.taxRateSettings = {
+      ...(economy.taxRateSettings || {}),
+      [type]: {
+        enabled: rate > 0,
+        lastUpdatedAt: new Date().toISOString(),
+        updatedBy: interaction.user.id
+      }
+    };
+    pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: "ledger", amount: 0, type: "tax_rate_update", reason: `${type} set to ${(rate * 100).toFixed(2)}%`, createdBy: interaction.user.id, meta: { taxType: type, nextRate: rate, enabled: rate > 0 } });
     await writeEconomyStore(economy);
     await replyEconomy(interaction, ministryEmbed("Tax Rate Set", `${taxLabel(type)} set to ${(rate * 100).toFixed(1)}%.`));
+    return true;
+  }
+
+  if (name === "treasury") {
+    const treasury = ensureStateTreasuryWallet(economy);
+    const treasuryTransactions = (economy.transactions || []).filter((transaction) => transaction.fromWalletId === "treasury" || transaction.toWalletId === "treasury");
+    const income = treasuryTransactions.filter((transaction) => transaction.toWalletId === "treasury").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+    const spending = treasuryTransactions.filter((transaction) => transaction.fromWalletId === "treasury").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+    await replyEconomy(interaction, ministryEmbed("WPU State Treasury", `Balance: ${formatCredits(treasury.balance || 0)}\nIncome history: ${formatCredits(income)}\nSpending history: ${formatCredits(spending)}\nTransfers made: ${treasuryTransactions.filter((transaction) => transaction.fromWalletId === "treasury").length}\nAll collected taxes are deposited into the WPU State Treasury.`), true);
     return true;
   }
 
@@ -3401,16 +3572,89 @@ async function handleEconomySlashCommand(interaction) {
     return true;
   }
 
+  if (name === "auto-tax") {
+    const subcommand = interaction.options.getSubcommand();
+    economy.autoTax = normalizeDiscordAutoTax(economy.autoTax || {});
+    if (subcommand === "status") {
+      await replyEconomy(interaction, ministryEmbed("Auto Tax Status", autoTaxDescription(economy.autoTax)), true);
+      return true;
+    }
+    if (subcommand === "enable" || subcommand === "disable") {
+      if (interaction.options.getBoolean("confirm") !== true) {
+        await replyEconomy(interaction, ministryEmbed("Confirmation Required", `Are you sure you want to ${subcommand} automatic taxation? Run again with confirm: True.`), true);
+        return true;
+      }
+      economy.autoTax = normalizeDiscordAutoTax({
+        ...economy.autoTax,
+        enabled: subcommand === "enable",
+        frequency: interaction.options.getString("frequency") || economy.autoTax.frequency,
+        executionTime: interaction.options.getString("time") || economy.autoTax.executionTime,
+        nextRunAt: "",
+        updatedAt: new Date().toISOString(),
+        updatedBy: interaction.user.id
+      });
+      pushEconomyTransaction(economy, { fromWalletId: "treasury", toWalletId: "ledger", amount: 0, type: `auto_tax_${subcommand}d`, reason: `Auto Tax ${subcommand}d`, createdBy: interaction.user.id, meta: { frequency: economy.autoTax.frequency, executionTime: economy.autoTax.executionTime } });
+      await writeEconomyStore(economy);
+      await replyEconomy(interaction, ministryEmbed("Auto Tax Status", autoTaxDescription(economy.autoTax)), true);
+      return true;
+    }
+    if (subcommand === "run") {
+      const rate = discordTaxRateFor(economy, "income_tax");
+      if (rate <= 0) {
+        economy.autoTax = normalizeDiscordAutoTax({ ...economy.autoTax, lastRunAt: new Date().toISOString(), nextRunAt: "", updatedAt: new Date().toISOString(), updatedBy: interaction.user.id });
+        await writeEconomyStore(economy);
+        await replyEconomy(interaction, ministryEmbed("Automatic Taxation Complete", "Income Tax is disabled or set to 0%, so no deductions were made."), true);
+        return true;
+      }
+      const taxEvents = [];
+      for (const entry of economy.wallets || []) {
+        if (entry.id === "treasury" || entry.exempt || entry.status === "frozen") continue;
+        const taxAmount = Math.max(1, Math.round(Number(entry.balance || 0) * rate * 100) / 100);
+        entry.balance = Math.max(0, Number(entry.balance || 0) - taxAmount);
+        const taxRecord = addTreasuryTaxRecord(economy, { walletId: entry.id, taxType: "income_tax", amount: taxAmount, rate, createdBy: interaction.user.id });
+        const transaction = pushEconomyTransaction(economy, { fromWalletId: entry.id, toWalletId: "treasury", amount: taxAmount, type: "income_tax", reason: "Taxation sustains the Union.", taxAmount, createdBy: interaction.user.id });
+        taxEvents.push({ walletId: entry.id, discordId: entry.discordId, userId: entry.userId, amount: taxAmount, rate, createdAt: transaction.createdAt, taxRecordId: taxRecord.id, transactionId: transaction.id, remainingBalance: Number(entry.balance || 0) });
+      }
+      economy.autoTax = normalizeDiscordAutoTax({ ...economy.autoTax, lastRunAt: new Date().toISOString(), nextRunAt: "", updatedAt: new Date().toISOString(), updatedBy: interaction.user.id });
+      await writeEconomyStore(economy);
+      try {
+        addIncomeTaxCitizenAlerts(governmentStore, taxEvents, interaction.user.id);
+        await writeGovernmentAccessStore(governmentStore);
+      } catch (error) {
+        logGovernmentAuditWarning(governmentStore, interaction.user.id, error?.message || "Tax collected but citizen alert failed.");
+        await writeGovernmentAccessStore(governmentStore).catch(() => {});
+      }
+      await replyEconomy(interaction, ministryEmbed("Automatic Taxation Complete", autoTaxDescription(economy.autoTax)), true);
+      return true;
+    }
+  }
+
   if (name === "run-tax") {
-    const rate = Number(economy.taxRates?.income_tax || 0.08);
+    const rate = discordTaxRateFor(economy, "income_tax");
+    if (rate <= 0) {
+      economy.autoTax = normalizeDiscordAutoTax({ ...(economy.autoTax || {}), lastRunAt: new Date().toISOString(), nextRunAt: "", updatedAt: new Date().toISOString(), updatedBy: interaction.user.id });
+      await writeEconomyStore(economy);
+      await replyEconomy(interaction, ministryEmbed("Automatic Taxation Complete", "Income Tax is disabled or set to 0%, so no deductions were made."));
+      return true;
+    }
+    const taxEvents = [];
     for (const entry of economy.wallets || []) {
-      if (entry.exempt || entry.status === "frozen") continue;
+      if (entry.id === "treasury" || entry.exempt || entry.status === "frozen") continue;
       const taxAmount = Math.max(1, Math.round(Number(entry.balance || 0) * rate * 100) / 100);
       entry.balance = Math.max(0, Number(entry.balance || 0) - taxAmount);
-      (economy.taxRecords ||= []).unshift({ id: createId("tax"), walletId: entry.id, taxType: "income_tax", amount: taxAmount, rate, status: "paid", createdAt: new Date().toISOString() });
-      pushEconomyTransaction(economy, { fromWalletId: entry.id, toWalletId: "treasury", amount: taxAmount, type: "income_tax", reason: "Taxation sustains the Union.", taxAmount, createdBy: interaction.user.id });
+      const taxRecord = addTreasuryTaxRecord(economy, { walletId: entry.id, taxType: "income_tax", amount: taxAmount, rate, createdBy: interaction.user.id });
+      const transaction = pushEconomyTransaction(economy, { fromWalletId: entry.id, toWalletId: "treasury", amount: taxAmount, type: "income_tax", reason: "Taxation sustains the Union.", taxAmount, createdBy: interaction.user.id });
+      taxEvents.push({ walletId: entry.id, discordId: entry.discordId, userId: entry.userId, amount: taxAmount, rate, createdAt: transaction.createdAt, taxRecordId: taxRecord.id, transactionId: transaction.id, remainingBalance: Number(entry.balance || 0) });
     }
+    economy.autoTax = normalizeDiscordAutoTax({ ...(economy.autoTax || {}), lastRunAt: new Date().toISOString(), nextRunAt: "", updatedAt: new Date().toISOString(), updatedBy: interaction.user.id });
     await writeEconomyStore(economy);
+    try {
+      addIncomeTaxCitizenAlerts(governmentStore, taxEvents, interaction.user.id);
+      await writeGovernmentAccessStore(governmentStore);
+    } catch (error) {
+      logGovernmentAuditWarning(governmentStore, interaction.user.id, error?.message || "Tax collected but citizen alert failed.");
+      await writeGovernmentAccessStore(governmentStore).catch(() => {});
+    }
     await replyEconomy(interaction, ministryEmbed("Automatic Taxation Complete", "Income tax has been applied to eligible wallets."));
     return true;
   }
@@ -3419,6 +3663,13 @@ async function handleEconomySlashCommand(interaction) {
     const total = (economy.wallets || []).reduce((sum, entry) => sum + Number(entry.balance || 0), 0);
     const frozen = (economy.wallets || []).filter((entry) => entry.status === "frozen").length;
     await replyEconomy(interaction, ministryEmbed("Economy Report", `Wallets: ${(economy.wallets || []).length}\nTotal supply: ${formatCredits(total)}\nFrozen wallets: ${frozen}\nAlerts: ${(economy.alerts || []).length}`));
+    return true;
+  }
+
+  if (name === "tax-report") {
+    const paid = (economy.taxRecords || []).filter((record) => record.status === "paid");
+    const rows = paid.slice(0, 8).map((record) => `${taxLabel(record.taxType)}: ${formatCredits(record.amount)} -> ${record.paidInto || "WPU State Treasury"}`).join("\n") || "No tax records.";
+    await replyEconomy(interaction, ministryEmbed("Tax Report", `Paid tax total: ${formatCredits(paid.reduce((sum, record) => sum + Number(record.amount || 0), 0))}\nAll collected taxes are deposited into the WPU State Treasury.\n\n${rows}`), true);
     return true;
   }
 
@@ -6212,6 +6463,7 @@ function buildSlashCommands() {
       ),
     new SlashCommandBuilder().setName("district").setDescription("Show your district economy status."),
     new SlashCommandBuilder().setName("leaderboard").setDescription("Show the Panem Credit leaderboard."),
+    new SlashCommandBuilder().setName("state-funds").setDescription("Show the public WPU State Treasury summary."),
     new SlashCommandBuilder()
       .setName("grant")
       .setDescription("Issue Panem Credits to a user.")
@@ -6285,9 +6537,14 @@ function buildSlashCommands() {
           .addChoices(
             { name: "Income Tax", value: "income_tax" },
             { name: "Trade Tax", value: "trade_tax" },
+            { name: "Market Sale Tax", value: "market_sale_tax" },
+            { name: "Gambling Winnings Tax", value: "gambling_winnings_tax" },
+            { name: "Stock Trade Tax", value: "stock_trade_tax" },
             { name: "District Levy", value: "district_levy" },
             { name: "Emergency State Levy", value: "emergency_state_levy" },
-            { name: "Luxury Goods Tax", value: "luxury_goods_tax" }
+            { name: "Luxury Goods Tax", value: "luxury_goods_tax" },
+            { name: "Black Market Penalty Tax", value: "black_market_penalty_tax" },
+            { name: "Raid Recovery Fine Rate", value: "raid_recovery_fine_rate" }
           )
       )
       .addNumberOption((option) => option.setName("rate").setDescription("Decimal rate, e.g. 0.05.").setRequired(true).setMinValue(0).setMaxValue(1)),
@@ -6402,8 +6659,36 @@ function buildSlashCommands() {
       .setDescription("Run automatic income taxation.")
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder()
+      .setName("auto-tax")
+      .setDescription("View or control automatic taxation.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addSubcommand((subcommand) => subcommand.setName("status").setDescription("Show whether Auto Tax is enabled."))
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("enable")
+          .setDescription("Enable automatic taxation.")
+          .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm enabling automatic taxation.").setRequired(true))
+          .addStringOption((option) => option.setName("frequency").setDescription("Schedule frequency.").addChoices({ name: "Daily", value: "daily" }, { name: "Weekly", value: "weekly" }))
+          .addStringOption((option) => option.setName("time").setDescription("Execution time, 24-hour HH:MM."))
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("disable")
+          .setDescription("Disable automatic taxation.")
+          .addBooleanOption((option) => option.setName("confirm").setDescription("Confirm disabling automatic taxation.").setRequired(true))
+      )
+      .addSubcommand((subcommand) => subcommand.setName("run").setDescription("Run automatic taxation manually now.")),
+    new SlashCommandBuilder()
       .setName("economy-report")
       .setDescription("Show a Ministry economy report.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    new SlashCommandBuilder()
+      .setName("treasury")
+      .setDescription("Show restricted WPU State Treasury controls and audit summary.")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    new SlashCommandBuilder()
+      .setName("tax-report")
+      .setDescription("Show a restricted WPU tax receipt report.")
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder()
       .setName("purge")

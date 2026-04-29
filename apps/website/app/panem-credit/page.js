@@ -560,7 +560,7 @@ export default async function PanemCreditPage({ searchParams }) {
               <ul className="government-mini-list">
                 {walletTaxes.slice(0, 8).map((tax) => (
                   <li key={tax.id}>
-                    <span>{taxLabel(tax.taxType)} / {tax.status}</span>
+                    <span>{taxLabel(tax.taxType)} / {tax.status}<br />paid into: {tax.paidInto || "WPU State Treasury"}</span>
                     <strong>{formatCredits(tax.amount)}</strong>
                   </li>
                 ))}
