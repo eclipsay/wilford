@@ -625,19 +625,30 @@ function economyQuickLinks(...keys) {
   return buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
 }
 
-function availableJobsForWallet(wallet) {
-  return economyJobDefaults.filter((job) => job.district === "Any" || job.district === wallet?.district);
+function normalizeCitizenDistrict(citizen, wallet = null) {
+  return String(citizen?.district || wallet?.district || "Capitol").trim() || "Capitol";
 }
 
-function findEconomyJob(input, wallet = null) {
+function availableJobsForDistrict(district) {
+  return economyJobDefaults.filter((job) => job.district === "Any" || job.district === district);
+}
+
+function availableJobsForWallet(wallet, district = "") {
+  const resolvedDistrict = district || wallet?.district || "Capitol";
+  return availableJobsForDistrict(resolvedDistrict);
+}
+
+function findEconomyJob(input, wallet = null, district = "") {
   const value = String(input || "").trim().toLowerCase();
   const job = economyJobDefaults.find((entry) => entry.id === value || entry.name.toLowerCase() === value);
   if (!job) return null;
-  if (wallet && job.district !== "Any" && job.district !== wallet.district) return null;
+  const resolvedDistrict = district || wallet?.district || "";
+  if (resolvedDistrict && job.district !== "Any" && job.district !== resolvedDistrict) return null;
   return job;
 }
 
-async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "work") {
+async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "work", districtName = "") {
+  const resolvedDistrict = districtName || wallet.district || "Capitol";
   const selectedJobId = mode === "overtime"
     ? "overtime"
     : mode === "special-task"
@@ -647,7 +658,7 @@ async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "w
         : jobId || wallet.selectedJobId || "work-shift";
   const job = economyJobDefaults.find((entry) => entry.id === selectedJobId) || economyJobDefaults[0];
 
-  if (job.district !== "Any" && job.district !== wallet.district) {
+  if (job.district !== "Any" && job.district !== resolvedDistrict) {
     return { ok: false, title: "Work Desk", message: "That role is not available in your district. Open Jobs and select an available role first." };
   }
 
@@ -655,10 +666,10 @@ async function performEconomyJobAction(economy, wallet, userId, jobId, mode = "w
     return { ok: false, title: "Work Desk", message: "This wallet cannot work that assignment yet. Cooldown or account status applies." };
   }
 
-  const district = (economy.districts || []).find((entry) => entry.name === wallet.district);
+  const district = (economy.districts || []).find((entry) => entry.name === resolvedDistrict);
   const event = economyActiveEvent(economy);
-  const districtFit = job.district === "Any" || job.district === wallet.district ? 1.18 : 1;
-  const eventBoost = event.boostedDistricts?.includes(wallet.district) ? 1.2 : 1;
+  const districtFit = job.district === "Any" || job.district === resolvedDistrict ? 1.18 : 1;
+  const eventBoost = event.boostedDistricts?.includes(resolvedDistrict) ? 1.2 : 1;
   const prosperity = 1 + (Number(district?.prosperityRating || 70) - 70) / 300;
   const payoutBoost = 1 + discordEventModifier(economy, job.district, "jobPayoutPercent");
   const riskBoost = discordEventModifier(economy, job.district, "riskPercent") + (mode === "overtime" ? 0.08 : 0);
@@ -740,9 +751,10 @@ function dashboardSelect(section = "overview") {
 
 function dashboardJobSelect(context) {
   const wallet = context?.identity?.wallet;
+  const district = normalizeCitizenDistrict(context?.identity?.citizen, wallet);
   if (!wallet) return null;
   const selected = wallet.selectedJobId || "";
-  const jobs = availableJobsForWallet(wallet).slice(0, 25);
+  const jobs = availableJobsForWallet(wallet, district).slice(0, 25);
   if (!jobs.length) return null;
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -759,9 +771,10 @@ function dashboardJobSelect(context) {
 
 function dashboardJobSelectClean(context) {
   const wallet = context?.identity?.wallet;
+  const district = normalizeCitizenDistrict(context?.identity?.citizen, wallet);
   if (!wallet) return null;
   const selected = wallet.selectedJobId || "";
-  const jobs = availableJobsForWallet(wallet).slice(0, 25);
+  const jobs = availableJobsForWallet(wallet, district).slice(0, 25);
   if (!jobs.length) return null;
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -840,7 +853,8 @@ function citizenDashboardEmbed(section, context, user) {
   if (!identity.wallet) return walletLinkRequiredEmbed();
   const { citizen, wallet } = identity;
   const metrics = dashboardMetricSummary(economy, governmentStore, identity);
-  const district = (economy.districts || []).find((entry) => entry.name === wallet.district || entry.name === citizen.district);
+  const displayDistrict = normalizeCitizenDistrict(citizen, wallet);
+  const district = (economy.districts || []).find((entry) => entry.name === displayDistrict);
   const title = {
     overview: "Citizen Dashboard",
     wallet: "Wallet",
@@ -855,7 +869,7 @@ function citizenDashboardEmbed(section, context, user) {
     "union-id": "Union ID",
     help: "Citizen Help"
   }[section] || "Citizen Dashboard";
-  let description = `${citizen.citizenName || citizen.name || wallet.displayName || "Registered Citizen"}\n${citizen.district || wallet.district || "Unassigned"}\n`;
+  let description = `${citizen.citizenName || citizen.name || wallet.displayName || "Registered Citizen"}\n${displayDistrict}\n`;
   const fields = [];
   if (section === "wallet" || section === "overview") {
     fields.push({ name: "💳 Balance", value: formatCredits(wallet.balance), inline: true }, { name: "Status", value: String(wallet.status || "active"), inline: true }, { name: "Tax", value: String(wallet.taxStatus || "compliant"), inline: true });
@@ -872,9 +886,10 @@ function citizenDashboardEmbed(section, context, user) {
     const rows = wallet.holdings.slice(0, 8).map((holding) => `${itemDisplayName(holding.itemId, economy)} x${holding.quantity} (${holding.rarity || "common"})`).join("\n") || "Your inventory is empty. Try fishing, mining, or farming.";
     description += `Worth: ${formatCredits(metrics.inventoryValue)}\nSlots: ${occupiedInventorySlots(wallet)} / ${wallet.inventorySlots}\n\n${rows}`;
   } else if (section === "jobs") {
-    const selectedJob = economyJobDefaults.find((job) => job.id === wallet.selectedJobId) || availableJobsForWallet(wallet)[0] || economyJobDefaults[0];
-    const rows = availableJobsForWallet(wallet).slice(0, 8).map((job) => `${job.name}: ${job.riskLevel} risk, ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)}, ${job.cooldownHours}h`).join("\n") || "No district jobs are available.";
-    description += `Selected: ${selectedJob.name}\nRisk: ${selectedJob.riskLevel} / ${(Number(selectedJob.failureChance || 0) * 100).toFixed(0)}% failure\nPayout: ${formatCredits(selectedJob.minReward)}-${formatCredits(selectedJob.maxReward)}\nCooldown: ${selectedJob.cooldownHours}h\n\n${rows}`;
+    const jobs = availableJobsForWallet(wallet, displayDistrict);
+    const selectedJob = jobs.find((job) => job.id === wallet.selectedJobId) || jobs[0] || economyJobDefaults[0];
+    const rows = jobs.slice(0, 8).map((job) => `${job.name}: ${job.riskLevel} risk, ${formatCredits(job.minReward)}-${formatCredits(job.maxReward)}, ${job.cooldownHours}h`).join("\n") || "No district jobs are available.";
+    description += `District: ${displayDistrict}\nSelected: ${selectedJob.name}\nRisk: ${selectedJob.riskLevel} / ${(Number(selectedJob.failureChance || 0) * 100).toFixed(0)}% failure\nPayout: ${formatCredits(selectedJob.minReward)}-${formatCredits(selectedJob.maxReward)}\nCooldown: ${selectedJob.cooldownHours}h\n\n${rows}`;
   } else if (section === "stocks") {
     const rows = wallet.stockPortfolio.slice(0, 8).map((position) => {
       const company = findStockCompany(economy, position.ticker);
@@ -885,7 +900,7 @@ function citizenDashboardEmbed(section, context, user) {
     const rows = (economy.taxRecords || []).filter((record) => record.walletId === wallet.id).slice(0, 8).map((record) => `${taxLabel(record.taxType)}: ${formatCredits(record.amount)} (${record.status})`).join("\n") || "No tax records.";
     description += `Status: ${wallet.taxStatus}\nPaid total: ${formatCredits(metrics.taxPaid)}\n\n${rows}`;
   } else if (section === "district") {
-    description += `${district?.name || citizen.district || "Unassigned"}\n${district?.goodsProduced || "No district production data."}\nSupply ${district?.supplyLevel || 0} / Demand ${district?.demandLevel || 0} / Prosperity ${district?.prosperityRating || 0}`;
+    description += `${district?.name || displayDistrict || "Unassigned"}\n${district?.goodsProduced || "No district production data."}\nSupply ${district?.supplyLevel || 0} / Demand ${district?.demandLevel || 0} / Prosperity ${district?.prosperityRating || 0}`;
   } else if (section === "requests") {
     const rows = metrics.requests.slice(0, 8).map((request) => `${request.category}: ${request.status} (${request.priority})`).join("\n") || "No citizen requests recorded.";
     description += `Active requests: ${metrics.activeRequests.length}\n\n${rows}`;
@@ -1000,7 +1015,8 @@ async function handleCitizenDashboardComponent(interaction) {
       return true;
     }
     const wallet = context.identity.wallet;
-    const job = findEconomyJob(interaction.values[0], wallet);
+    const district = normalizeCitizenDistrict(context.identity.citizen, wallet);
+    const job = findEconomyJob(interaction.values[0], wallet, district);
     if (!job) {
       await interaction.reply({ embeds: [dashboardReplyEmbed("Job Selection Rejected", "That job is not available for your district.")], ephemeral: true });
       return true;
@@ -1010,6 +1026,7 @@ async function handleCitizenDashboardComponent(interaction) {
       return true;
     }
     wallet.selectedJobId = job.id;
+    wallet.district = district;
     wallet.jobChangedAt = new Date().toISOString();
     pushEconomyTransaction(context.economy, { fromWalletId: wallet.id, toWalletId: "labour-registry", amount: 0, type: "set_job", reason: `${wallet.displayName} selected ${job.name}.`, createdBy: interaction.user.id, meta: { key: job.id } });
     await writeEconomyStore(context.economy);
@@ -1046,7 +1063,8 @@ async function handleCitizenDashboardComponent(interaction) {
       context.identity.wallet,
       interaction.user.id,
       context.identity.wallet.selectedJobId,
-      action
+      action,
+      normalizeCitizenDistrict(context.identity.citizen, context.identity.wallet)
     );
     if (!result.ok) {
       await interaction.reply({ embeds: [dashboardReplyEmbed(result.title, result.message)], components: dashboardComponents("jobs", context), ephemeral: true });
@@ -1593,7 +1611,8 @@ async function handleEconomySlashCommand(interaction) {
 
   if (name === "jobinfo") {
     const jobInput = interaction.options.getString("job", true);
-    const job = economyJobDefaults.find((entry) => entry.id === jobInput || entry.name.toLowerCase() === jobInput.toLowerCase());
+    const district = normalizeCitizenDistrict(identity.citizen, wallet);
+    const job = findEconomyJob(jobInput, wallet, district);
     if (!job) {
       await replyEconomy(interaction, ministryEmbed("Job Not Found", "Use `/jobs` to see available job names."), true);
       return true;
@@ -1604,8 +1623,9 @@ async function handleEconomySlashCommand(interaction) {
 
   if (name === "setjob") {
     const jobInput = interaction.options.getString("job", true);
-    const job = economyJobDefaults.find((entry) => entry.id === jobInput || entry.name.toLowerCase() === jobInput.toLowerCase());
-    if (!job || (job.district !== "Any" && job.district !== wallet.district)) {
+    const district = normalizeCitizenDistrict(identity.citizen, wallet);
+    const job = findEconomyJob(jobInput, wallet, district);
+    if (!job) {
       await replyEconomy(interaction, ministryEmbed("Job Selection Rejected", "That job is not available for your district. Use `/jobs` first."), true);
       return true;
     }
@@ -1614,6 +1634,7 @@ async function handleEconomySlashCommand(interaction) {
       return true;
     }
     wallet.selectedJobId = job.id;
+    wallet.district = district;
     wallet.jobChangedAt = new Date().toISOString();
     pushEconomyTransaction(economy, { fromWalletId: wallet.id, toWalletId: "labour-registry", amount: 0, type: "set_job", reason: `${wallet.displayName} selected ${job.name}.`, createdBy: interaction.user.id, meta: { key: job.id } });
     await writeEconomyStore(economy);
@@ -1622,50 +1643,20 @@ async function handleEconomySlashCommand(interaction) {
   }
 
   if (name === "work" || name === "overtime" || name === "special-task" || name === "district-work") {
-    const jobId = name === "overtime" ? "overtime" : name === "special-task" ? "special-task" : name === "district-work" ? "district-labour" : interaction.options.getString("job") || wallet.selectedJobId || "work-shift";
-    const job = economyJobDefaults.find((entry) => entry.id === jobId) || economyJobDefaults[0];
-    if (job.district !== "Any" && job.district !== wallet.district) {
-      await replyEconomy(interaction, ministryEmbed("Work Desk", "That role is not available in your district. Use `/jobs` then `/setjob`."), true);
+    const result = await performEconomyJobAction(
+      economy,
+      wallet,
+      interaction.user.id,
+      interaction.options.getString("job") || wallet.selectedJobId || "",
+      name,
+      normalizeCitizenDistrict(identity.citizen, wallet)
+    );
+    if (!result.ok) {
+      await replyEconomy(interaction, ministryEmbed(result.title, result.message), true);
       return true;
     }
-    if (wallet.status !== "active" || !economyCooldownReady(economy, wallet.id, "work", job.id, job.cooldownHours)) {
-      await replyEconomy(interaction, ministryEmbed("Work Desk", "This wallet cannot work that assignment yet. Cooldown or account status applies."), true);
-      return true;
-    }
-    const district = (economy.districts || []).find((entry) => entry.name === wallet.district);
-    const event = economyActiveEvent(economy);
-    const districtFit = job.district === "Any" || job.district === wallet.district ? 1.18 : 1;
-    const eventBoost = event.boostedDistricts?.includes(wallet.district) ? 1.2 : 1;
-    const prosperity = 1 + (Number(district?.prosperityRating || 70) - 70) / 300;
-    const payoutBoost = 1 + discordEventModifier(economy, job.district, "jobPayoutPercent");
-    const riskBoost = discordEventModifier(economy, job.district, "riskPercent") + (name === "overtime" ? 0.08 : 0);
-    const failed = Math.random() < Math.min(0.75, Math.max(0, Number(job.failureChance || 0) + riskBoost));
-    const illegalOffer = Math.random() < Number(job.illegalOpportunityChance || 0);
-    let reward = Math.round(randomEconomyAmount(job.minReward, job.maxReward) * districtFit * eventBoost * prosperity * Number(event.workMultiplier || 1) * payoutBoost * (name === "overtime" ? 1.35 : 1));
-    let itemReward = null;
-    let penalty = 0;
-    if (failed) {
-      penalty = Math.max(15, Math.round(reward * (job.riskLevel === "High" || job.riskLevel === "Restricted" ? 0.45 : job.riskLevel === "Medium" ? 0.28 : 0.15)));
-      wallet.balance = Math.max(-1000, Number(wallet.balance || 0) - penalty);
-      reward = 0;
-      if (job.riskLevel === "High" || job.riskLevel === "Restricted" || illegalOffer) {
-        addEconomyAlert(economy, { severity: job.riskLevel === "Restricted" ? "critical" : "high", type: "job_risk", walletId: wallet.id, fine: penalty, summary: `${wallet.displayName} triggered a ${job.name} labour risk failure.`, action: "MSS review" });
-        await postMssFinancialAlert({ severity: "high", summary: `${wallet.displayName} triggered a ${job.name} labour risk failure.`, action: "MSS review" });
-      }
-    } else {
-      wallet.balance += reward;
-      if (Array.isArray(job.itemRewards) && job.itemRewards.length && Math.random() < 0.22) {
-        itemReward = inventoryItemById(job.itemRewards[Math.floor(Math.random() * job.itemRewards.length)], economy);
-        if (itemReward) addEconomyHolding(wallet, itemReward.id, 1, inventoryItemValue(itemReward, economy));
-      }
-    }
-    if (district) {
-      district.supplyLevel = Math.max(0, Math.min(140, Number(district.supplyLevel || 0) + (failed ? -1 : 1)));
-      district.tradeVolume = Math.round(Number(district.tradeVolume || 0) + Math.max(1, reward) * 1.6);
-    }
-    pushEconomyTransaction(economy, { fromWalletId: failed ? wallet.id : "district-production", toWalletId: failed ? "treasury" : wallet.id, amount: failed ? penalty : reward, type: "work", reason: `${job.name}${failed ? " failure" : ""}${itemReward ? ` / ${itemReward.name}` : ""}`, createdBy: interaction.user.id, meta: { key: job.id, eventId: event.id, failed, riskLevel: job.riskLevel, itemRewardId: itemReward?.id || "" } });
     await writeEconomyStore(economy);
-    await replyEconomy(interaction, ministryEmbed(failed ? "Work Assignment Failed" : "Work Completed", `${job.name}\n${failed ? `Penalty: ${formatCredits(penalty)}` : `Reward: ${formatCredits(reward)}`}${itemReward ? `\nItem: ${itemReward.name}` : ""}\nRisk: ${job.riskLevel}\nEvent: ${event.title}`));
+    await replyEconomy(interaction, ministryEmbed(result.title, result.message));
     return true;
   }
 
