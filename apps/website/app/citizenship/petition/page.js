@@ -4,13 +4,22 @@ import { redirect } from "next/navigation";
 import { PageHero } from "../../../components/PageHero";
 import { SiteLayout } from "../../../components/SiteLayout";
 
-const baseUrl = (
-  process.env.API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NODE_ENV === "production"
-    ? "https://api.wilfordindustries.org"
-    : "http://localhost:4000")
-).replace(/\/+$/, "");
+function resolvePetitionApiBaseUrl() {
+  const configured = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "").trim();
+  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?/i.test(configured);
+
+  if (configured && !(process.env.NODE_ENV === "production" && isLocalhost)) {
+    return configured.replace(/\/+$/, "");
+  }
+
+  return (
+    process.env.NODE_ENV === "production"
+      ? "https://api.wilfordindustries.org"
+      : "http://localhost:4000"
+  );
+}
+
+const baseUrl = resolvePetitionApiBaseUrl();
 
 function normalizeDiscordUserId(value) {
   return String(value || "").replace(/\s+/g, "").trim();
