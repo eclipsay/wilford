@@ -4212,6 +4212,32 @@ h3 {
   font-size: 0.86rem;
 }
 
+.government-principle--capitol {
+  grid-column: span 2;
+  min-height: 230px;
+  border-color: rgba(243, 204, 138, 0.74);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(243, 204, 138, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(91, 15, 17, 0.72), rgba(5, 4, 4, 0.98)),
+    rgba(10, 4, 4, 0.96);
+  box-shadow: 0 0 44px rgba(211, 161, 73, 0.15), 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.government-principle--capitol em {
+  color: var(--gold-bright);
+  font-size: 0.72rem;
+  font-style: normal;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.government-principle--capitol span {
+  width: 84px;
+  height: 84px;
+  border-color: rgba(243, 204, 138, 0.78);
+  font-size: 2.55rem;
+}
+
 .government-return {
   display: flex;
   justify-content: center;
@@ -5012,6 +5038,10 @@ h3 {
   .government-principles__grid {
     grid-template-columns: 1fr;
     padding-top: 0;
+  }
+
+  .government-principle--capitol {
+    grid-column: auto;
   }
 
   .government-ministry {
@@ -6443,6 +6473,24 @@ body {
   overflow: hidden;
 }
 
+.people-card--capitol-governor {
+  grid-column: span 2;
+  border-color: rgba(243, 204, 138, 0.76);
+  background:
+    radial-gradient(circle at 78% 0%, rgba(243, 204, 138, 0.17), transparent 36%),
+    linear-gradient(180deg, rgba(94, 14, 16, 0.72), rgba(6, 4, 4, 0.98)),
+    rgba(10, 4, 4, 0.96);
+  box-shadow: 0 0 46px rgba(211, 161, 73, 0.16), 0 28px 78px rgba(0, 0, 0, 0.46);
+}
+
+.people-card--capitol-governor .people-card__portrait {
+  aspect-ratio: 16 / 7;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(243, 204, 138, 0.22), transparent 42%),
+    linear-gradient(90deg, rgba(67, 9, 10, 0.88), rgba(7, 4, 4, 0.96)),
+    #090404;
+}
+
 .people-card__portrait {
   display: grid;
   place-items: center;
@@ -7014,6 +7062,10 @@ body {
   .government-ministries,
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .people-card--capitol-governor {
+    grid-column: auto;
   }
 
   .government-chart::before,
@@ -8089,6 +8141,44 @@ details.citizen-application-answers[open] {
   padding: 1rem;
 }
 
+.district-profile-card--capitol {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(240px, 0.36fr) 1fr;
+  border-color: rgba(243, 204, 138, 0.78);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(243, 204, 138, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(88, 12, 15, 0.8), rgba(6, 5, 5, 0.98)),
+    rgba(9, 5, 5, 0.96);
+  box-shadow: 0 0 48px rgba(211, 161, 73, 0.16), 0 26px 80px rgba(0, 0, 0, 0.46);
+  padding: 1.35rem;
+}
+
+.district-profile-card--capitol .district-profile-card__governor {
+  border-right-color: rgba(243, 204, 138, 0.34);
+}
+
+.district-profile-card--capitol .district-profile-card__governor img {
+  border-color: rgba(243, 204, 138, 0.68);
+  box-shadow: 0 0 28px rgba(211, 161, 73, 0.14);
+}
+
+.capitol-prestige-badge {
+  align-items: center;
+  border: 1px solid rgba(243, 204, 138, 0.58);
+  border-radius: 999px;
+  color: var(--gold-bright);
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  margin-bottom: 0.75rem;
+  min-height: 1.7rem;
+  padding: 0.35rem 0.75rem;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
 .district-profile-card__governor {
   border-right: 1px solid rgba(214, 173, 82, 0.18);
   padding-right: 1rem;
@@ -8107,6 +8197,23 @@ details.citizen-application-answers[open] {
 .district-profile-card__body {
   display: grid;
   gap: 0.85rem;
+}
+
+.district-governor-editor__heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.district-governor-editor--capitol {
+  border-color: rgba(243, 204, 138, 0.72);
+  background:
+    radial-gradient(circle at 86% 0%, rgba(243, 204, 138, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(86, 12, 14, 0.66), rgba(6, 4, 4, 0.98)),
+    rgba(10, 4, 4, 0.96);
+  box-shadow: 0 0 40px rgba(211, 161, 73, 0.13), 0 22px 70px rgba(0, 0, 0, 0.42);
 }
 
 .citizen-request-form textarea,
@@ -8134,6 +8241,10 @@ details.citizen-application-answers[open] {
     border-right: 0;
     border-bottom: 1px solid rgba(214, 173, 82, 0.18);
     padding: 0 0 1rem;
+  }
+
+  .district-profile-card--capitol {
+    grid-template-columns: 1fr;
   }
 }
 

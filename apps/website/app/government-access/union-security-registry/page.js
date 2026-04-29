@@ -147,25 +147,32 @@ export default async function UnionSecurityRegistryPage({ searchParams }) {
             <p className="eyebrow">District Governors</p>
             <h2>District Profile Controls</h2>
             <div className="government-user-list">
-              {state.districtProfiles.map((district) => (
-                <form action="/government-access/union-security-registry/action" className="panel public-application-form" key={district.id} method="post">
-                  <input name="intent" type="hidden" value="district" />
-                  <input name="districtId" type="hidden" value={district.id} />
-                  <h3>{district.name}</h3>
-                  <div className="public-application-grid public-application-grid--three">
-                    <label className="public-application-field"><span>Governor</span><input defaultValue={district.governorName} name="governorName" /></label>
-                    <label className="public-application-field"><span>Title</span><input defaultValue={district.governorTitle} name="governorTitle" /></label>
-                    <label className="public-application-field"><span>Portrait path</span><input defaultValue={district.governorPortrait} name="governorPortrait" /></label>
-                    <label className="public-application-field"><span>Appointment date</span><input defaultValue={district.appointmentDate} name="appointmentDate" /></label>
-                  </div>
-                  <label className="public-application-field"><span>Biography</span><textarea defaultValue={district.governorBiography} name="governorBiography" rows="3" /></label>
-                  <label className="public-application-field"><span>Lore description</span><textarea defaultValue={district.loreDescription} name="loreDescription" rows="3" /></label>
-                  <label className="public-application-field"><span>Loyalty statement</span><input defaultValue={district.loyaltyStatement} name="loyaltyStatement" /></label>
-                  <label className="public-application-field"><span>Key landmarks, one per line</span><textarea defaultValue={district.keyLandmarks.join("\n")} name="keyLandmarks" rows="3" /></label>
-                  <label className="public-application-field"><span>Recent bulletins, one per line</span><textarea defaultValue={district.recentBulletins.join("\n")} name="recentBulletins" rows="3" /></label>
-                  <button className="button button--solid-site" type="submit">Save District Profile</button>
-                </form>
-              ))}
+              {state.districtProfiles.map((district) => {
+                const isCapitol = district.name === "Capitol" || district.canonicalName === "The Capitol";
+
+                return (
+                  <form action="/government-access/union-security-registry/action" className={`panel public-application-form${isCapitol ? " district-governor-editor--capitol" : ""}`} key={district.id} method="post">
+                    <input name="intent" type="hidden" value="district" />
+                    <input name="districtId" type="hidden" value={district.id} />
+                    <div className="district-governor-editor__heading">
+                      <h3>{district.name}</h3>
+                      {isCapitol ? <span className="capitol-prestige-badge">Capitol High Office</span> : null}
+                    </div>
+                    <div className="public-application-grid public-application-grid--three">
+                      <label className="public-application-field"><span>Governor</span><input defaultValue={district.governorName} name="governorName" /></label>
+                      <label className="public-application-field"><span>Title</span><input defaultValue={district.governorTitle} name="governorTitle" /></label>
+                      <label className="public-application-field"><span>Portrait path</span><input defaultValue={district.governorPortrait} name="governorPortrait" /></label>
+                      <label className="public-application-field"><span>Appointment date</span><input defaultValue={district.appointmentDate} name="appointmentDate" /></label>
+                    </div>
+                    <label className="public-application-field"><span>Biography</span><textarea defaultValue={district.governorBiography} name="governorBiography" rows="3" /></label>
+                    <label className="public-application-field"><span>Lore description</span><textarea defaultValue={district.loreDescription} name="loreDescription" rows="3" /></label>
+                    <label className="public-application-field"><span>Loyalty statement</span><input defaultValue={district.loyaltyStatement} name="loyaltyStatement" /></label>
+                    <label className="public-application-field"><span>Key landmarks, one per line</span><textarea defaultValue={district.keyLandmarks.join("\n")} name="keyLandmarks" rows="3" /></label>
+                    <label className="public-application-field"><span>Recent bulletins, one per line</span><textarea defaultValue={district.recentBulletins.join("\n")} name="recentBulletins" rows="3" /></label>
+                    <button className="button button--solid-site" type="submit">Save District Profile</button>
+                  </form>
+                );
+              })}
             </div>
           </section>
         ) : null}

@@ -45,9 +45,10 @@ export default async function DistrictsPage() {
             const economyDistrict = economy.districts.find((item) => item.id === district.id || item.name === district.canonicalName);
             const goods = economy.marketItems.filter((item) => item.district === district.canonicalName).slice(0, 3);
             const citizens = state.citizenRecords.filter((citizen) => citizen.district === district.canonicalName || citizen.district === district.name);
+            const isCapitol = district.name === "Capitol" || district.canonicalName === "The Capitol";
 
             return (
-              <article className="district-profile-card" key={district.id}>
+              <article className={`district-profile-card${isCapitol ? " district-profile-card--capitol" : ""}`} key={district.id}>
                 <div className="district-profile-card__governor">
                   <Image
                     src={district.governorPortrait || "/wpu-grand-seal.png"}
@@ -56,6 +57,7 @@ export default async function DistrictsPage() {
                     height={220}
                   />
                   <div>
+                    {isCapitol ? <span className="capitol-prestige-badge">Capitol High Office</span> : null}
                     <p className="eyebrow">{district.governorTitle}</p>
                     <h3>{district.governorName}</h3>
                     <span>{district.appointmentDate}</span>

@@ -200,13 +200,18 @@ export default async function GovernmentPage() {
           </div>
 
           <div className="government-principles__grid">
-            {governorPreview.map((district) => (
-              <article className="government-principle" key={district.id}>
-                <span aria-hidden="true">{district.name === "Capitol" ? "C" : district.name.replace(/\D/g, "")}</span>
-                <strong>{district.governorName}</strong>
-                <p>{district.name}</p>
-              </article>
-            ))}
+            {governorPreview.map((district) => {
+              const isCapitol = district.name === "Capitol" || district.canonicalName === "The Capitol";
+
+              return (
+                <article className={`government-principle${isCapitol ? " government-principle--capitol" : ""}`} key={district.id}>
+                  {isCapitol ? <em>Capitol High Office</em> : null}
+                  <span aria-hidden="true">{isCapitol ? "C" : district.name.replace(/\D/g, "")}</span>
+                  <strong>{district.governorName}</strong>
+                  <p>{isCapitol ? "Capitol Governor" : district.name}</p>
+                </article>
+              );
+            })}
           </div>
         </section>
       </main>

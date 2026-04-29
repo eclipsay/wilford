@@ -82,7 +82,8 @@ export default async function MembersPage() {
         title: district.governorTitle,
         portrait: district.governorPortrait || "/wpu-grand-seal.png",
         bio: district.governorBiography,
-        motto: district.loyaltyStatement
+        motto: district.loyaltyStatement,
+        isCapitolGovernor: district.name === "Capitol" || district.canonicalName === "The Capitol"
       }))
     }
   ];
@@ -102,7 +103,7 @@ export default async function MembersPage() {
             <h2>{group.section}</h2>
             <div className="people-grid">
               {group.people.map((person) => (
-                <article className="people-card" key={person.name}>
+                <article className={`people-card${person.isCapitolGovernor ? " people-card--capitol-governor" : ""}`} key={person.name}>
                   <div className="people-card__portrait">
                     <Image
                       src={person.portrait}
@@ -113,6 +114,7 @@ export default async function MembersPage() {
                     />
                   </div>
                   <div className="people-card__body">
+                    {person.isCapitolGovernor ? <span className="capitol-prestige-badge">Capitol High Office</span> : null}
                     <p>{person.title}</p>
                     <h3>{person.name}</h3>
                     <span>{person.bio}</span>
