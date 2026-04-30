@@ -284,6 +284,17 @@ export function governmentBridgeSecret() {
   return authSecret();
 }
 
+export function governmentBridgeSecrets() {
+  const candidates = [
+    process.env.GOVERNMENT_AUTH_SECRET,
+    process.env.ADMIN_API_KEY,
+    process.env.PANEL_SESSION_SECRET,
+    "WPU-DEVELOPMENT-GOVERNMENT-AUTH-SECRET"
+  ].filter(Boolean);
+
+  return [...new Set(candidates)];
+}
+
 export function hashPassword(password, salt = randomBytes(16).toString("hex")) {
   const hash = pbkdf2Sync(String(password || ""), salt, 210000, 32, "sha256").toString("hex");
   return `pbkdf2_sha256$210000$${salt}$${hash}`;
