@@ -734,6 +734,11 @@ app.post("/api/admin/bulletins/:id", requireAdmin, async (req, res) => {
   res.json({ bulletins });
 });
 
+app.get("/api/admin/bulletins", requireAdmin, async (_req, res) => {
+  const content = await getContent();
+  res.json({ bulletins: content.bulletins || [] });
+});
+
 app.get("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
   const status = String(req.query?.status || "").trim().toLowerCase();
   const broadcasts = await getDiscordBroadcasts({ status });

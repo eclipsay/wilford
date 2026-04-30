@@ -280,6 +280,10 @@ function authSecret() {
   );
 }
 
+export function governmentBridgeSecret() {
+  return authSecret();
+}
+
 export function hashPassword(password, salt = randomBytes(16).toString("hex")) {
   const hash = pbkdf2Sync(String(password || ""), salt, 210000, 32, "sha256").toString("hex");
   return `pbkdf2_sha256$210000$${salt}$${hash}`;
@@ -448,6 +452,20 @@ async function setGovernmentSession(user, overrides = {}) {
     secure: process.env.NODE_ENV === "production",
     path: "/government-access",
     maxAge: 60 * 60 * 8
+  });
+}
+
+export async function setGovernmentSessionForBridgeSession(session) {
+  const user = {
+    username: cleanText(session?.username || "panel-superadmin", 120),
+    displayName: cleanText(session?.displayName || "Panel Superadmin", 120),
+    role: accessRoles.includes(session?.role) ? session.role : "Executive Director",
+    forcePasswordChange: false
+  };
+
+  await setGovernmentSession(user, {
+    forcePasswordChange: false,
+    assignedDistrict: cleanText(session?.assignedDistrict || "", 80)
   });
 }
 

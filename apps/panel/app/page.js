@@ -2,7 +2,11 @@ import { fetchPublic } from "../lib/api";
 import { fetchAdmin } from "../lib/api";
 import { requireAuth } from "../lib/auth";
 import { PanelShell } from "../components/PanelShell";
-import { buildModuleHref, commandModules } from "../lib/command-modules";
+import {
+  commandModules,
+  createGovernmentBridgeHref
+} from "../lib/command-modules";
+import { getSession } from "../lib/auth";
 
 function safeCount(value) {
   return Array.isArray(value) ? value.length : 0;
@@ -35,11 +39,7 @@ async function loadCommandSnapshot() {
     contentResult.status === "fulfilled"
       ? contentResult.value
       : {
-          members: [],
-          alliances: [],
           bulletins: [],
-          excommunications: [],
-          enemyNations: [],
           settings: {}
         };
   const commits =
@@ -79,11 +79,7 @@ async function loadCommandSnapshot() {
     content,
     commits,
     counts: {
-      members: safeCount(content.members),
-      alliances: safeCount(content.alliances),
       bulletins: safeCount(content.bulletins),
-      excommunications: safeCount(content.excommunications),
-      enemyNations: safeCount(content.enemyNations),
       commits: safeCount(commits.commits),
       articles: safeCount(articles.articles),
       broadcasts: safeCount(broadcasts.broadcasts),
@@ -104,10 +100,23 @@ async function loadCommandSnapshot() {
   };
 }
 
+const moduleGroupOrder = [
+  "Administration",
+  "Publishing",
+  "Security",
+  "Judiciary",
+  "Economy",
+  "Districts",
+  "Audit"
+];
+
 export default async function PanelHomePage() {
   await requireAuth();
+  const session = await getSession();
   const { content, counts, degraded } = await loadCommandSnapshot();
-  const groups = [...new Set(commandModules.map((module) => module.group))];
+  const groups = moduleGroupOrder.filter((group) =>
+    commandModules.some((module) => module.group === group)
+  );
 
   return (
     <PanelShell
@@ -155,12 +164,12 @@ export default async function PanelHomePage() {
         </div>
         <div className="stat-row">
           <div className="stat-chip">
-            <span>Legacy members</span>
-            <strong>{counts.members}</strong>
+            <span>Published articles</span>
+            <strong>{counts.articles}</strong>
           </div>
           <div className="stat-chip">
-            <span>Published media</span>
-            <strong>{counts.articles + counts.broadcasts + counts.commits}</strong>
+            <span>Active bulletins</span>
+            <strong>{counts.bulletins}</strong>
           </div>
           <div className="stat-chip">
             <span>Security records</span>
@@ -174,7 +183,7 @@ export default async function PanelHomePage() {
         <div className="terminal-readout">
           <div className="terminal-readout__line">
             <span className="terminal-readout__prompt">$</span>
-            <span>service/status members={counts.members} alliances={counts.alliances} excommunications={counts.excommunications}</span>
+            <span>service/media articles={counts.articles} bulletins={counts.bulletins} broadcasts={counts.broadcasts}</span>
           </div>
           <div className="terminal-readout__line">
             <span className="terminal-readout__prompt">$</span>
@@ -206,13 +215,14 @@ export default async function PanelHomePage() {
               <div className="module-grid">
                 {commandModules
                   .filter((module) => module.group === group)
+                  .sort((left, right) => Number(left.order || 0) - Number(right.order || 0))
                   .map((module) => (
                     <a
                       className="module-card"
                       href={
                         module.external === false
                           ? module.path
-                          : buildModuleHref(module.path)
+                          : createGovernmentBridgeHref(module.path, session || {})
                       }
                       key={module.title}
                       rel={module.external === false ? undefined : "noreferrer"}
@@ -220,7 +230,10 @@ export default async function PanelHomePage() {
                     >
                       <div className="module-card__header">
                         <span className="module-card__code">{module.code}</span>
-                        <strong>{counts[module.metric] ?? 0}</strong>
+                        <div className="module-card__meta">
+                          <strong>{counts[module.metric] ?? 0}</strong>
+                          <small>{module.external === false ? "panel" : "external"}</small>
+                        </div>
                       </div>
                       <h3>{module.title}</h3>
                       <p>{module.description}</p>

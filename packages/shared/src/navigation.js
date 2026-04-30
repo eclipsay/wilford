@@ -11,11 +11,11 @@ export const mainNavigation = [
 export const panelNavigation = [
   { label: "Dashboard", href: "/" },
   { label: "Government Users", href: "/government-users" },
-  { label: "Members", href: "/members" },
-  { label: "Excommunications", href: "/excommunications" },
-  { label: "Settings", href: "/settings" },
-  { label: "Commits", href: "/commits" },
+  { label: "Articles", href: "/articles" },
+  { label: "Bulletins", href: "/bulletins" },
   { label: "Audit Log", href: "/audit-log" },
+  { label: "Commits", href: "/commits" },
+  { label: "Settings", href: "/settings" },
   { label: "Users", href: "/users" },
   { label: "System", href: "/system" }
 ];

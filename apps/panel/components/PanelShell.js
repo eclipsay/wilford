@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { panelNavigation } from "@wilford/shared";
 import { clearAuthenticatedSession, getSession } from "../lib/auth";
-import { getSiteBaseUrl } from "../lib/command-modules";
+import { createGovernmentBridgeHref } from "../lib/command-modules";
 
 async function logoutAction() {
   "use server";
@@ -10,15 +10,14 @@ async function logoutAction() {
 
 export async function PanelShell({ title, description, children }) {
   const session = await getSession();
-  const siteBaseUrl = getSiteBaseUrl();
   const baseNavigation = [
     { label: "Dashboard", href: "/" },
     { label: "Government Users", href: "/government-users" },
-    { label: "Members", href: "/members" },
-    { label: "Excommunications", href: "/excommunications" },
-    { label: "Settings", href: "/settings" },
-    { label: "Commits", href: "/commits" },
+    { label: "Articles", href: "/articles" },
+    { label: "Bulletins", href: "/bulletins" },
     { label: "Audit Log", href: "/audit-log" },
+    { label: "Commits", href: "/commits" },
+    { label: "Settings", href: "/settings" },
     { label: "Users", href: "/users" },
     { label: "System", href: "/system" }
   ];
@@ -61,11 +60,11 @@ export async function PanelShell({ title, description, children }) {
             </div>
             <a
               className="button button--ghost"
-              href={`${siteBaseUrl}/government-access`}
+              href={createGovernmentBridgeHref("/government-access", session || {})}
               rel="noreferrer"
               target="_blank"
             >
-              Open Gov Access
+              Superadmin Gov Access
             </a>
             <span className="panel-nav__identity">
               user={session?.username} role={session?.role}

@@ -809,6 +809,20 @@ select {
   font-size: 1rem;
 }
 
+.module-card__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.module-card__meta small {
+  color: var(--panel-text-soft);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .module-card__code {
   display: inline-flex;
   align-items: center;
