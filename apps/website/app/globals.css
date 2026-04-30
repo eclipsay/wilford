@@ -2328,10 +2328,10 @@ h3 {
     url("/lemmie-16x9.png");
   background-position:
     center center,
-    center top;
+    center 112px;
   background-size:
     100% 100%,
-    100% auto;
+    auto calc(100% - 112px);
   background-repeat: no-repeat;
 }
 

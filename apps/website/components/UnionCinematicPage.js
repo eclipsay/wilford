@@ -418,7 +418,7 @@ export function UnionCinematicPage() {
           <p className="union-cinema-eyebrow">Chapter 7</p>
           <h2>The Eternal Engine</h2>
           <p>
-            Once mankind's last refuge, Snowpiercer became the grand artery of
+            Once mankind&apos;s last refuge, Snowpiercer became the grand artery of
             the Union. It carries leadership, commerce, relief, and authority
             between all districts.
           </p>
@@ -477,7 +477,7 @@ export function UnionCinematicPage() {
       </section>
 
       <section className="union-final-cinema union-reveal">
-        <blockquote>"History divided the world. Lemmie united it."</blockquote>
+        <blockquote>&quot;History divided the world. Lemmie united it.&quot;</blockquote>
         <div className="union-final-cinema__seal union-reveal" style={{ "--delay": "180ms" }}>
           <Image
             className="grand-seal"

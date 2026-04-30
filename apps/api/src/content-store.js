@@ -187,6 +187,8 @@ const defaultContent = {
   ]
 };
 
+let writeQueue = Promise.resolve();
+
 function withNormalizedOrder(items) {
   return [...(items || [])]
     .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
@@ -599,17 +601,35 @@ async function readContentFile() {
       economy: normalizeEconomyStore(parsed.economy || defaultContent.economy),
       bulletins: withNormalizedOrder(parsed.bulletins || defaultContent.bulletins)
     };
-  } catch {
-    return structuredClone(defaultContent);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return structuredClone(defaultContent);
+    }
+
+    throw new Error(
+      `Unable to read API content store at ${config.dataFile}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 }
 
-async function writeContentFile(content) {
+async function persistContentFile(content) {
   await mkdir(dirname(config.dataFile), { recursive: true });
   await backupContentFile();
   const tempPath = `${config.dataFile}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tempPath, JSON.stringify(content, null, 2));
   await rename(tempPath, config.dataFile);
+}
+
+async function writeContentFile(content) {
+  const pendingWrite = writeQueue.then(
+    () => persistContentFile(content),
+    () => persistContentFile(content)
+  );
+
+  writeQueue = pendingWrite.catch(() => undefined);
+  return pendingWrite;
 }
 
 function addOrderedItem(items, item) {
