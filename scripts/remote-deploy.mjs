@@ -57,8 +57,7 @@ if (commands[action]) {
 }
 
 const child = spawn("ssh", sshArgs, {
-  stdio: "inherit",
-  shell: process.platform === "win32"
+  stdio: "inherit"
 });
 
 child.on("exit", (code, signal) => {
