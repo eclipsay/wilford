@@ -31,7 +31,8 @@ export const commandModules = [
     code: "USR",
     description:
       "Manage restricted government accounts, roles, temporary passwords, and district assignment.",
-    path: "/government-access/users",
+    path: "/government-users",
+    external: false,
     metric: "governmentUsers"
   },
   {

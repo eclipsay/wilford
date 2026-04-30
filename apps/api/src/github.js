@@ -28,7 +28,7 @@ function getLocalGitCommits() {
       "git",
       [
         "log",
-        "--date=short",
+        "--date=iso-strict",
         "--pretty=format:%H%x1f%an%x1f%ad%x1f%s%x1e",
         "-n",
         "12"

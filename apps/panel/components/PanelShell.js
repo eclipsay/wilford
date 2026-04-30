@@ -13,11 +13,11 @@ export async function PanelShell({ title, description, children }) {
   const siteBaseUrl = getSiteBaseUrl();
   const baseNavigation = [
     { label: "Dashboard", href: "/" },
+    { label: "Government Users", href: "/government-users" },
     { label: "Members", href: "/members" },
     { label: "Excommunications", href: "/excommunications" },
     { label: "Settings", href: "/settings" },
     { label: "Commits", href: "/commits" },
-    { label: "Bot Commands", href: "/bot-commands" },
     { label: "Audit Log", href: "/audit-log" },
     { label: "Users", href: "/users" },
     { label: "System", href: "/system" }
@@ -31,7 +31,7 @@ export async function PanelShell({ title, description, children }) {
         )
       : baseNavigation;
   const navigation = navigationSource.filter((item) => {
-    if (item.href === "/users") {
+    if (["/users", "/government-users"].includes(item.href)) {
       return ["owner", "admin"].includes(session?.role);
     }
 

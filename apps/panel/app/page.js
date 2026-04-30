@@ -209,10 +209,14 @@ export default async function PanelHomePage() {
                   .map((module) => (
                     <a
                       className="module-card"
-                      href={buildModuleHref(module.path)}
+                      href={
+                        module.external === false
+                          ? module.path
+                          : buildModuleHref(module.path)
+                      }
                       key={module.title}
-                      rel="noreferrer"
-                      target="_blank"
+                      rel={module.external === false ? undefined : "noreferrer"}
+                      target={module.external === false ? undefined : "_blank"}
                     >
                       <div className="module-card__header">
                         <span className="module-card__code">{module.code}</span>

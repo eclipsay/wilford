@@ -5919,12 +5919,27 @@ function formatCommitDate(value) {
   });
 }
 
+function parseCommitTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  // Avoid treating YYYY-MM-DD as midnight UTC, which renders as the prior evening
+  // for US timezones inside Discord embeds.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value).trim())) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function buildCommitEmbed(commit) {
   const titleDate = formatCommitDate(commit.date);
   const shortSha = formatShortSha(commit.sha);
   const message = (commit.message || "New commit").slice(0, 180);
-
-  return new EmbedBuilder()
+  const timestamp = parseCommitTimestamp(commit.date);
+  const embed = new EmbedBuilder()
     .setColor(0xf28c28)
     .setTitle(`Changelog - ${titleDate}`)
     .setDescription(`\`\`\`diff\n+ ${message}\n\`\`\``)
@@ -5942,8 +5957,13 @@ function buildCommitEmbed(commit) {
     )
     .setFooter({
       text: `${brand.name} - ${commit.author || "Unknown author"}`
-    })
-    .setTimestamp(commit.date ? new Date(commit.date) : new Date());
+    });
+
+  if (timestamp) {
+    embed.setTimestamp(timestamp);
+  }
+
+  return embed;
 }
 
 async function publishCommitUpdates() {
