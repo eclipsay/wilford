@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { panelNavigation } from "@wilford/shared";
 import { clearAuthenticatedSession, getSession } from "../lib/auth";
+import { getSiteBaseUrl } from "../lib/command-modules";
 
 async function logoutAction() {
   "use server";
@@ -9,6 +10,7 @@ async function logoutAction() {
 
 export async function PanelShell({ title, description, children }) {
   const session = await getSession();
+  const siteBaseUrl = getSiteBaseUrl();
   const baseNavigation = [
     { label: "Dashboard", href: "/" },
     { label: "Members", href: "/members" },
@@ -39,13 +41,14 @@ export async function PanelShell({ title, description, children }) {
   return (
     <main className="shell">
       <header className="panel-header">
+        <div className="panel-scanline" aria-hidden="true" />
         <div className="panel-header__top">
           <div className="panel-header__brand">
             <div className="panel-brand-mark" aria-hidden="true">
-              W
+              &gt;_
             </div>
             <div>
-              <p className="panel-header__eyebrow">Wilford Internal</p>
+              <p className="panel-header__eyebrow">Wilford Internal // Terminal Uplink</p>
               <h1>{title}</h1>
               <p className="panel-header__copy">{description}</p>
             </div>
@@ -54,17 +57,30 @@ export async function PanelShell({ title, description, children }) {
           <div className="panel-header__account">
             <div className="panel-status-pill">
               <span />
-              Live Control Room
+              Command Channel Live
             </div>
+            <a
+              className="button button--ghost"
+              href={`${siteBaseUrl}/government-access`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Open Gov Access
+            </a>
             <span className="panel-nav__identity">
-              {session?.username} / {session?.role}
+              user={session?.username} role={session?.role}
             </span>
             <form action={logoutAction}>
               <button className="button button--ghost" type="submit">
-                Sign out
+                Exit Session
               </button>
             </form>
           </div>
+        </div>
+
+        <div className="panel-terminal-line" aria-hidden="true">
+          <span>$</span>
+          <span> panel.boot --profile={session?.role || "guest"} --scope=admin</span>
         </div>
 
         <nav className="panel-nav">
