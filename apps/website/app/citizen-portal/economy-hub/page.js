@@ -3,6 +3,9 @@ import {
   economyJobDefaults,
   formatCredits,
   getJobAccess,
+  lootboxCrateDefaults,
+  lootboxDailyGlobalLimit,
+  lootboxDailyUserLimit,
   normalizeEconomyDistrict
 } from "@wilford/shared";
 import { PageHero } from "../../../components/PageHero";
@@ -83,6 +86,7 @@ function resultPanel(params, store, wallet) {
     job: "set_job",
     work: "work",
     gather: "gather",
+    crate: "lootbox",
     craft: "crafting",
     buy: "market_buy",
     sell: "market_sell",
@@ -100,7 +104,8 @@ function resultPanel(params, store, wallet) {
     ? `Reason: ${String(params.error).replace(/-/g, " ")}.`
     : statusFromTransaction(transaction, "Your economy action has been recorded.");
   const itemFound = transaction?.meta?.itemRewardId || transaction?.meta?.itemId || transaction?.meta?.outputItemId;
-  const suggested = params.saved === "gather" ? "Use the item in Crafting or sell it to the State." :
+  const suggested = params.saved === "crate" ? "Check Inventory Vault, then craft, sell, or list the reward." :
+    params.saved === "gather" ? "Use the item in Crafting or sell it to the State." :
     params.saved === "work" ? "Spend credits at the Marketplace or build a stock position." :
       params.saved === "craft" ? "List the crafted good or check district demand." :
         "Open the Command Deck and pick the next available tile.";
@@ -176,6 +181,10 @@ export default async function EconomyHubPage({ searchParams }) {
   const topDistricts = market.districtRows.slice(0, 8);
   const today = new Date().toISOString().slice(0, 10);
   const dailyClaimed = Array.isArray(wallet.loginDays) && wallet.loginDays.includes(today);
+  const globalCratesOpened = store.lootboxAllocationDate === today ? Number(store.globalLootboxesOpenedToday || 0) : 0;
+  const userCratesOpened = store.lootboxAllocationDate === today ? Number(store.perUserLootboxesOpenedToday?.[wallet.id] || 0) : 0;
+  const remainingGlobalCrates = Math.max(0, lootboxDailyGlobalLimit - globalCratesOpened);
+  const remainingUserCrates = Math.max(0, lootboxDailyUserLimit - userCratesOpened);
   const suspicionScore = Number(security.current?.score || wallet.suspicionLevel || 0);
   const energy = Math.max(28, 100 - Math.min(72, recentWalletTransactions(store, wallet).filter((entry) => Date.now() - Date.parse(entry.createdAt || 0) < 6 * 60 * 60 * 1000).length * 9));
   const taxPaid = (store.taxRecords || []).some((record) => record.walletId === wallet.id && Date.now() - Date.parse(record.createdAt || 0) < 24 * 60 * 60 * 1000);
@@ -356,7 +365,35 @@ export default async function EconomyHubPage({ searchParams }) {
         <section className="economy-game-section scroll-fade" id="inventory-game">
           <div className="economy-section-heading">
             <p className="eyebrow">Inventory Vault</p>
-            <h2>Item cards show rarity, quantity, value, and the next useful action.</h2>
+            <h2>Open Union crates, then manage rarity cards, quantities, value, and the next useful action.</h2>
+          </div>
+          <div className="economy-card-grid economy-card-grid--compact economy-crate-grid">
+            {lootboxCrateDefaults.map((crate) => (
+              <article className="economy-action-card economy-crate-card" key={crate.id}>
+                <span className="court-role-badge">Union Crate</span>
+                <h3>{crate.label}</h3>
+                <p>Paid reward crate with rarity rolls, daily allocation limits, and possible tax penalties on low rolls.</p>
+                <div className="economy-rarity-strip">
+                  <span className="rarity-common">Common</span>
+                  <span className="rarity-rare">Rare {Math.round(Number(crate.rareChance || 0) * 100)}%</span>
+                  <span className="rarity-epic">Epic {Math.round(Number(crate.epicChance || 0) * 100)}%</span>
+                  <span className="rarity-legendary">Legendary {Math.round(Number(crate.legendaryChance || 0) * 100)}%</span>
+                </div>
+                <dl className="panem-ledger">
+                  <div><dt>Cost</dt><dd>{formatCredits(crate.price)}</dd></div>
+                  <div><dt>Global left</dt><dd>{remainingGlobalCrates}</dd></div>
+                  <div><dt>Your left</dt><dd>{remainingUserCrates}</dd></div>
+                </dl>
+                <form action="/inventory/action" className="economy-command-form" method="post">
+                  <input name="source" type="hidden" value="economy-hub" />
+                  <input name="intent" type="hidden" value="crate" />
+                  <input name="crateId" type="hidden" value={crate.id} />
+                  <button className="button button--solid-site economy-run-button" disabled={remainingGlobalCrates <= 0 || remainingUserCrates <= 0 || Number(wallet.balance || 0) < Number(crate.price || 0)} type="submit">
+                    {remainingGlobalCrates <= 0 || remainingUserCrates <= 0 ? "Allocation Used" : Number(wallet.balance || 0) < Number(crate.price || 0) ? "Need Credits" : "Open Crate"}
+                  </button>
+                </form>
+              </article>
+            ))}
           </div>
           <div className="inventory-grid economy-inventory-grid">
             {inventory.holdings.length ? inventory.holdings.slice(0, 12).map((holding) => (

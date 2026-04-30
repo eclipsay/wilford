@@ -336,9 +336,25 @@ async function readGovernmentAccessStore() {
 }
 
 function getEconomyWallet(economy, id) {
+  const lookup = String(id || "").trim();
+  if (!lookup) return null;
   return (economy.wallets || []).find(
-    (wallet) => wallet.id === id || wallet.userId === id || wallet.discordId === id
+    (wallet) => wallet.id === lookup || wallet.userId === lookup || wallet.discordId === lookup
   );
+}
+
+function linkedWalletForCitizen(economy, citizen, discordId = "") {
+  const directWallet = getEconomyWallet(economy, citizen?.walletId || citizen?.userId || citizen?.discordId || citizen?.id);
+  if (directWallet) return directWallet;
+  if (!discordId) return null;
+  return (economy.wallets || []).find((wallet) =>
+    String(wallet.discordId || "").trim() === discordId &&
+    (
+      (citizen?.walletId && wallet.id === citizen.walletId) ||
+      (citizen?.userId && wallet.userId === citizen.userId) ||
+      (citizen?.id && (wallet.citizenId === citizen.id || wallet.userId === citizen.id))
+    )
+  ) || null;
 }
 
 function ensureDiscordWallet(economy, user) {
@@ -370,18 +386,22 @@ function ensureDiscordWallet(economy, user) {
 
 function getVerifiedDiscordCitizen(governmentStore, economy, user) {
   const discordId = String(user?.id || "").trim();
-  const citizen = (governmentStore.citizenRecords || []).find((record) =>
-    String(record.discordId || "").trim() === discordId &&
+  const verifiedCitizens = (governmentStore.citizenRecords || []).filter((record) =>
     record.verificationStatus === "Verified" &&
     !record.lostOrStolen &&
     !["Revoked", "Enemy of the State"].includes(record.securityClassification)
   );
+  const citizen = verifiedCitizens.find((record) => String(record.discordId || "").trim() === discordId) ||
+    verifiedCitizens.find((record) => {
+      const wallet = linkedWalletForCitizen(economy, record, discordId);
+      return wallet && String(wallet.discordId || "").trim() === discordId;
+    });
 
   if (!citizen) {
     return null;
   }
 
-  const wallet = getEconomyWallet(economy, citizen.walletId || citizen.userId || citizen.discordId || citizen.id);
+  const wallet = linkedWalletForCitizen(economy, citizen, discordId);
   if (!wallet) {
     return { citizen, wallet: null };
   }

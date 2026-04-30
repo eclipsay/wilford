@@ -83,7 +83,7 @@ export const POST = safeAction("inventory/action", "/inventory", async function 
       await recordCitizenActivity(citizen.id, "inventory crate opened", `${result.quantity} x ${result.item.name}`);
     }
     return redirectTo(request, fromEconomyHub
-      ? `/citizen-portal/economy-hub?${result.ok ? "saved=gather" : `error=${result.reason || "crate"}`}#inventory-game`
+      ? `/citizen-portal/economy-hub?${result.ok ? "saved=crate" : `error=${result.reason || "crate"}`}#inventory-game`
       : `/inventory?${result.ok ? "saved=crate" : `error=${result.reason || "crate"}`}`);
   }
 
