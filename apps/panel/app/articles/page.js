@@ -113,7 +113,16 @@ async function deleteArticleAction(formData) {
 export default async function ArticlesPage({ searchParams }) {
   await requireAdmin();
   const params = await searchParams;
-  const { articles } = await fetchAdmin("/api/admin/articles");
+  let articles = [];
+  let loadError = "";
+
+  try {
+    const result = await fetchAdmin("/api/admin/articles");
+    articles = result.articles || [];
+  } catch (error) {
+    loadError =
+      error instanceof Error ? error.message : "Article registry could not be loaded.";
+  }
 
   return (
     <PanelShell
@@ -129,6 +138,12 @@ export default async function ArticlesPage({ searchParams }) {
       {params?.error ? (
         <section className="panel-card system-banner system-banner--error">
           <p>{String(params.error)}</p>
+        </section>
+      ) : null}
+
+      {loadError ? (
+        <section className="panel-card system-banner system-banner--error">
+          <p>{loadError}</p>
         </section>
       ) : null}
 
@@ -209,97 +224,109 @@ export default async function ArticlesPage({ searchParams }) {
           </div>
         </div>
         <div className="government-user-list">
-          {(articles || []).map((article) => (
-            <article className="panel-card government-user-card" key={article.id}>
-              <form action={updateArticleAction} className="form-card">
-                <input name="id" type="hidden" value={article.id} />
-                <div className="panel-card__header">
-                  <div>
-                    <p className="card__kicker">
-                      {article.category} / {article.source}
-                    </p>
-                    <h2>{article.title}</h2>
-                  </div>
-                  <span className="status-badge">{article.status}</span>
-                </div>
-                <label className="field">
-                  <span>Title</span>
-                  <input defaultValue={article.title} name="title" required />
-                </label>
-                <label className="field">
-                  <span>Subtitle</span>
-                  <input defaultValue={article.subtitle} name="subtitle" />
-                </label>
-                <label className="field">
-                  <span>Body</span>
-                  <textarea defaultValue={article.body} name="body" required rows="10" />
-                </label>
-                <div className="panel-grid">
-                  <label className="field">
-                    <span>Hero Image Path or URL</span>
-                    <input defaultValue={article.heroImage} name="heroImage" />
-                  </label>
-                  <label className="field">
-                    <span>Category</span>
-                    <select defaultValue={article.category} name="category">
-                      {articleCategories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Source</span>
-                    <input defaultValue={article.source} name="source" />
-                  </label>
-                  <label className="field">
-                    <span>Publish Date</span>
-                    <input
-                      defaultValue={toDateTimeLocal(article.publishDate)}
-                      name="publishDate"
-                      type="datetime-local"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Status</span>
-                    <select defaultValue={article.status} name="status">
-                      {articleStatuses.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <label className="checkbox-field">
-                  <input defaultChecked={article.featured} name="featured" type="checkbox" />
-                  <span>Featured article</span>
-                </label>
-                <div className="record-actions">
-                  <button className="button button--solid" type="submit">
-                    Save Article
-                  </button>
-                  <a
-                    className="button button--ghost"
-                    href={`/news/${article.id}`}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    View Public
-                  </a>
-                </div>
-              </form>
-              <div className="record-actions">
-                <form action={deleteArticleAction}>
+          {articles.length ? (
+            articles.map((article) => (
+              <article className="panel-card government-user-card" key={article.id}>
+                <form action={updateArticleAction} className="form-card">
                   <input name="id" type="hidden" value={article.id} />
-                  <button className="button button--ghost button--danger" type="submit">
-                    Delete
-                  </button>
+                  <div className="panel-card__header">
+                    <div>
+                      <p className="card__kicker">
+                        {article.category} / {article.source}
+                      </p>
+                      <h2>{article.title}</h2>
+                    </div>
+                    <span className="status-badge">{article.status}</span>
+                  </div>
+                  <label className="field">
+                    <span>Title</span>
+                    <input defaultValue={article.title} name="title" required />
+                  </label>
+                  <label className="field">
+                    <span>Subtitle</span>
+                    <input defaultValue={article.subtitle} name="subtitle" />
+                  </label>
+                  <label className="field">
+                    <span>Body</span>
+                    <textarea defaultValue={article.body} name="body" required rows="10" />
+                  </label>
+                  <div className="panel-grid">
+                    <label className="field">
+                      <span>Hero Image Path or URL</span>
+                      <input defaultValue={article.heroImage} name="heroImage" />
+                    </label>
+                    <label className="field">
+                      <span>Category</span>
+                      <select defaultValue={article.category} name="category">
+                        {articleCategories.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Source</span>
+                      <input defaultValue={article.source} name="source" />
+                    </label>
+                    <label className="field">
+                      <span>Publish Date</span>
+                      <input
+                        defaultValue={toDateTimeLocal(article.publishDate)}
+                        name="publishDate"
+                        type="datetime-local"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Status</span>
+                      <select defaultValue={article.status} name="status">
+                        {articleStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <label className="checkbox-field">
+                    <input defaultChecked={article.featured} name="featured" type="checkbox" />
+                    <span>Featured article</span>
+                  </label>
+                  <div className="record-actions">
+                    <button className="button button--solid" type="submit">
+                      Save Article
+                    </button>
+                    <a
+                      className="button button--ghost"
+                      href={`/news/${article.id}`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      View Public
+                    </a>
+                  </div>
                 </form>
-              </div>
-            </article>
-          ))}
+                <div className="record-actions">
+                  <form action={deleteArticleAction}>
+                    <input name="id" type="hidden" value={article.id} />
+                    <button className="button button--ghost button--danger" type="submit">
+                      Delete
+                    </button>
+                  </form>
+                </div>
+              </article>
+            ))
+          ) : (
+            <section className="panel-card">
+              <p className="card__kicker">No Article Records</p>
+              <h2>Nothing loaded yet.</h2>
+              <p>
+                {loadError
+                  ? "The article API read failed, so existing records could not be displayed."
+                  : "Create the first article from the form above."}
+              </p>
+            </section>
+          )}
         </div>
       </section>
     </PanelShell>

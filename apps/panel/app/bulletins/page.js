@@ -141,10 +141,26 @@ async function deleteBulletinAction(formData) {
 export default async function BulletinsPage({ searchParams }) {
   await requireAdmin();
   const params = await searchParams;
-  const [{ bulletins }, { articles }] = await Promise.all([
-    fetchAdmin("/api/admin/bulletins").then((result) => ({ bulletins: result.bulletins || [] })),
-    fetchAdmin("/api/admin/articles").then((result) => ({ articles: result.articles || [] }))
+  let bulletins = [];
+  let articles = [];
+  let loadError = "";
+
+  const results = await Promise.allSettled([
+    fetchAdmin("/api/admin/bulletins"),
+    fetchAdmin("/api/admin/articles")
   ]);
+
+  if (results[0].status === "fulfilled") {
+    bulletins = results[0].value.bulletins || [];
+  } else {
+    loadError = results[0].reason instanceof Error
+      ? results[0].reason.message
+      : "Bulletin registry could not be loaded.";
+  }
+
+  if (results[1].status === "fulfilled") {
+    articles = results[1].value.articles || [];
+  }
 
   return (
     <PanelShell
@@ -160,6 +176,12 @@ export default async function BulletinsPage({ searchParams }) {
       {params?.error ? (
         <section className="panel-card system-banner system-banner--error">
           <p>{String(params.error)}</p>
+        </section>
+      ) : null}
+
+      {loadError ? (
+        <section className="panel-card system-banner system-banner--error">
+          <p>{loadError}</p>
         </section>
       ) : null}
 
@@ -232,106 +254,118 @@ export default async function BulletinsPage({ searchParams }) {
           </div>
         </div>
         <div className="government-user-list">
-          {(bulletins || []).map((bulletin, index) => (
-            <article className="panel-card government-user-card" key={bulletin.id}>
-              <form action={updateBulletinAction} className="form-card">
-                <input name="id" type="hidden" value={bulletin.id} />
-                <div className="panel-card__header">
-                  <div>
-                    <p className="card__kicker">
-                      slot {String(index + 1).padStart(2, "0")} / {bulletin.category}
-                    </p>
-                    <h2>{bulletin.headline}</h2>
+          {bulletins.length ? (
+            bulletins.map((bulletin, index) => (
+              <article className="panel-card government-user-card" key={bulletin.id}>
+                <form action={updateBulletinAction} className="form-card">
+                  <input name="id" type="hidden" value={bulletin.id} />
+                  <div className="panel-card__header">
+                    <div>
+                      <p className="card__kicker">
+                        slot {String(index + 1).padStart(2, "0")} / {bulletin.category}
+                      </p>
+                      <h2>{bulletin.headline}</h2>
+                    </div>
+                    <span className="status-badge">
+                      {bulletin.active ? bulletin.priority : "inactive"}
+                    </span>
                   </div>
-                  <span className="status-badge">
-                    {bulletin.active ? bulletin.priority : "inactive"}
-                  </span>
-                </div>
-                <label className="field">
-                  <span>Headline</span>
-                  <input defaultValue={bulletin.headline} name="headline" required />
-                </label>
-                <div className="panel-grid">
                   <label className="field">
-                    <span>Category</span>
-                    <select defaultValue={bulletin.category} name="category">
-                      {bulletinCategories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
+                    <span>Headline</span>
+                    <input defaultValue={bulletin.headline} name="headline" required />
                   </label>
-                  <label className="field">
-                    <span>Priority</span>
-                    <select defaultValue={bulletin.priority} name="priority">
-                      {bulletinPriorities.map((priority) => (
-                        <option key={priority} value={priority}>
-                          {priority}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Expiry Date Optional</span>
-                    <input
-                      defaultValue={toDateTimeLocal(bulletin.expiresAt)}
-                      name="expiresAt"
-                      type="datetime-local"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Linked Article</span>
-                    <select defaultValue={bulletin.linkedArticleId || ""} name="linkedArticleId">
-                      <option value="">No linked article</option>
-                      {articles
-                        .filter((article) => article.status === "published")
-                        .map((article) => (
-                          <option key={article.id} value={article.id}>
-                            {article.title}
+                  <div className="panel-grid">
+                    <label className="field">
+                      <span>Category</span>
+                      <select defaultValue={bulletin.category} name="category">
+                        {bulletinCategories.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
                           </option>
                         ))}
-                    </select>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Priority</span>
+                      <select defaultValue={bulletin.priority} name="priority">
+                        {bulletinPriorities.map((priority) => (
+                          <option key={priority} value={priority}>
+                            {priority}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Expiry Date Optional</span>
+                      <input
+                        defaultValue={toDateTimeLocal(bulletin.expiresAt)}
+                        name="expiresAt"
+                        type="datetime-local"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Linked Article</span>
+                      <select defaultValue={bulletin.linkedArticleId || ""} name="linkedArticleId">
+                        <option value="">No linked article</option>
+                        {articles
+                          .filter((article) => article.status === "published")
+                          .map((article) => (
+                            <option key={article.id} value={article.id}>
+                              {article.title}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </div>
+                  <label className="checkbox-field">
+                    <input defaultChecked={bulletin.active} name="active" type="checkbox" />
+                    <span>Active bulletin</span>
                   </label>
-                </div>
-                <label className="checkbox-field">
-                  <input defaultChecked={bulletin.active} name="active" type="checkbox" />
-                  <span>Active bulletin</span>
-                </label>
+                  <div className="record-actions">
+                    <button className="button button--solid" type="submit">
+                      Save Bulletin
+                    </button>
+                  </div>
+                </form>
                 <div className="record-actions">
-                  <button className="button button--solid" type="submit">
-                    Save Bulletin
-                  </button>
+                  <form action={moveBulletinAction}>
+                    <input name="id" type="hidden" value={bulletin.id} />
+                    <input name="direction" type="hidden" value="up" />
+                    <button className="button button--ghost" disabled={index === 0} type="submit">
+                      Move Up
+                    </button>
+                  </form>
+                  <form action={moveBulletinAction}>
+                    <input name="id" type="hidden" value={bulletin.id} />
+                    <input name="direction" type="hidden" value="down" />
+                    <button
+                      className="button button--ghost"
+                      disabled={index === bulletins.length - 1}
+                      type="submit"
+                    >
+                      Move Down
+                    </button>
+                  </form>
+                  <form action={deleteBulletinAction}>
+                    <input name="id" type="hidden" value={bulletin.id} />
+                    <button className="button button--ghost button--danger" type="submit">
+                      Delete
+                    </button>
+                  </form>
                 </div>
-              </form>
-              <div className="record-actions">
-                <form action={moveBulletinAction}>
-                  <input name="id" type="hidden" value={bulletin.id} />
-                  <input name="direction" type="hidden" value="up" />
-                  <button className="button button--ghost" disabled={index === 0} type="submit">
-                    Move Up
-                  </button>
-                </form>
-                <form action={moveBulletinAction}>
-                  <input name="id" type="hidden" value={bulletin.id} />
-                  <input name="direction" type="hidden" value="down" />
-                  <button
-                    className="button button--ghost"
-                    disabled={index === bulletins.length - 1}
-                    type="submit"
-                  >
-                    Move Down
-                  </button>
-                </form>
-                <form action={deleteBulletinAction}>
-                  <input name="id" type="hidden" value={bulletin.id} />
-                  <button className="button button--ghost button--danger" type="submit">
-                    Delete
-                  </button>
-                </form>
-              </div>
-            </article>
-          ))}
+              </article>
+            ))
+          ) : (
+            <section className="panel-card">
+              <p className="card__kicker">No Bulletin Records</p>
+              <h2>Nothing loaded yet.</h2>
+              <p>
+                {loadError
+                  ? "The bulletin API read failed, so existing records could not be displayed."
+                  : "Create the first bulletin from the form above."}
+              </p>
+            </section>
+          )}
         </div>
       </section>
     </PanelShell>

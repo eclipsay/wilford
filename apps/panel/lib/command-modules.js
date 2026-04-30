@@ -11,8 +11,8 @@ export function getSiteBaseUrl() {
 function governmentBridgeSecret() {
   return (
     process.env.GOVERNMENT_AUTH_SECRET ||
-    process.env.PANEL_SESSION_SECRET ||
     process.env.ADMIN_API_KEY ||
+    process.env.PANEL_SESSION_SECRET ||
     "WPU-DEVELOPMENT-GOVERNMENT-AUTH-SECRET"
   );
 }
