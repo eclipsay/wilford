@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
   compactEconomyStoreForWrite,
   craftingQualityTiers,
@@ -394,6 +394,43 @@ function cleanTransferCode(value = "") {
     .slice(0, 24);
 }
 
+function backupTimestamp(date = new Date()) {
+  return date.toISOString().replace(/[:.]/g, "-");
+}
+
+async function pruneContentBackups() {
+  let entries = [];
+  try {
+    entries = await readdir(config.dataBackupDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  const backups = entries
+    .filter((entry) => entry.isFile() && /^content-\d{4}-\d{2}-\d{2}T/.test(entry.name) && entry.name.endsWith(".json"))
+    .map((entry) => entry.name)
+    .sort()
+    .reverse();
+  const stale = backups.slice(config.dataBackupRetention);
+  await Promise.all(stale.map((name) => unlink(join(config.dataBackupDir, name)).catch(() => null)));
+}
+
+async function backupContentFile() {
+  let current = "";
+  try {
+    current = await readFile(config.dataFile, "utf8");
+  } catch {
+    return null;
+  }
+
+  if (!current.trim()) return null;
+  await mkdir(config.dataBackupDir, { recursive: true });
+  const backupPath = join(config.dataBackupDir, `content-${backupTimestamp()}.json`);
+  await writeFile(backupPath, current);
+  await pruneContentBackups();
+  return backupPath;
+}
+
 function normalizeCitizenForProvisioning(record = {}) {
   const district = cleanRecordText(record.district || "Capitol", 80);
   return {
@@ -569,7 +606,10 @@ async function readContentFile() {
 
 async function writeContentFile(content) {
   await mkdir(dirname(config.dataFile), { recursive: true });
-  await writeFile(config.dataFile, JSON.stringify(content, null, 2));
+  await backupContentFile();
+  const tempPath = `${config.dataFile}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tempPath, JSON.stringify(content, null, 2));
+  await rename(tempPath, config.dataFile);
 }
 
 function addOrderedItem(items, item) {
