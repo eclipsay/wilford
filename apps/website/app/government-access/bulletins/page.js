@@ -68,7 +68,7 @@ function DiscordBroadcastFields({ allowEveryone = false }) {
         </label>
       </div>
       <p className="public-application-help">
-        @everyone requires Supreme Chairman or Executive Director authority and confirmation.
+        @everyone requires Supreme Chairman or Executive Director authority and confirmation, and dangerous requests route to executive approval.
       </p>
     </fieldset>
   );

@@ -81,6 +81,9 @@ const petitionsToCourtChannelId = String(process.env.PETITIONS_TO_COURT_CHANNEL_
 const legalArchivesChannelId = String(process.env.LEGAL_ARCHIVES_CHANNEL_ID || "").trim();
 const pardonsClemencyChannelId = String(process.env.PARDONS_CLEMENCY_CHANNEL_ID || "").trim();
 const lemmieDiscordUserId = String(process.env.DISCORD_LEMMIE_USER_ID || botOwnerId).trim();
+const eclipDiscordUserId = String(
+  process.env.DISCORD_ECLIP_USER_ID || "140478632165507073"
+).trim();
 const applicationGuildId = String(
   process.env.DISCORD_APPLICATION_GUILD_ID || process.env.DISCORD_GUILD_ID || ""
 ).trim();
@@ -5560,6 +5563,11 @@ function buildBroadcastApprovalEmbed(broadcast) {
         inline: true
       },
       {
+        name: "Authority",
+        value: "Supreme Chairman or Executive Director approval required.",
+        inline: true
+      },
+      {
         name: "Website Review",
         value: `${websiteUrl}/government-access/broadcast-approvals`,
         inline: false
@@ -5569,25 +5577,52 @@ function buildBroadcastApprovalEmbed(broadcast) {
     .setTimestamp(new Date(broadcast.createdAt || Date.now()));
 }
 
-async function notifyLemmieForBroadcastApproval(broadcast) {
-  if (!lemmieDiscordUserId) {
+function broadcastApprovalUserIds() {
+  return [...new Set([lemmieDiscordUserId, eclipDiscordUserId].filter(Boolean))];
+}
+
+async function notifyApproversForBroadcastApproval(broadcast) {
+  const approverIds = broadcastApprovalUserIds();
+
+  if (!approverIds.length) {
     return;
   }
 
-  const user = await client.users.fetch(lemmieDiscordUserId).catch(() => null);
+  const failures = [];
+  let delivered = 0;
 
-  if (!user) {
-    throw new Error("Unable to find Lemmie Discord user for broadcast approval.");
+  for (const approverId of approverIds) {
+    const user = await client.users.fetch(approverId).catch(() => null);
+
+    if (!user) {
+      failures.push({ target: approverId, error: "Approver user not found." });
+      continue;
+    }
+
+    try {
+      await user.send({ embeds: [buildBroadcastApprovalEmbed(broadcast)] });
+      delivered += 1;
+    } catch (error) {
+      failures.push({
+        target: approverId,
+        error: error instanceof Error ? error.message : "Approver DM failed."
+      });
+    }
   }
 
-  await user.send({ embeds: [buildBroadcastApprovalEmbed(broadcast)] });
+  if (!delivered) {
+    throw new Error("Unable to notify any broadcast approver.");
+  }
+
   await markDiscordBroadcast(broadcast.id, {
     status: "approval_notified",
     approvalNotifiedAt: new Date().toISOString(),
-    recipients: [],
-    successCount: 0,
-    failureCount: 0,
-    failures: []
+    recipients: approverIds
+      .filter((target) => !failures.some((failure) => failure.target === target))
+      .map((target) => ({ target, method: "dm" })),
+    successCount: delivered,
+    failureCount: failures.length,
+    failures
   });
 }
 
@@ -6184,7 +6219,7 @@ async function runBroadcastApprovalLoop() {
 
     for (const broadcast of broadcasts) {
       if (broadcast.status === "pending_approval") {
-        await notifyLemmieForBroadcastApproval(broadcast);
+        await notifyApproversForBroadcastApproval(broadcast);
       }
     }
   } catch (error) {

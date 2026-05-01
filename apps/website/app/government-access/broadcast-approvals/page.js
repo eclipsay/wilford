@@ -97,7 +97,7 @@ export default async function BroadcastApprovalsPage({ searchParams }) {
   return (
     <SiteLayout>
       <PageHero
-        eyebrow="Supreme Chairman Authority"
+        eyebrow="Executive Approval Authority"
         title="Broadcast Approvals"
         description="Approve or decline high-risk Discord broadcasts before server-wide delivery."
       />
@@ -124,7 +124,7 @@ export default async function BroadcastApprovalsPage({ searchParams }) {
         <section className="panel government-user-panel">
           <div className="panel__header">
             <div>
-              <p className="eyebrow">Chairman Review</p>
+              <p className="eyebrow">Chairman / Executive Director Review</p>
               <h2>Pending Broadcast Requests</h2>
               <p className="public-application-help">
                 Authenticated as {user.username} / {user.role}. Approval releases the request to the bot queue.

@@ -76,7 +76,7 @@ function DiscordBroadcastFields({ showResend = false, allowEveryone = false }) {
         ) : null}
       </div>
       <p className="public-application-help">
-        Broadcasts only send for published articles. @everyone requires Supreme Chairman or Executive Director authority and confirmation.
+        Broadcasts only send for published articles. @everyone requires Supreme Chairman or Executive Director authority and confirmation, and dangerous requests route to executive approval.
       </p>
     </fieldset>
   );

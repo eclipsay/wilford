@@ -57,7 +57,7 @@ export const permissions = {
     "Security Command",
     "Minister of State Security"
   ],
-  broadcastApproval: ["Supreme Chairman"],
+  broadcastApproval: ["Supreme Chairman", "Executive Director"],
   citizenshipReview: [
     "Supreme Chairman",
     "Executive Director",
