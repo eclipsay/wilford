@@ -120,6 +120,10 @@ async function enqueueArticleBroadcast(user, formData, fields, linkedId = "") {
 
 function broadcastRedirectSuffix(result) {
   if (result?.status === "queued") {
+    if (result.broadcast?.pingDeniedReason) {
+      return `&broadcast=ping-downgraded&detail=${encodeURIComponent(result.broadcast.pingDeniedReason)}`;
+    }
+
     return "&broadcast=queued";
   }
 

@@ -86,7 +86,14 @@ export default async function ArticleControlPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireGovernmentUser("articleControl");
   const allowEveryonePing = ["Supreme Chairman", "Executive Director"].includes(user.role);
-  const articles = await getAllArticles();
+  let articles = [];
+  let articleLoadError = "";
+
+  try {
+    articles = await getAllArticles();
+  } catch (error) {
+    articleLoadError = error instanceof Error ? error.message : "Article records could not be loaded.";
+  }
 
   return (
     <SiteLayout>
@@ -118,6 +125,13 @@ export default async function ArticleControlPage({ searchParams }) {
           </section>
         ) : null}
 
+        {params?.broadcast === "ping-downgraded" ? (
+          <section className="application-notice application-notice--error">
+            <strong>Discord Ping Removed</strong>
+            <p>The article was queued, but the requested ping was removed: {params?.detail || "not authorised"}.</p>
+          </section>
+        ) : null}
+
         {params?.error === "required" ? (
           <section className="application-notice application-notice--error">
             <strong>Required Fields Missing</strong>
@@ -132,6 +146,13 @@ export default async function ArticleControlPage({ searchParams }) {
             {params?.detail ? (
               <p className="public-application-help">API detail: {String(params.detail)}</p>
             ) : null}
+          </section>
+        ) : null}
+
+        {articleLoadError ? (
+          <section className="application-notice application-notice--error">
+            <strong>Article Records Unavailable</strong>
+            <p>{articleLoadError}</p>
           </section>
         ) : null}
 

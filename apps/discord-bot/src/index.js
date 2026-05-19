@@ -6008,13 +6008,14 @@ async function publishCommitUpdates() {
     String(process.env.DISCORD_COMMITS_CHANNEL_ID || "").trim();
 
   if (!channelId) {
+    console.log("Discord bot: commits publisher skipped because no commits channel is configured.");
     return;
   }
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
 
   if (!channel?.isTextBased()) {
-    console.log("Discord bot: commits channel is missing or not text-based.");
+    console.log(`Discord bot: commits channel ${channelId} is missing or not text-based.`);
     return;
   }
 
@@ -6022,6 +6023,7 @@ async function publishCommitUpdates() {
   const visibleCommits = Array.isArray(commits) ? commits.filter((entry) => entry?.sha) : [];
 
   if (!visibleCommits.length) {
+    console.log("Discord bot: commits publisher skipped because the API returned no visible commits.");
     return;
   }
 

@@ -11,6 +11,12 @@ const baseUrl = (
     : "http://localhost:4000")
 ).replace(/\/+$/, "");
 
+const localApiPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
+function canUseLocalArticleStore() {
+  return process.env.NODE_ENV !== "production" && localApiPattern.test(baseUrl);
+}
+
 export const articleCategories = [
   "Chairman",
   "Government",
@@ -193,7 +199,11 @@ async function requestAdminArticles(path, options = {}) {
 export async function getAllArticles() {
   try {
     return await requestAdminArticles("/api/admin/articles");
-  } catch {}
+  } catch (error) {
+    if (!canUseLocalArticleStore()) {
+      throw error;
+    }
+  }
 
   const content = await readContentFile();
   return normalizeArticles(content.articles);
@@ -217,7 +227,7 @@ export async function createArticle(fields) {
       body: JSON.stringify(fields)
     });
   } catch (error) {
-    if (process.env.NODE_ENV === "production") {
+    if (!canUseLocalArticleStore()) {
       throw error;
     }
   }
@@ -246,7 +256,7 @@ export async function updateArticle(id, fields) {
       body: JSON.stringify(fields)
     });
   } catch (error) {
-    if (process.env.NODE_ENV === "production") {
+    if (!canUseLocalArticleStore()) {
       throw error;
     }
   }
@@ -281,7 +291,7 @@ export async function deleteArticle(id) {
       method: "DELETE"
     });
   } catch (error) {
-    if (process.env.NODE_ENV === "production") {
+    if (!canUseLocalArticleStore()) {
       throw error;
     }
   }

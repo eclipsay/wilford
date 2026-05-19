@@ -1,26 +1,24 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { fetchPublic } from "../../lib/api";
+import { fetchAdmin, fetchPublic } from "../../lib/api";
 import { requireAuth } from "../../lib/auth";
-import { updatePanelContent } from "../../lib/content-file";
 import { PanelShell } from "../../components/PanelShell";
 
 async function saveSettingsAction(formData) {
   "use server";
 
   try {
-    await updatePanelContent((content) => ({
-      ...content,
-      settings: {
-        ...content.settings,
+    await fetchAdmin("/api/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({
         homepageEyebrow: formData.get("homepageEyebrow"),
         homepageHeadline: formData.get("homepageHeadline"),
         homepageDescription: formData.get("homepageDescription"),
         chairmanName: formData.get("chairmanName"),
         commitsRepository: formData.get("commitsRepository"),
         discordCommitsChannelId: formData.get("discordCommitsChannelId")
-      }
-    }));
+      })
+    });
   } catch {
     redirect("/settings?error=1");
   }

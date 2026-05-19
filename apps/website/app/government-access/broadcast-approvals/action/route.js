@@ -45,6 +45,7 @@ export const POST = safeAction("government-access/broadcast-approvals/action", "
       await updateDiscordBroadcast(id, {
         status: "pending",
         confirmed: true,
+        pingConfirmed: broadcast.pingOption === "everyone" ? true : broadcast.pingConfirmed,
         approvedAt: new Date().toISOString(),
         approvedBy: user.username,
         approvalNote

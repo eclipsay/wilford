@@ -764,10 +764,6 @@ app.post("/api/admin/discord-broadcasts", requireAdmin, async (req, res) => {
     pingOption = "none";
     pingDeniedReason = "role not authorised for @everyone";
   }
-  if (pingOption === "everyone" && !pingConfirmed) {
-    pingOption = "none";
-    pingDeniedReason = "confirmation missing";
-  }
   if (pingOption === "everyone") {
     const recent = (await getDiscordBroadcasts({ status: "" })).find((broadcast) =>
       broadcast.pingOption === "everyone" &&
